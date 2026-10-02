@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.neerajthegreat192.twa",
+        "sha256_cert_fingerprints": ["46:6C:D5:1F:FE:2B:CB:D8:4D:9F:C8:65:E1:A5:7E:1D:0F:FB:E8:FD:34:03:54:7D:97:6A:DC:20:AC:49:88:74"]
+      }
+    }]
