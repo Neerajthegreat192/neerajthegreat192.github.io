@@ -259,7 +259,7 @@ function clearOngoingCallNotification() {
   }
 }
 
-// --- ऐप शेयर बटन लॉजिक (Native Share Fix) ---
+// --- शेयर बटन लॉजिक (Native Share Fix) ---
 const Share = window.Capacitor?.Plugins?.Share;
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
@@ -601,30 +601,6 @@ $('clearChatHistoryBtn').onclick = async () => {
     $('profileModal').hidden = true;
   } catch(e) {
     toast('त्रुटि: चैट साफ नहीं हो सकी');
-  }
-};
-
-$('checkUpdateBtn').onclick = async () => {
-  toast(currentLang === 'hi' ? 'जाँच रहे हैं...' : 'Checking...');
-  try {
-    const fetchPromise = get(ref(db, 'app_version'));
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
-    const snap = await Promise.race([fetchPromise, timeoutPromise]);
-
-    if (snap && snap.exists()) {
-      const data = snap.val();
-      const latestVer = data.version || "1.19.0";
-      if (latestVer > CURRENT_APP_VERSION) {
-        if (confirm(`New update (${latestVer}) available!\nDownload APK?`)) {
-          if (data.apkUrl) window.open(data.apkUrl, '_blank');
-          else toast('डाउनलोड लिंक उपलब्ध नहीं है');
-        }
-        return;
-      }
-    }
-    toast(`✅ App is on latest version (v${CURRENT_APP_VERSION})`);
-  } catch(e) {
-    toast(`✅ App is on latest version (v${CURRENT_APP_VERSION})`);
   }
 };
 
@@ -1112,7 +1088,6 @@ actionBtn.addEventListener('mousedown', (e) => {
   }
 });
 
-// --- डबल मैसेज को रोकने के लिए सिर्फ यहाँ एक लॉक लगाया गया है ---
 let isSendingMsg = false;
 actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
@@ -1340,7 +1315,6 @@ function listenForIncoming() {
   });
 }
 
-// 100% सही स्ट्रिंग ऑडियो फ्लैग के साथ कॉल भेजना
 async function sendPushNotification(token, callerName, isVoice = false) {
   try {
     fetch("https://neeraj.neerajthegreat192.workers.dev/", {
@@ -1416,7 +1390,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
-// कॉलर द्वारा कॉल कैंसिल करने पर मिस्ड कॉल को चैट में अपडेट करें
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
@@ -1913,7 +1886,6 @@ function setupHardwareBackButton() {
   });
 }
 
-// --- Visual Viewport Keyboard Resize Handling ---
 if (window.visualViewport) {
   const syncViewport = () => {
     if (!chatScreen.hidden) {
@@ -1943,32 +1915,55 @@ chatInput.addEventListener('blur', () => {
   }
 });
 
-// --- शुद्ध वेब OTA (CSS और लाइव स्टाइल अपडेट) ---
-async function checkWebOtaUpdate() {
+// --- डायनामिक OTA (JS और CSS लाइव अपडेट) ---
+async function checkWebOtaUpdate(manual = false) {
   try {
+    if (manual) toast(currentLang === 'hi' ? 'अपडेट की जांच हो रही है...' : 'Checking for update...');
+    
     const res = await fetch('https://neerajthegreat192.github.io/ota-version.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return;
+    if (!res.ok) {
+      if (manual) toast(currentLang === 'hi' ? 'सर्वर से संपर्क नहीं हो पाया' : 'Server not reachable');
+      return;
+    }
 
     const info = await res.json();
     const activeVer = localStorage.getItem('ota_active_ver');
 
     if (info.version && String(info.version) !== activeVer) {
+      if (manual) toast(currentLang === 'hi' ? 'नया अपडेट डाउनलोड हो रहा है...' : 'Downloading new update...');
+      
+      const jsRes = await fetch('https://neerajthegreat192.github.io/app.js?t=' + Date.now(), { cache: 'no-store' });
       const cssRes = await fetch('https://neerajthegreat192.github.io/style.css?t=' + Date.now(), { cache: 'no-store' });
-      if (cssRes.ok) {
+      
+      if (jsRes.ok && cssRes.ok) {
+        const newJs = await jsRes.text();
         const newCss = await cssRes.text();
+        
+        localStorage.setItem('ota_cached_js', newJs);
         localStorage.setItem('ota_cached_css', newCss);
-        const otaStyle = $('otaCustomStyle');
-        if (otaStyle) otaStyle.textContent = newCss;
+        localStorage.setItem('ota_active_ver', String(info.version));
+        
+        if (confirm(currentLang === 'hi' ? 'नया अपडेट मिल गया है! क्या आप अभी ऐप रीस्टार्ट करना चाहते हैं?' : 'New update applied! Restart app now?')) {
+          location.reload();
+        }
+      } else {
+        if (manual) toast('फ़ाइलें डाउनलोड करने में त्रुटि');
       }
-      localStorage.setItem('ota_active_ver', String(info.version));
+    } else {
+      if (manual) toast(`✅ App is on latest version (OTA v${info.version})`);
     }
-  } catch (err) {}
+  } catch (err) {
+    if (manual) toast('अपडेट चेक फेल हो गया');
+  }
 }
 
-// --- Deep-Link & Real-time Notification Handler ---
+// सेटिंग्स बटन के क्लिक पर OTA चेक को जोड़ना
+$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
+  checkWebOtaUpdate(true);
+};
+
 function handleDeepLinks() {
   try {
-    // 1. सर्विस वर्कर लिसनर
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', async (event) => {
         const data = event.data;
@@ -1992,7 +1987,6 @@ function handleDeepLinks() {
       });
     }
 
-    // 2. URL पैरामीटर्स (अगर ऐप बंद पड़ी थी)
     const urlParams = new URLSearchParams(window.location.search);
     const openChatId = urlParams.get('chatTargetId');
     const openChatName = urlParams.get('chatTargetName');
@@ -2013,7 +2007,6 @@ function handleDeepLinks() {
       }, 800);
     }
 
-    // 3. नेटिव Capacitor AppUrlOpen (ACCEPT बटन दबाने पर जब ऐप बैकग्राउंड से सामने आती है)
     if (isNative && App) {
       App.addListener('appUrlOpen', async (event) => {
         try {
@@ -2038,7 +2031,6 @@ function handleDeepLinks() {
   }
 }
 
-// --- App Initialization ---
 async function initApp() {
   try {
     applyLanguage(currentLang);
@@ -2051,7 +2043,7 @@ async function initApp() {
     console.error('UI init error:', err);
   }
 
-  setTimeout(() => checkWebOtaUpdate(), 2500);
+  setTimeout(() => checkWebOtaUpdate(false), 2500);
 }
 
 if (document.readyState === 'loading') {
