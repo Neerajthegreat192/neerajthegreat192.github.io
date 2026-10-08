@@ -1098,15 +1098,30 @@ async function sendChatMessage() {
   setTimeout(() => { isSendingMsg = false; }, 800);
 }
 
-actionBtn.onclick = async (e) => {
+// --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का परफ़ेक्ट फ़िक्स ---
+actionBtn.addEventListener('pointerdown', (e) => {
+  if (chatInput.value.trim().length > 0) {
+    e.preventDefault();
+  }
+});
+
+actionBtn.addEventListener('mousedown', (e) => {
+  if (chatInput.value.trim().length > 0) {
+    e.preventDefault();
+  }
+});
+
+actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
   if (chatInput.value.trim().length > 0) {
     await sendChatMessage();
+    chatInput.focus(); 
   } else {
     chatInput.blur();
     openVoiceDock();
   }
-};
+});
+
 
 chatInput.onkeydown = e => { 
   if (e.key === 'Enter' && !e.shiftKey) { 
