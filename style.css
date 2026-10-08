@@ -194,7 +194,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   min-width:75px;
 }
 .msg-time-label{font-size:11px;color:#94a3b8;font-weight:700;white-space:nowrap}
-.contact-live-status{font-size:11px;font-weight:700;white-space:nowrap;color:#64748b}
+.contact-live-status{font-size:11px;font-weight:700;white-space:nowrap;color:#f43f5e}
 .contact-live-status.online{color:var(--success)}
 .badge-unread{
   background:var(--success);
