@@ -1064,27 +1064,23 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         token,
-        type: "chat",
         title: myUserName,
         body: textContent,
-        callerName: "",
-        callId: "",
-        audioOnly: "false",
-        chatTargetId: myUserId,
-        chatTargetName: myUserName,
-        messageText: textContent,
-        roomId: roomId,
-        msgId: msgId,
-        priority: "high",
-        url: window.location.href
+        callerName: myUserName,
+        callId: "CHAT_" + myUserId
       })
     }).catch(()=>{});
   } catch(e) {}
 }
 
+let isSendingMsg = false; // यह लॉक डबल मैसेज को रोकेगा
+
 async function sendChatMessage() {
+  if (isSendingMsg) return; // अगर मैसेज जा रहा है, तो दूसरा ब्लॉक करें
   const txt = chatInput.value.trim();
   if (!txt || !currentChatTargetId) return;
+
+  isSendingMsg = true; // लॉक लगा दें
   playMessageTickSound();
 
   const roomId = getChatRoomId(myUserId, currentChatTargetId);
@@ -1105,6 +1101,9 @@ async function sendChatMessage() {
     senderId: myUserId, senderName: myUserName, text: txt, time: Date.now(), delivered: targetOnline, read: false
   });
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
+
+  // 800 मिलीसेकंड बाद ही दूसरा मैसेज भेजने की अनुमति दें
+  setTimeout(() => { isSendingMsg = false; }, 800);
 }
 
 // --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का फ़िक्स ---
@@ -1140,8 +1139,8 @@ chatInput.addEventListener('keydown', e => {
 
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
-const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn = $('dockPauseResumeBtn');
-const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot = $('dockBlinkDot');
+const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn =$('dockPauseResumeBtn');
+const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot =$('dockBlinkDot');
 const waveCanvas = $('waveCanvas'), waveCtx = waveCanvas.getContext('2d');
 
 async function openVoiceDock() {
@@ -1349,13 +1348,8 @@ async function sendPushNotification(token, callerName, isVoice = false) {
         token,
         title: "इनकमिंग कॉल...",
         body: `${callerName} आपको कॉल कर रहे हैं`,
-        callerName,
-        callId: activeCallId,
-        callType: isVoice ? "ऑडियो" : "वीडियो",
-        audioOnly: isVoice ? "true" : "false",
-        priority: "high",
-        channelId: "call_channel",
-        url: window.location.href
+        callerName: callerName + (isVoice ? "|AUDIO" : "|VIDEO"),
+        callId: activeCallId
       })
     }).catch(()=>{});
   } catch(e) {}
@@ -1432,7 +1426,7 @@ $('btnCancelCall').onclick = () => {
       if (token) {
         fetch("https://neeraj.neerajthegreat192.workers.dev/", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, type: "cancel_call" })
+          body: JSON.stringify({ token, title: "Cancel", body: "Call Cancelled", callId: "CANCEL_" + activeCallId })
         }).catch(()=>{});
       }
     }).catch(()=>{});
