@@ -443,7 +443,6 @@ async function initPresence() {
   });
   if (myFcmToken) await update(userRef, { fcmToken: myFcmToken });
 
-  // ब्राउज़र में नोटिफिकेशन परमिशन होने पर टोकन स्वतः फ़ेच और सिंक करें
   if (!isNative && 'Notification' in window && Notification.permission === 'granted') {
     requestNotificationPermission().catch(()=>{});
   }
@@ -1035,7 +1034,7 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         token,
-        type: "chat", // स्पष्ट चैट टाइप ताकि बैकग्राउंड सर्विस कॉल न समझे
+        type: "chat",
         title: myUserName,
         body: textContent,
         callerName: "",
@@ -1081,7 +1080,7 @@ async function sendChatMessage() {
 // --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का फ़िक्स ---
 actionBtn.addEventListener('pointerdown', (e) => {
   if (chatInput.value.trim().length > 0) {
-    e.preventDefault(); // इनपुट बॉक्स से फ़ोकस छिनने और कीबोर्ड बंद होने से रोकता है
+    e.preventDefault();
   }
 });
 
@@ -1091,23 +1090,24 @@ actionBtn.addEventListener('mousedown', (e) => {
   }
 });
 
-// सेंड बटन क्लिक हैंडलर (फ़ोकस बनाए रखें)
+// सेंड बटन क्लिक लिसनर (एकल एवं साफ़)
 actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
   if (chatInput.value.trim().length > 0) {
     await sendChatMessage();
-    chatInput.focus(); // मैसेज जाने के तुरंत बाद कर्सर इनपुट में ही रखेगा
+    chatInput.focus();
   } else {
     chatInput.blur();
     openVoiceDock();
   }
 });
-actionBtn.addEventListener('click', async (e) => {
-  e.preventDefault();
-  if (chatInput.value.trim().length > 0) await sendChatMessage();
-  else { chatInput.blur(); openVoiceDock(); }
+
+chatInput.addEventListener('keydown', e => { 
+  if (e.key === 'Enter' && !e.shiftKey) { 
+    e.preventDefault(); 
+    sendChatMessage(); 
+  } 
 });
-chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } });
 
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
@@ -1391,7 +1391,8 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 }
 
 $('btnCancelCall').onclick = () => { stopAllCallTones(); outgoingDialog.hidden = true; hangup(); };
-$('btnAccept').onclick = async () => { stopAllCallTones(); incomingDialog.hidden = true; if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession(); };$('btnReject').onclick = async () => {
+$('btnAccept').onclick = async () => { stopAllCallTones(); incomingDialog.hidden = true; if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession(); };
+$('btnReject').onclick = async () => {
   stopAllCallTones(); incomingDialog.hidden = true;
   clearOngoingCallNotification();
   recordCallLog({
@@ -1864,7 +1865,7 @@ function setupHardwareBackButton() {
   });
 }
 
-// --- Visual Viewport Keyboard Resize Handling (कीबोर्ड से चिपका कर रखने के लिए) ---
+// --- Visual Viewport Keyboard Resize Handling (कीबोर्ड से इनपुट टच रखना और होल्ड रोकना) ---
 if (window.visualViewport) {
   const syncViewport = () => {
     if (!chatScreen.hidden) {
@@ -1921,7 +1922,6 @@ async function checkWebOtaUpdate() {
 // --- Deep-Link & Real-time Notification Handler ---
 function handleDeepLinks() {
   try {
-    // 1. Service Worker से रियल-टाइम मैसेज सुनना
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', async (event) => {
         const data = event.data;
@@ -1945,7 +1945,6 @@ function handleDeepLinks() {
       });
     }
 
-    // 2. URL पैरामीटर्स (Android Intent या Browser Click से)
     const urlParams = new URLSearchParams(window.location.search);
     const openChatId = urlParams.get('chatTargetId');
     const openChatName = urlParams.get('chatTargetName');
@@ -1990,7 +1989,7 @@ async function initApp() {
   }, 2500);
 }
 
-// सुरक्षित स्टार्ट: DOM तैयार होते ही केवल एक बार चलेगा
+// सुरक्षित स्टार्ट
 if (document.readyState === 'loading') {
   window.addEventListener('DOMContentLoaded', initApp, { once: true });
 } else {
