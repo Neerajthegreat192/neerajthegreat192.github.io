@@ -520,3 +520,103 @@ button{font-family:inherit;cursor:pointer;outline:none}
 #chatTargetName {
   color: #FFD700 !important;
 }
+
+/* --- स्क्रीन और कीबोर्ड फिक्स: होल्ड और स्लाइडिंग बंद करें --- */
+html, body {
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  position: fixed !important;
+  overscroll-behavior: none !important;
+}
+
+#chatScreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  background: var(--bg, #090d10) !important;
+}
+
+.chat-header {
+  flex-shrink: 0 !important;
+}
+
+.chat-body {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding-bottom: 8px !important;
+}
+
+/* --- टाइपिंग एरिया: चौड़ाई बढ़ाई गई और कीबोर्ड से चिपकाया गया --- */
+.chat-footer {
+  flex-shrink: 0 !important;
+  position: relative !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 6px !important;
+  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 4px) 8px !important;
+  background: #0e161c !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-sizing: border-box !important;
+  z-index: 100 !important;
+}
+
+/* अटैच बटन को थोड़ा कॉम्पैक्ट किया गया ताकि इनपुट को अधिक जगह मिले */
+.attach-btn {
+  width: 38px !important;
+  height: 38px !important;
+  flex-shrink: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* टाइपिंग बॉक्स की चौड़ाई बढ़ाई गई (Flex: 1) */
+.input-wrap {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  background: #18222d !important;
+  border-radius: 22px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  display: flex !important;
+  align-items: center !important;
+  padding: 2px 10px !important;
+}
+
+.chat-input {
+  width: 100% !important;
+  min-height: 38px !important;
+  max-height: 100px !important;
+  padding: 8px 4px !important;
+  font-size: 15px !important;
+  color: #fff !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  resize: none !important;
+  box-sizing: border-box !important;
+}
+
+/* सेंड/माइक बटन */
+.action-btn {
+  width: 40px !important;
+  height: 40px !important;
+  flex-shrink: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
