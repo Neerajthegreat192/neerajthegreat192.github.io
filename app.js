@@ -266,7 +266,7 @@ if (shareBtn) {
   shareBtn.onclick = async () => {
     const shareData = {
       title: 'VideoCallApp',
-      text: 'एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
+      text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
       url: GITHUB_APK_URL
     };
     try {
@@ -442,6 +442,7 @@ function handleIncomingCallNotification(data) {
   currentCallTargetId = data.callerId || '';
   currentCallTargetName = data.callerName || 'कोई';
   
+  // Audio flag strictly handled
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
   lobbyScreen.hidden = true;
@@ -1070,7 +1071,6 @@ async function sendChatMessage() {
 
   isSendingMsg = true; 
   
-  // क्लिक होते ही तुरंत इनपुट खाली करें ताकि डबल क्लिक कुछ न कर पाए
   chatInput.value = ''; 
   chatInput.style.height = '44px';
   updateActionBtnState();
@@ -1093,12 +1093,18 @@ async function sendChatMessage() {
     senderId: myUserId, senderName: myUserName, text: txt, time: Date.now(), delivered: targetOnline, read: false
   });
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
+  
   chatInput.focus();
 
-  setTimeout(() => { isSendingMsg = false; }, 800);
+  setTimeout(() => { 
+    const body = document.getElementById('chatBody');
+    if (body) {
+      body.scrollTop = body.scrollHeight;
+    }
+    isSendingMsg = false; 
+  }, 150);
 }
 
-// --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का परफ़ेक्ट फ़िक्स ---
 actionBtn.addEventListener('pointerdown', (e) => {
   if (chatInput.value.trim().length > 0) {
     e.preventDefault();
@@ -1121,7 +1127,6 @@ actionBtn.addEventListener('click', async (e) => {
     openVoiceDock();
   }
 });
-
 
 chatInput.onkeydown = e => { 
   if (e.key === 'Enter' && !e.shiftKey) { 
@@ -1408,12 +1413,10 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
-// रद्द करें (Cancel Call) बटन: रिंगटोन बंद करने के लिए पेलोड भेजेगा
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
   if (currentCallTargetId) {
-    // चैट में मिस्ड कॉल का लाल अलर्ट डालें
     const roomId = getChatRoomId(myUserId, currentCallTargetId);
     const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
     push(ref(db, `chats/${roomId}/messages`), { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false });
@@ -1474,7 +1477,7 @@ async function toggleVideoTrackMode(enableCam) {
       pipWrap.style.opacity = '0.2'; $('camBtn').classList.add('off'); camEnabled = false;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
     }
-  } catch(e) { toast('कैमरा शुरू नहीं सका'); }
+  } catch(e) { toast('कैमरा शुरू नहीं हो सका'); }
 }
 
 $('audioModeBtn').onclick = () => {
@@ -1906,7 +1909,6 @@ function setupHardwareBackButton() {
   });
 }
 
-// --- Visual Viewport Keyboard Resize Handling ---
 if (window.visualViewport) {
   const syncViewport = () => {
     if (!chatScreen.hidden) {
@@ -1936,7 +1938,6 @@ chatInput.addEventListener('blur', () => {
   }
 });
 
-// --- शुद्ध वेब OTA (CSS और लाइव स्टाइल अपडेट) ---
 async function checkWebOtaUpdate() {
   try {
     const res = await fetch('https://neerajthegreat192.github.io/ota-version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1958,10 +1959,8 @@ async function checkWebOtaUpdate() {
   } catch (err) {}
 }
 
-// --- Deep-Link & Real-time Notification Handler ---
 function handleDeepLinks() {
   try {
-    // 1. सर्विस वर्कर लिसनर
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', async (event) => {
         const data = event.data;
@@ -1985,7 +1984,6 @@ function handleDeepLinks() {
       });
     }
 
-    // 2. URL पैरामीटर्स (अगर ऐप बंद पड़ी थी)
     const urlParams = new URLSearchParams(window.location.search);
     const openChatId = urlParams.get('chatTargetId');
     const openChatName = urlParams.get('chatTargetName');
@@ -2006,7 +2004,6 @@ function handleDeepLinks() {
       }, 800);
     }
 
-    // 3. नेटिव Capacitor AppUrlOpen (ACCEPT बटन दबाने पर जब ऐप बैकग्राउंड से सामने आती है)
     if (isNative && App) {
       App.addListener('appUrlOpen', async (event) => {
         try {
@@ -2031,7 +2028,6 @@ function handleDeepLinks() {
   }
 }
 
-// --- App Initialization ---
 async function initApp() {
   try {
     applyLanguage(currentLang);
