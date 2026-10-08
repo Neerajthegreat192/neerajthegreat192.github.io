@@ -259,6 +259,29 @@ function clearOngoingCallNotification() {
   }
 }
 
+// --- ऐप शेयर बटन लॉजिक ---
+$('shareAppBtn').onclick = async () => {
+  const shareData = {
+    title: 'VideoCallApp',
+    text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
+    url: GITHUB_APK_URL
+  };
+
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else {
+      await navigator.clipboard.writeText(GITHUB_APK_URL);
+      toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      await navigator.clipboard.writeText(GITHUB_APK_URL);
+      toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
+    }
+  }
+};
+
 $('directApkDlBtn').onclick = () => {
   toast(currentLang === 'hi' ? '📥 APK डाउनलोड शुरू हो रहा है...' : '📥 Downloading APK...');
   const a = document.createElement('a');
