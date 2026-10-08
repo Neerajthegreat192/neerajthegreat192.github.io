@@ -259,7 +259,7 @@ function clearOngoingCallNotification() {
   }
 }
 
-// --- ऐप शेयर बटन लॉजिक ---
+// --- शेयर बटन लॉजिक (Native Share Fix) ---
 const Share = window.Capacitor?.Plugins?.Share;
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
@@ -442,7 +442,6 @@ function handleIncomingCallNotification(data) {
   currentCallTargetId = data.callerId || '';
   currentCallTargetName = data.callerName || 'कोई';
   
-  // Audio flag strictly handled
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
   lobbyScreen.hidden = true;
@@ -1105,23 +1104,22 @@ async function sendChatMessage() {
   }, 150);
 }
 
+// --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का परफ़ेक्ट फ़िक्स ---
 actionBtn.addEventListener('pointerdown', (e) => {
   if (chatInput.value.trim().length > 0) {
     e.preventDefault();
   }
 });
-
 actionBtn.addEventListener('mousedown', (e) => {
   if (chatInput.value.trim().length > 0) {
     e.preventDefault();
   }
 });
-
 actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
   if (chatInput.value.trim().length > 0) {
     await sendChatMessage();
-    chatInput.focus(); 
+    chatInput.focus();
   } else {
     chatInput.blur();
     openVoiceDock();
@@ -1413,6 +1411,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
+// कॉलर द्वारा कॉल कैंसिल करने पर मिस्ड कॉल को चैट में अपडेट करें
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
@@ -1909,6 +1908,7 @@ function setupHardwareBackButton() {
   });
 }
 
+// --- Visual Viewport Keyboard Resize Handling ---
 if (window.visualViewport) {
   const syncViewport = () => {
     if (!chatScreen.hidden) {
@@ -1938,6 +1938,7 @@ chatInput.addEventListener('blur', () => {
   }
 });
 
+// --- शुद्ध वेब OTA (CSS और लाइव स्टाइल अपडेट) ---
 async function checkWebOtaUpdate() {
   try {
     const res = await fetch('https://neerajthegreat192.github.io/ota-version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1959,8 +1960,10 @@ async function checkWebOtaUpdate() {
   } catch (err) {}
 }
 
+// --- Deep-Link & Real-time Notification Handler ---
 function handleDeepLinks() {
   try {
+    // 1. सर्विस वर्कर लिसनर
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', async (event) => {
         const data = event.data;
@@ -1984,6 +1987,7 @@ function handleDeepLinks() {
       });
     }
 
+    // 2. URL पैरामीटर्स (अगर ऐप बंद पड़ी थी)
     const urlParams = new URLSearchParams(window.location.search);
     const openChatId = urlParams.get('chatTargetId');
     const openChatName = urlParams.get('chatTargetName');
@@ -2004,6 +2008,7 @@ function handleDeepLinks() {
       }, 800);
     }
 
+    // 3. नेटिव Capacitor AppUrlOpen (ACCEPT बटन दबाने पर जब ऐप बैकग्राउंड से सामने आती है)
     if (isNative && App) {
       App.addListener('appUrlOpen', async (event) => {
         try {
@@ -2028,6 +2033,7 @@ function handleDeepLinks() {
   }
 }
 
+// --- App Initialization ---
 async function initApp() {
   try {
     applyLanguage(currentLang);
