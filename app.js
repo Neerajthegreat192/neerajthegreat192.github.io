@@ -259,31 +259,44 @@ function clearOngoingCallNotification() {
   }
 }
 
-// --- शेयर बटन लॉजिक (Native Share Fix) ---
+// --- शेयर बटन लॉजिक (WhatsApp Direct Fallback) ---
 const Share = window.Capacitor?.Plugins?.Share;
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
   shareBtn.onclick = async () => {
-    const shareData = {
-      title: 'VideoCallApp',
-      text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
-      url: GITHUB_APK_URL
-    };
+    const shareText = 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें: \n\n' + GITHUB_APK_URL;
+    
     try {
       if (isNative && Share) {
+        // 1. अगर Capacitor प्लगइन है, तो असली शेयर मेन्यू खोलें
         await Share.share({
-          title: shareData.title,
-          text: shareData.text,
-          url: shareData.url,
+          title: 'VideoCallApp',
+          text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
+          url: GITHUB_APK_URL,
           dialogTitle: 'ऐप शेयर करें'
         });
       } else if (navigator.share) {
-        await navigator.share(shareData);
+        // 2. वेब ब्राउज़र के लिए
+        await navigator.share({
+          title: 'VideoCallApp',
+          text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
+          url: GITHUB_APK_URL
+        });
       } else {
-        await navigator.clipboard.writeText(shareData.url);
-        toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
+        // 3. प्लगइन नहीं है, तो सीधे WhatsApp खोलने का जुगाड़
+        window.location.href = `whatsapp://send?text=${encodeURIComponent(shareText)}`;
+        toast(currentLang === 'hi' ? 'WhatsApp खोला जा रहा है...' : 'Opening WhatsApp...');
+        
+        // बैकअप: अगर WhatsApp न हो तो लिंक कॉपी कर लें
+        setTimeout(() => {
+          navigator.clipboard.writeText(shareText).catch(()=>{});
+        }, 1500);
       }
-    } catch (err) {}
+    } catch (err) {
+      // कोई भी एरर आने पर लिंक कॉपी करें
+      navigator.clipboard.writeText(shareText).catch(()=>{});
+      toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
+    }
   };
 }
 
