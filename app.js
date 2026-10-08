@@ -1840,7 +1840,7 @@ function setupHardwareBackButton() {
   });
 }
 
-// --- Visual Viewport Keyboard Resize Handling (कीबोर्ड से इनपुट टच रखना और होल्ड रोकना) ---
+// --- Visual Viewport Keyboard Resize Handling (कीबोर्ड से चिपका कर रखने के लिए) ---
 if (window.visualViewport) {
   const syncViewport = () => {
     if (!chatScreen.hidden) {
@@ -1896,53 +1896,59 @@ async function checkWebOtaUpdate() {
 
 // --- Deep-Link & Real-time Notification Handler ---
 function handleDeepLinks() {
-  // 1. Service Worker से रियल-टाइम मैसेज सुनना
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', async (event) => {
-      const data = event.data;
-      if (data.type === 'NEW_CHAT_MESSAGE') {
-        // रियल-टाइम में चैट लिस्ट अपडेट करें
-        if (latestChatSnippets[data.senderId]) {
-          latestChatSnippets[data.senderId].text = data.text;
-          latestChatSnippets[data.senderId].time = Date.now();
-          renderContacts();
+  try {
+    // 1. Service Worker से रियल-टाइम मैसेज सुनना
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', async (event) => {
+        const data = event.data;
+        if (!data) return;
+
+        if (data.type === 'NEW_CHAT_MESSAGE' && data.senderId) {
+          if (latestChatSnippets[data.senderId]) {
+            latestChatSnippets[data.senderId].text = data.text;
+            latestChatSnippets[data.senderId].time = Date.now();
+            renderContacts();
+          }
+        } else if (data.type === 'OPEN_CHAT' && data.targetId) {
+          openChat(data.targetId, data.senderName || 'उपयोगकर्ता', true);
+        } else if (data.type === 'ACCEPT_CALL' && data.callId) {
+          if (!isCallConnected) {
+            activeCallId = data.callId;
+            isAudioOnlyCall = !!data.isAudio;
+            if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
+          }
         }
-      } else if (data.type === 'OPEN_CHAT') {
-        openChat(data.targetId, data.senderName, true);
-      } else if (data.type === 'ACCEPT_CALL') {
+      });
+    }
+
+    // 2. URL पैरामीटर्स (Android Intent या Browser Click से)
+    const urlParams = new URLSearchParams(window.location.search);
+    const openChatId = urlParams.get('chatTargetId');
+    const openChatName = urlParams.get('chatTargetName');
+    const acceptCallId = urlParams.get('acceptCallId');
+    const isAudioUrl = urlParams.get('isAudio') === 'true';
+
+    if (openChatId) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => {
+        openChat(openChatId, openChatName || 'उपयोगकर्ता', true);
+      }, 800);
+    } else if (acceptCallId) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(async () => {
         if (!isCallConnected) {
-          activeCallId = data.callId;
-          isAudioOnlyCall = data.isAudio;
+          activeCallId = acceptCallId;
+          isAudioOnlyCall = isAudioUrl;
           if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
         }
-      }
-    });
-  }
-
-  // 2. URL पैरामीटर्स (Android Intent से) पढ़ना
-  const urlParams = new URLSearchParams(window.location.search);
-  const openChatId = urlParams.get('chatTargetId');
-  const openChatName = urlParams.get('chatTargetName');
-  const acceptCallId = urlParams.get('acceptCallId');
-  const isAudioUrl = urlParams.get('isAudio') === 'true';
-
-  if (openChatId && openChatName) {
-    // URL क्लीन करें और चैट खोलें
-    window.history.replaceState({}, document.title, window.location.pathname);
-    setTimeout(() => openChat(openChatId, openChatName, true), 1000);
-  } else if (acceptCallId) {
-    window.history.replaceState({}, document.title, window.location.pathname);
-    setTimeout(async () => {
-      if (!isCallConnected) {
-        activeCallId = acceptCallId;
-        isAudioOnlyCall = isAudioUrl;
-        if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
-      }
-    }, 1000);
+      }, 800);
+    }
+  } catch (e) {
+    console.warn('Deep link error:', e);
   }
 }
 
-// App Initialization के अंदर इसे कॉल करें
+// --- App Initialization (एकल व सुरक्षित फ़ंक्शन) ---
 async function initApp() {
   try {
     applyLanguage(currentLang);
@@ -1950,21 +1956,7 @@ async function initApp() {
     setupNativePushListeners();
     checkUser();
     await triggerAutoPermissionGate();
-    handleDeepLinks(); // <-- यहाँ जोड़ा गया
-  } catch (err) {
-    console.error('UI init error:', err);
-  }
-  setTimeout(() => { checkWebOtaUpdate(); }, 2500);
-}
-
-// --- App Initialization (100% Fail-Safe) ---
-async function initApp() {
-  try {
-    applyLanguage(currentLang);
-    setupHardwareBackButton();
-    setupNativePushListeners();
-    checkUser();
-    await triggerAutoPermissionGate();
+    handleDeepLinks();
   } catch (err) {
     console.error('UI init error:', err);
   }
@@ -1974,8 +1966,9 @@ async function initApp() {
   }, 2500);
 }
 
+// सुरक्षित स्टार्ट: DOM तैयार होते ही केवल एक बार चलेगा
 if (document.readyState === 'loading') {
-  window.addEventListener('DOMContentLoaded', initApp);
+  window.addEventListener('DOMContentLoaded', initApp, { once: true });
 } else {
   initApp();
 }
