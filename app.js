@@ -443,6 +443,11 @@ async function initPresence() {
   });
   if (myFcmToken) await update(userRef, { fcmToken: myFcmToken });
 
+  // ब्राउज़र में नोटिफिकेशन परमिशन होने पर टोकन स्वतः फ़ेच और सिंक करें
+  if (!isNative && 'Notification' in window && Notification.permission === 'granted') {
+    requestNotificationPermission().catch(()=>{});
+  }
+
   onValue(connectedRef, async snap => {
     if (snap.val() === true) {
       networkBanner.hidden = true;
@@ -1008,13 +1013,6 @@ function updateActionBtnState() {
   else { micSvg.style.display = 'block'; sendSvg.style.display = 'none'; actionBtn.classList.remove('send-mode'); }
 }
 
-chatInput.addEventListener('focus', () => {
-  setTimeout(() => {
-    const body = $('chatBody');
-    if (body) body.scrollTop = body.scrollHeight;
-  }, 200);
-});
-
 chatInput.addEventListener('input', () => {
   chatInput.style.height = '44px';
   chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
@@ -1037,6 +1035,7 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         token,
+        type: "chat", // स्पष्ट चैट टाइप ताकि बैकग्राउंड सर्विस कॉल न समझे
         title: myUserName,
         body: textContent,
         callerName: "",
@@ -1053,6 +1052,7 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
     }).catch(()=>{});
   } catch(e) {}
 }
+
 async function sendChatMessage() {
   const txt = chatInput.value.trim();
   if (!txt || !currentChatTargetId) return;
@@ -1802,7 +1802,6 @@ function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); w
 
 let backPressedOnce = false;
 function setupHardwareBackButton() {
-  // 1. Browser & PWA Back Button Handling
   window.addEventListener('popstate', (e) => {
     const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) {
@@ -1822,7 +1821,6 @@ function setupHardwareBackButton() {
 
   history.pushState(null, '', window.location.href);
 
-  // 2. Native Android (Capacitor) Back Button Handling
   if (!isNative || !App) return;
   App.addListener('backButton', () => {
     const openModals = [$('adminPanelModal'),$('adminPinModal'),$('profileModal'),$('addParticipantModal'),$('permNoticeModal')];
@@ -1842,16 +1840,37 @@ function setupHardwareBackButton() {
   });
 }
 
-// --- Visual Viewport Keyboard Resize Handling ---
+// --- Visual Viewport Keyboard Resize Handling (कीबोर्ड से इनपुट टच रखना और होल्ड रोकना) ---
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
+  const syncViewport = () => {
     if (!chatScreen.hidden) {
+      window.scrollTo(0, 0);
       chatScreen.style.height = `${window.visualViewport.height}px`;
       const body = $('chatBody');
       if (body) body.scrollTop = body.scrollHeight;
     }
+  };
+
+  window.visualViewport.addEventListener('resize', syncViewport);
+  window.visualViewport.addEventListener('scroll', () => {
+    if (!chatScreen.hidden) window.scrollTo(0, 0);
   });
 }
+
+chatInput.addEventListener('focus', () => {
+  setTimeout(() => {
+    window.scrollTo(0, 0);
+    const body = $('chatBody');
+    if (body) body.scrollTop = body.scrollHeight;
+  }, 150);
+});
+
+chatInput.addEventListener('blur', () => {
+  if (!chatScreen.hidden) {
+    chatScreen.style.height = '100%';
+    window.scrollTo(0, 0);
+  }
+});
 
 // --- शुद्ध वेब OTA (CSS और लाइव स्टाइल अपडेट) ---
 async function checkWebOtaUpdate() {
@@ -1863,23 +1882,16 @@ async function checkWebOtaUpdate() {
     const activeVer = localStorage.getItem('ota_active_ver');
 
     if (info.version && String(info.version) !== activeVer) {
-      console.log('Web OTA: नया कोड मिला:', info.version);
-
       const cssRes = await fetch('https://neerajthegreat192.github.io/style.css?t=' + Date.now(), { cache: 'no-store' });
       if (cssRes.ok) {
         const newCss = await cssRes.text();
         localStorage.setItem('ota_cached_css', newCss);
-
         const otaStyle = $('otaCustomStyle');
         if (otaStyle) otaStyle.textContent = newCss;
       }
-
       localStorage.setItem('ota_active_ver', String(info.version));
-      toast(currentLang === 'hi' ? '✨ नया अपडेट लागू हो गया!' : '✨ New update applied!');
     }
-  } catch (err) {
-    console.warn('Web OTA Check skipped:', err);
-  }
+  } catch (err) {}
 }
 
 // --- App Initialization (100% Fail-Safe) ---
@@ -1899,7 +1911,6 @@ async function initApp() {
   }, 2500);
 }
 
-// अगर DOM पहले से तैयार है तो तुरंत चलाएं, वरना इवेंट का इंतज़ार करें
 if (document.readyState === 'loading') {
   window.addEventListener('DOMContentLoaded', initApp);
 } else {
