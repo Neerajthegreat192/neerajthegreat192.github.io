@@ -1894,6 +1894,69 @@ async function checkWebOtaUpdate() {
   } catch (err) {}
 }
 
+// --- Deep-Link & Real-time Notification Handler ---
+function handleDeepLinks() {
+  // 1. Service Worker से रियल-टाइम मैसेज सुनना
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', async (event) => {
+      const data = event.data;
+      if (data.type === 'NEW_CHAT_MESSAGE') {
+        // रियल-टाइम में चैट लिस्ट अपडेट करें
+        if (latestChatSnippets[data.senderId]) {
+          latestChatSnippets[data.senderId].text = data.text;
+          latestChatSnippets[data.senderId].time = Date.now();
+          renderContacts();
+        }
+      } else if (data.type === 'OPEN_CHAT') {
+        openChat(data.targetId, data.senderName, true);
+      } else if (data.type === 'ACCEPT_CALL') {
+        if (!isCallConnected) {
+          activeCallId = data.callId;
+          isAudioOnlyCall = data.isAudio;
+          if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
+        }
+      }
+    });
+  }
+
+  // 2. URL पैरामीटर्स (Android Intent से) पढ़ना
+  const urlParams = new URLSearchParams(window.location.search);
+  const openChatId = urlParams.get('chatTargetId');
+  const openChatName = urlParams.get('chatTargetName');
+  const acceptCallId = urlParams.get('acceptCallId');
+  const isAudioUrl = urlParams.get('isAudio') === 'true';
+
+  if (openChatId && openChatName) {
+    // URL क्लीन करें और चैट खोलें
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setTimeout(() => openChat(openChatId, openChatName, true), 1000);
+  } else if (acceptCallId) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setTimeout(async () => {
+      if (!isCallConnected) {
+        activeCallId = acceptCallId;
+        isAudioOnlyCall = isAudioUrl;
+        if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
+      }
+    }, 1000);
+  }
+}
+
+// App Initialization के अंदर इसे कॉल करें
+async function initApp() {
+  try {
+    applyLanguage(currentLang);
+    setupHardwareBackButton();
+    setupNativePushListeners();
+    checkUser();
+    await triggerAutoPermissionGate();
+    handleDeepLinks(); // <-- यहाँ जोड़ा गया
+  } catch (err) {
+    console.error('UI init error:', err);
+  }
+  setTimeout(() => { checkWebOtaUpdate(); }, 2500);
+}
+
 // --- App Initialization (100% Fail-Safe) ---
 async function initApp() {
   try {
