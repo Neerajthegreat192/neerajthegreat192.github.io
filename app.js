@@ -1410,10 +1410,16 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 }
 
 // रद्द करें (Cancel Call) बटन: रिंगटोन बंद करने के लिए पेलोड भेजेगा
+// कॉलर द्वारा कॉल कैंसिल करने पर मिस्ड कॉल को चैट में अपडेट करें
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
   if (currentCallTargetId) {
+    // चैट में मिस्ड कॉल का लाल अलर्ट डालें
+    const roomId = getChatRoomId(myUserId, currentCallTargetId);
+    const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
+    push(ref(db, `chats/${roomId}/messages`), { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false });
+
     update(ref(db, `user_inbox/${currentCallTargetId}`), { status: 'cancelled' }).catch(()=>{});
     get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
       const token = snap.val()?.fcmToken;
