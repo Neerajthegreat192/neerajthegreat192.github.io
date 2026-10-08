@@ -260,27 +260,30 @@ function clearOngoingCallNotification() {
 }
 
 // --- ऐप शेयर बटन लॉजिक ---
+const Share = window.Capacitor?.Plugins?.Share;
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
   shareBtn.onclick = async () => {
     const shareData = {
       title: 'VideoCallApp',
-      text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
+      text: 'एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
       url: GITHUB_APK_URL
     };
     try {
-      if (navigator.share) {
+      if (isNative && Share) {
+        await Share.share({
+          title: shareData.title,
+          text: shareData.text,
+          url: shareData.url,
+          dialogTitle: 'ऐप शेयर करें'
+        });
+      } else if (navigator.share) {
         await navigator.share(shareData);
       } else {
-        await navigator.clipboard.writeText(GITHUB_APK_URL);
+        await navigator.clipboard.writeText(shareData.url);
         toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
       }
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        await navigator.clipboard.writeText(GITHUB_APK_URL);
-        toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
-      }
-    }
+    } catch (err) {}
   };
 }
 
@@ -1073,20 +1076,24 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
   } catch(e) {}
 }
 
-let isSendingMsg = false; // यह लॉक डबल मैसेज को रोकेगा
+let isSendingMsg = false; 
 
 async function sendChatMessage() {
-  if (isSendingMsg) return; // अगर मैसेज जा रहा है, तो दूसरा ब्लॉक करें
+  if (isSendingMsg) return; 
   const txt = chatInput.value.trim();
   if (!txt || !currentChatTargetId) return;
 
-  isSendingMsg = true; // लॉक लगा दें
+  isSendingMsg = true; 
+  
+  // क्लिक होते ही तुरंत इनपुट खाली करें ताकि डबल क्लिक कुछ न कर पाए
+  chatInput.value = ''; 
+  chatInput.style.height = '44px';
+  updateActionBtnState();
+  
   playMessageTickSound();
 
   const roomId = getChatRoomId(myUserId, currentChatTargetId);
   const roomPath = `chats/${roomId}/messages`;
-  chatInput.value = ''; chatInput.style.height = '44px';
-  updateActionBtnState(); chatInput.focus();
   update(ref(db, `users/${myUserId}`), { typingTo: null }).catch(()=>{});
 
   const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
@@ -1101,41 +1108,28 @@ async function sendChatMessage() {
     senderId: myUserId, senderName: myUserName, text: txt, time: Date.now(), delivered: targetOnline, read: false
   });
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
+  chatInput.focus(); // फोकस वापस लाएं ताकि कीबोर्ड खुला रहे
 
-  // 800 मिलीसेकंड बाद ही दूसरा मैसेज भेजने की अनुमति दें
   setTimeout(() => { isSendingMsg = false; }, 800);
 }
 
-// --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का फ़िक्स ---
-actionBtn.addEventListener('pointerdown', (e) => {
-  if (chatInput.value.trim().length > 0) {
-    e.preventDefault();
-  }
-});
-actionBtn.addEventListener('mousedown', (e) => {
-  if (chatInput.value.trim().length > 0) {
-    e.preventDefault();
-  }
-});
-
-// सेंड बटन क्लिक लिसनर (सिर्फ एक बार काम करेगा)
-actionBtn.addEventListener('click', async (e) => {
+// पुराने सारे pointerdown/mousedown हटा दिए गए हैं, सिर्फ यह रहेगा
+actionBtn.onclick = async (e) => {
   e.preventDefault();
   if (chatInput.value.trim().length > 0) {
     await sendChatMessage();
-    chatInput.focus();
   } else {
     chatInput.blur();
     openVoiceDock();
   }
-});
+};
 
-chatInput.addEventListener('keydown', e => { 
+chatInput.onkeydown = e => { 
   if (e.key === 'Enter' && !e.shiftKey) { 
     e.preventDefault(); 
     sendChatMessage(); 
   } 
-});
+};
 
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
