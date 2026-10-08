@@ -442,7 +442,6 @@ function handleIncomingCallNotification(data) {
   currentCallTargetId = data.callerId || '';
   currentCallTargetName = data.callerName || 'कोई';
   
-  // Audio flag strictly handled
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
   lobbyScreen.hidden = true;
@@ -706,20 +705,6 @@ async function recordCallLog(entry) {
         type: remoteType, callMode: entry.callMode || 'video', duration: entry.duration || '00:01', time: entry.time || Date.now()
       };
       await set(ref(db, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
-    }
-
-    if (entry.targetId) {
-      const roomPath = `chats/${getChatRoomId(myUserId, entry.targetId)}/messages`;
-      const isVoice = entry.callMode === 'audio';
-      const label = isVoice ? (currentLang === 'hi' ? 'ऑडियो कॉल' : 'Audio Call') : (currentLang === 'hi' ? 'वीडियो कॉल' : 'Video Call');
-      let callText = entry.type === 'missed' 
-        ? `${isVoice ? '📞' : '📹'} ${currentLang === 'hi' ? 'मिस्ड' : 'Missed'} ${label}` 
-        : `${isVoice ? '📞' : '📹'} ${label} (${entry.duration || '00:01'})`;
-
-      await push(ref(db, roomPath), {
-        senderId: myUserId, senderName: myUserName, type: 'system-call',
-        text: callText, time: Date.now(), delivered: true, read: false
-      }).catch(()=>{});
     }
   } catch(e) {
     console.warn("Record call log error:", e);
@@ -1108,12 +1093,11 @@ async function sendChatMessage() {
     senderId: myUserId, senderName: myUserName, text: txt, time: Date.now(), delivered: targetOnline, read: false
   });
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
-  chatInput.focus(); // फोकस वापस लाएं ताकि कीबोर्ड खुला रहे
+  chatInput.focus();
 
   setTimeout(() => { isSendingMsg = false; }, 800);
 }
 
-// पुराने सारे pointerdown/mousedown हटा दिए गए हैं, सिर्फ यह रहेगा
 actionBtn.onclick = async (e) => {
   e.preventDefault();
   if (chatInput.value.trim().length > 0) {
@@ -1133,8 +1117,8 @@ chatInput.onkeydown = e => {
 
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
-const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn =$('dockPauseResumeBtn');
-const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot =$('dockBlinkDot');
+const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn = $('dockPauseResumeBtn');
+const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot = $('dockBlinkDot');
 const waveCanvas = $('waveCanvas'), waveCtx = waveCanvas.getContext('2d');
 
 async function openVoiceDock() {
@@ -1410,7 +1394,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 }
 
 // रद्द करें (Cancel Call) बटन: रिंगटोन बंद करने के लिए पेलोड भेजेगा
-// कॉलर द्वारा कॉल कैंसिल करने पर मिस्ड कॉल को चैट में अपडेट करें
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
@@ -1476,7 +1459,7 @@ async function toggleVideoTrackMode(enableCam) {
       pipWrap.style.opacity = '0.2'; $('camBtn').classList.add('off'); camEnabled = false;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
     }
-  } catch(e) { toast('कैमरा शुरू नहीं हो सका'); }
+  } catch(e) { toast('कैमरा शुरू नहीं सका'); }
 }
 
 $('audioModeBtn').onclick = () => {
