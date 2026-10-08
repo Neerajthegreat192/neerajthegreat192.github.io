@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#090d10">
+<link rel="manifest" href="manifest.json">
+
+<!-- 1. बेस CSS और डायनामिक OTA स्टाइल -->
+<link rel="stylesheet" href="style.css" id="baseStyle">
+<style id="otaCustomStyle"></style>
+<script>
+  // 0 मिलीसेकंड में सेव्ड CSS लागू करें
+  try {
+    const cachedCss = localStorage.getItem('ota_cached_css');
+    if (cachedCss) document.getElementById('otaCustomStyle').textContent = cachedCss;
+  } catch(e) {}
+</script>
+
+<title id="pageTitle">VideoCallApp</title>
+</head>
+<body>
+
+<div id="networkBanner" hidden>⚠️ इंटरनेट कनेक्शन टूट गया है... पुनः कनेक्ट कर रहे हैं</div>
+<input type="file" id="photoFileInput" accept="image/*" style="display:none">
+
+<div id="permNoticeModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>🛡️ अनुमतियाँ आवश्यक हैं</h2>
+    <p>वीडियो कॉल, वॉइस नोट और नोटिफिकेशन की आवाज़ के लिए कैमरा, माइक्रोफ़ोन और नोटिफिकेशन की अनुमति दें।</p>
+    <button id="grantPermsBtn" class="btn-gold">अनुमति दें (Grant)</button>
+  </div>
+</div>
+
+<div id="nameModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2 id="txtWelcome">स्वागत है!</h2>
+    <p id="txtEnterName">कॉलिंग एवं चैट शुरू करने के लिए अपना नाम लिखें</p>
+    <input id="nameInput" class="modal-input" placeholder="उदा. नीरज बडोला..." maxlength="25" autocomplete="off">
+    <button id="saveNameBtn" class="btn-gold">आगे बढ़ें</button>
+  </div>
+</div>
+
+<div id="profileModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2 id="txtSettingsTitle" style="margin-bottom:14px">⚙ सेटिंग्स एवं प्रोफ़ाइल</h2>
+    <div style="background:rgba(255,255,255,0.05);padding:10px 12px;border-radius:12px;margin-bottom:12px;border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:13px;font-weight:800">🌐 भाषा / Language</span>
+      <select id="langSelect" style="background:#090d10;color:var(--c-user);border:1px solid var(--line);padding:6px 10px;border-radius:8px;font-size:12px;font-weight:800;outline:none">
+        <option value="hi">हिन्दी (Hindi)</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+    <div id="nameEditArea" hidden>
+      <input id="editNameInput" class="modal-input" maxlength="25" placeholder="नया नाम दर्ज करें..." autocomplete="off">
+      <button id="saveEditedNameBtn" class="btn-gold" style="margin-bottom:8px">नाम सुरक्षित करें</button>
+    </div>
+    <button id="toggleEditNameBtn" class="btn-sec-outline">✏️ नाम बदलें / अपडेट करें</button>
+    <button id="recheckPermsBtn" class="btn-sec-outline">🛡️ अनुमतियाँ पुनः जांचें</button>
+    <button id="clearChatHistoryBtn" class="btn-sec-outline">🗑️ सभी चैट साफ़ करें</button>
+    <button id="resetProfileBtn" class="btn-danger-outline">आईडी हटाएं / रीसेट करें</button>
+    <button id="checkUpdateBtn" class="btn-gold" style="margin-top:14px">🔄 नया अपडेट जांचें (APK)</button>
+    <button id="closeProfileBtn" class="btn-cancel-box" style="margin-top:8px">✕ रद्द करें</button>
+  </div>
+</div>
+
+<div id="adminPinModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>🔐 एडमिन वेरिफिकेशन</h2>
+    <input type="password" id="adminPinInput" class="modal-input" placeholder="पिन" maxlength="6" style="font-size:22px;letter-spacing:8px" autocomplete="off">
+    <button id="verifyPinBtn" class="btn-gold">सत्यापित करें</button>
+    <button id="closePinBtn" class="btn-cancel-box">✕ रद्द करें</button>
+  </div>
+</div>
+
+<div id="adminPanelModal" class="modal-overlay" hidden>
+  <div class="modal-box" style="max-height:80vh;display:flex;flex-direction:column">
+    <h2>👑 एडमिन कंट्रोल पैनल</h2>
+    <div id="adminUsersList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:12px"></div>
+    <button id="closeAdminPanelBtn" class="btn-cancel-box">बंद करें</button>
+  </div>
+</div>
+
+<div id="addParticipantModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2 id="txtAddParticipantTitle">कॉल में सदस्य जोड़ें</h2>
+    <div id="addContactsList" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+    <button id="closeAddModalBtn" class="btn-cancel-box">रद्द करें</button>
+  </div>
+</div>
+
+<div id="lobby" class="screen">
+  <div class="header">
+    <div class="user-title" id="myHeaderName">...</div>
+    <div class="header-actions">
+      <button id="adminBtn" class="admin-badge">👑 एडमिन</button>
+      <button class="icon-hdr-btn btn-apk-dl" id="directApkDlBtn" title="APK डाउनलोड करें">
+        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+      </button>
+      <button class="icon-hdr-btn btn-gear" id="profileBtn" title="सेटिंग्स">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" class="search-input" placeholder="संपर्क या चैट खोजें..." autocomplete="off">
+  </div>
+  <div class="lobby-tabs">
+    <button class="tab-btn active-chat" id="tabChatsBtn">💬 चैट</button>
+    <button class="tab-btn" id="tabCallsBtn">📞 कॉल</button>
+  </div>
+  <div class="tab-content" id="tabChatsContent"><div id="contactsList"></div></div>
+  <div class="tab-content" id="tabCallsContent" hidden><div id="callLogsList"></div></div>
+</div>
+
+<div id="chatScreen" class="screen" hidden>
+  <div class="chat-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button id="chatBackBtn" style="border:0;font-size:26px;background:none;color:#94a3b8;padding:2px 4px">‹</button>
+      <div class="contact-avatar" id="chatAvatar">
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      </div>
+      <div>
+        <div style="font-size:17px;font-weight:900;color:#fff;letter-spacing:0.2px" id="chatTargetName">उपयोगकर्ता</div>
+        <div style="font-size:11px" id="chatTargetStatus">ऑफलाइन</div>
+      </div>
+    </div>
+    <div class="chat-header-actions">
+      <button class="wp-call-btn" id="chatVoiceCallBtn" title="ऑडियो कॉल">
+        <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+      </button>
+      <button class="wp-call-btn" id="chatCallBtn" title="वीडियो कॉल">
+        <svg viewBox="0 0 24 24"><path d="M16 7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2.5l4.3 2.87A1 1 0 0 0 22 18.53V5.47a1 1 0 0 0-1.7-.84L16 7.5V7z"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="chat-footer">
+    <button class="attach-btn" id="attachBtn" title="फ़ोटो भेजें">📎</button>
+    <div class="input-wrap">
+      <textarea id="chatInput" class="chat-input" placeholder="संदेश लिखें..." rows="1"
+                autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"
+                data-lpignore="true" data-form-type="other" enterkeyhint="send"></textarea>
+    </div>
+    <button id="actionBtn" class="action-btn" title="वॉयस नोट">
+      <svg id="micSvg" viewBox="0 0 24 24" style="display:block"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+      <svg id="sendSvg" viewBox="0 0 24 24" style="display:none"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+    <div id="voiceDock" class="voice-dock" hidden>
+      <div class="voice-dock-top">
+        <div class="voice-dock-timer">
+          <span class="blink-dot" id="dockBlinkDot"></span>
+          <span id="dockTimerText">0:00</span>
+        </div>
+        <canvas id="waveCanvas" class="wave-canvas"></canvas>
+      </div>
+      <div class="voice-dock-bottom">
+        <button id="dockTrashBtn" class="dock-btn-trash" title="रद्द करें">🗑️</button>
+        <button id="dockPauseResumeBtn" class="dock-btn-pause">
+          <span id="dockPauseIco">⏸</span>
+          <span id="dockPauseText">पॉज़ करें</span>
+        </button>
+        <button id="dockSendBtn" class="dock-btn-send" title="भेजें">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="incomingDialog" class="call-dialog" hidden>
+  <div style="text-align:center">
+    <div class="caller-photo">👤</div>
+    <div style="font-size:22px;font-weight:900;margin-top:16px" id="incomingName">इनकमिंग कॉल...</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:4px" id="incomingSubText">बात करने के लिए कॉल उठाएँ</div>
+  </div>
+  <div style="display:flex;gap:44px">
+    <button class="circle-btn btn-reject" id="btnReject"><span style="font-size:24px">✕</span><span id="txtReject">काटें</span></button>
+    <button class="circle-btn btn-accept" id="btnAccept"><span style="font-size:24px">📞</span><span id="txtAccept">उठाएँ</span></button>
+  </div>
+</div>
+
+<div id="outgoingDialog" class="call-dialog" hidden>
+  <div style="text-align:center">
+    <div class="caller-photo">📞</div>
+    <div style="font-size:22px;font-weight:900;margin-top:16px" id="outgoingName">कॉलिंग...</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-top:4px" id="outgoingStatusText">कनेक्ट किया जा रहा है...</div>
+  </div>
+  <button class="circle-btn btn-reject" id="btnCancelCall" style="width:72px;height:72px"><span style="font-size:26px">✕</span><span id="txtCancelCall">रद्द करें</span></button>
+</div>
+
+<div id="call" class="screen" hidden>
+  <div id="remoteGrid"></div>
+  <div class="pip-wrap mirror" id="pipWrap"><video id="localVideo" autoplay playsinline muted></video></div>
+  <button id="pipRestoreBtn" class="pip-restore-btn" hidden>‹ 📹</button>
+  <div class="top-pill" id="topPill">
+    <div class="timer-pill" id="callTimer">00:00</div>
+    <div class="network-pill high" id="networkPill"><span class="network-dot"></span><span id="networkText">नेटवर्क: हाई</span></div>
+  </div>
+  <div class="controls" id="controlsBar">
+    <div class="controls-grid">
+      <button class="ctl-box" id="micBtn">
+        <span class="ctl-ic" id="micIco"><svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg></span>
+        <span class="ctl-txt" id="lblMic">माइक</span>
+      </button>
+      <button class="ctl-box" id="camBtn">
+        <span class="ctl-ic" id="camIco"><svg viewBox="0 0 24 24"><path d="M16 7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2.5l4.3 2.87A1 1 0 0 0 22 18.53V5.47a1 1 0 0 0-1.7-.84L16 7.5V7z"/></svg></span>
+        <span class="ctl-txt" id="lblCam">कैमरा</span>
+      </button>
+      <button class="ctl-box" id="speakerBtn">
+        <span class="ctl-ic" id="speakerIco"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></span>
+        <span class="ctl-txt" id="lblSpeaker">स्पीकर</span>
+      </button>
+      <button class="ctl-box" id="flipBtn">
+        <span class="ctl-ic"><svg viewBox="0 0 24 24"><path d="M9.01 14H2v2h7.01v3L13 15l-3.99-4v3zm5.98-1v-3H22V8h-7.01V5L11 9l3.99 4z"/></svg></span>
+        <span class="ctl-txt" id="lblFlip">पलटें</span>
+      </button>
+      <button class="ctl-box" id="audioModeBtn">
+        <span class="ctl-ic" id="audioModeIco"><svg viewBox="0 0 24 24"><path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/></svg></span>
+        <span class="ctl-txt" id="lblAudioMode">ऑडियो मोड</span>
+      </button>
+      <button class="ctl-box add" id="btnAddPerson">
+        <span class="ctl-ic"><svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
+        <span class="ctl-txt" id="lblAdd">जोड़ें</span>
+      </button>
+      <button class="ctl-box hang" id="hangBtn" style="grid-column: span 2">
+        <span class="ctl-ic"><svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C3.25 8.78 7.37 7 12 7c4.63 0 8.75 1.78 11.71 4.67.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29s-.52-.11-.7-.28c-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg></span>
+        <span class="ctl-txt" id="lblHang">काटें</span>
+      </button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<!-- 2. सुरक्षित फ़ेल-सेफ़ डायनामिक लोडर -->
+<script type="module">
+  (async () => {
+    const cachedJs = localStorage.getItem('ota_cached_js');
+    if (cachedJs) {
+      try {
+        const blob = new Blob([cachedJs], { type: 'application/javascript' });
+        const blobUrl = URL.createObjectURL(blob);
+        await import(blobUrl);
+        return;
+      } catch (err) {
+        console.warn('Fallback to standard app.js:', err);
+      }
+    }
+    import('./app.js');
+  })();
+</script>
+</body>
+</html>
