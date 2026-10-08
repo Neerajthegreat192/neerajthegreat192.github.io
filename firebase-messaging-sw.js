@@ -1,5 +1,3 @@
-// firebase-messaging-sw.js
-
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
@@ -13,173 +11,108 @@ const firebaseConfig = {
   appId: "1:62635884266:web:0375748951994b26cb2193"
 };
 
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// ======================================================
-// BACKGROUND MESSAGES & CALLS HANDLER
-// ======================================================
 messaging.onBackgroundMessage((payload) => {
   const data = payload.data || {};
+  const type = data.type || '';
+  
+  // 1. चैट मैसेज हैंडलिंग
+  if (type === 'chat' || data.messageText || data.chatTargetId) {
+    const sender = data.title || data.chatTargetName || data.senderName || 'नया संदेश';
+    const msgText = data.body || data.messageText || 'आपको एक संदेश प्राप्त हुआ है';
+    const senderId = data.chatTargetId || '';
 
-  // वास्तविक कॉल आईडी सत्यापन
-  const rawCallId = data.callId;
-  const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined' && String(rawCallId).trim() !== '';
-
-  // 1. यदि इनकमिंग वीडियो/ऑडियो कॉल है
-  if (isRealCall) {
-    const caller = data.callerName || payload.notification?.title || 'कोई व्यक्ति';
-    const callType = data.callType || (data.audioOnly === 'true' ? 'ऑडियो' : 'वीडियो');
-    let targetUrl = data.url || '/';
-
-    try {
-      const url = new URL(targetUrl, self.location.origin);
-      url.searchParams.set('callId', rawCallId);
-      url.searchParams.set('callerName', caller);
-      url.searchParams.set('callType', callType);
-      url.searchParams.set('action', 'accept');
-      targetUrl = url.href;
-    } catch (e) {
-      targetUrl = `/?callId=${encodeURIComponent(rawCallId)}&callerName=${encodeURIComponent(caller)}&action=accept`;
-    }
-
-    const notificationOptions = {
-      body: `${caller} आपको ${callType} कॉल कर रहे हैं...`,
-      icon: 'icon.png', // ध्यान दें: सुनिश्चित करें कि icon.png आपके रूट फोल्डर में हो
-      badge: 'icon.png',
-      tag: `incoming-call-${rawCallId}`,
-      renotify: true,
-      requireInteraction: true,
-      vibrate: [500, 250, 500, 250, 500, 250, 500, 250, 1000],
-      sound: 'ringtone.mp3', // कस्टम रिंगटोन
-      actions: [
-        { action: 'accept_call', title: '📞 उठाएँ' },
-        { action: 'reject_call', title: '❌ काटें' }
-      ],
-      data: {
-        type: 'incoming_call',
-        callerName: caller,
-        callId: rawCallId,
-        callType: callType,
-        url: targetUrl
-      }
-    };
-
-    return self.registration.showNotification(`📞 इनकमिंग ${callType} कॉल`, notificationOptions);
-  }
-
-  // 2. यदि सामान्य चैट मैसेज है
-  const sender = data.callerName || data.chatTargetName || data.senderName || 'नया संदेश';
-  const msgText = data.messageText || data.message || data.text || payload.notification?.body || 'आपको एक नया संदेश प्राप्त हुआ है';
-  const senderId = data.chatTargetId || data.senderId || '';
-  const roomId = data.roomId;
-  const msgId = data.msgId;
-  let chatUrl = data.url || '/';
-
-  if (senderId) {
-    try {
-      const url = new URL(chatUrl, self.location.origin);
-      url.searchParams.set('chatTargetId', senderId);
-      url.searchParams.set('chatTargetName', sender);
-      chatUrl = url.href;
-    } catch (e) {
-      chatUrl = `/?chatTargetId=${encodeURIComponent(senderId)}&chatTargetName=${encodeURIComponent(sender)}`;
-    }
-  }
-
-  // बैकग्राउंड में मैसेज को डिलीवर मार्क करना (REST API URL FIXED)
-  if (roomId && msgId) {
-    fetch(`https://chess-e4910-default-rtdb.firebaseio.com/chats/${roomId}/${msgId}.json`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ delivered: true })
-    }).catch(() => {});
-  }
-
-  const chatNotificationOptions = {
-    body: msgText,
-    icon: 'icon.png',
-    badge: 'icon.png',
-    tag: `chat_${senderId || 'general'}`,
-    renotify: true,
-    requireInteraction: false,
-    vibrate: [150, 80, 150],
-    data: {
-      type: 'chat_message',
-      targetId: senderId,
-      senderName: sender,
-      url: chatUrl
-    }
-  };
-
-  return self.registration.showNotification(`💬 ${sender}`, chatNotificationOptions);
-});
-
-// ======================================================
-// NOTIFICATION CLICK & ACTION BUTTONS HANDLER
-// ======================================================
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-
-  const data = event.notification.data || {};
-  const action = event.action;
-  let targetUrl = data.url || '/';
-
-  // 1. यदि यूज़र ने कॉल काटने (Reject) का बटन दबाया
-  if (action === 'reject_call') {
-    if (data.callId) {
-      fetch(`https://chess-e4910-default-rtdb.firebaseio.com/calls/${data.callId}.json`, {
+    // मैसेज को डिलीवर मार्क करना
+    if (data.roomId && data.msgId) {
+      fetch(`https://chess-e4910-default-rtdb.firebaseio.com/chats/${data.roomId}/messages/${data.msgId}.json`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'rejected' })
-      }).catch((e) => console.log("Call reject failed", e));
+        body: JSON.stringify({ delivered: true })
+      }).catch(() => {});
     }
+
+    // एक्टिव टैब को रियल-टाइम अपडेट के लिए मैसेज भेजना
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      clients.forEach(client => {
+        client.postMessage({ type: 'NEW_CHAT_MESSAGE', senderId, senderName: sender, text: msgText });
+      });
+    });
+
+    const chatOptions = {
+      body: msgText,
+      icon: 'icon.png', // ध्यान दें: चैट के लिए सामान्य आइकॉन
+      badge: 'icon.png',
+      tag: `chat_${senderId}`,
+      renotify: true,
+      requireInteraction: false,
+      data: { type: 'chat_click', targetId: senderId, senderName: sender }
+    };
+    return self.registration.showNotification(`💬 ${sender}`, chatOptions);
+  }
+
+  // 2. कॉल हैंडलिंग (ब्राउज़र के लिए)
+  const rawCallId = data.callId;
+  if (rawCallId && rawCallId !== 'null' && rawCallId.trim() !== '') {
+    const caller = data.callerName || 'इनकमिंग कॉल';
+    const isAudio = data.audioOnly === 'true' || data.audioOnly === true;
+    const callLabel = isAudio ? 'ऑडियो' : 'वीडियो';
+    
+    const callOptions = {
+      body: `${caller} आपको ${callLabel} कॉल कर रहे हैं...`,
+      icon: 'icon.png',
+      badge: 'icon.png',
+      tag: `call_${rawCallId}`,
+      renotify: true,
+      requireInteraction: true,
+      actions: [
+        { action: 'accept_call', title: '✅ ACCEPT' },
+        { action: 'reject_call', title: '❌ REJECT' }
+      ],
+      data: { type: 'call_click', callId: rawCallId, callerName: caller, isAudio }
+    };
+    return self.registration.showNotification(`📞 ${callLabel} कॉल`, callOptions);
+  }
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const action = event.action;
+
+  if (action === 'reject_call' && data.callId) {
+    fetch(`https://chess-e4910-default-rtdb.firebaseio.com/call_sessions/${data.callId}.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'rejected' })
+    }).catch(() => {});
     return;
   }
 
-  // 2. यदि यूज़र ने कॉल उठाने (Accept) या सीधे नोटिफ़िकेशन पर क्लिक किया
+  // ऐप को फोकस करना या खोलना और डीप-लिंक भेजना
   event.waitUntil(
-    clients.matchAll({
-      type: 'window',
-      includeUncontrolled: true
-    }).then((clientList) => {
-      // अगर ऐप/ब्राउज़र टैब पहले से खुला है
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
-          if (data.type === 'incoming_call' && 'postMessage' in client) {
-            client.postMessage({
-              type: 'incoming_call_click',
-              callId: data.callId,
-              callerName: data.callerName || '',
-              callType: data.callType || 'Video',
-              action: action === 'accept_call' ? 'accept' : 'view'
-            });
-          } else if (data.type === 'chat_message' && 'postMessage' in client) {
-            client.postMessage({
-              type: 'NOTIFICATION_CLICK',
-              targetId: data.targetId,
-              senderName: data.senderName
-            });
+          client.focus();
+          if (data.type === 'chat_click') {
+            client.postMessage({ type: 'OPEN_CHAT', targetId: data.targetId, senderName: data.senderName });
+          } else if (data.type === 'call_click' || action === 'accept_call') {
+            client.postMessage({ type: 'ACCEPT_CALL', callId: data.callId, isAudio: data.isAudio });
           }
-          return client.focus();
+          return;
         }
       }
-
-      // अगर ऐप बंद है, तो नया टैब/विंडो खोलें
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
+      
+      // अगर ऐप बंद है, तो URL में पैरामीटर लगाकर खोलें
+      let targetUrl = self.location.origin + '/';
+      if (data.type === 'chat_click') {
+        targetUrl += `?chatTargetId=${data.targetId}&chatTargetName=${encodeURIComponent(data.senderName)}`;
+      } else if (data.type === 'call_click' || action === 'accept_call') {
+        targetUrl += `?acceptCallId=${data.callId}&isAudio=${data.isAudio}`;
       }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
-});
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
 });
