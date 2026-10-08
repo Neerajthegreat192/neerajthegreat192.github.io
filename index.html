@@ -8,14 +8,16 @@
 <meta name="theme-color" content="#090d10">
 <link rel="manifest" href="manifest.json">
 
-<!-- 1. बेस CSS और डायनामिक OTA स्टाइल -->
+<!-- 1. बेस CSS और डायनामिक OTA कैश्ड स्टाइल -->
 <link rel="stylesheet" href="style.css" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
-  // 0 मिलीसेकंड में सेव्ड CSS लागू करें
+  // पेज रेंडर होने से पहले 0 मिलीसेकंड में सेव्ड CSS लागू करें
   try {
     const cachedCss = localStorage.getItem('ota_cached_css');
-    if (cachedCss) document.getElementById('otaCustomStyle').textContent = cachedCss;
+    if (cachedCss) {
+      document.getElementById('otaCustomStyle').textContent = cachedCss;
+    }
   } catch(e) {}
 </script>
 
@@ -235,22 +237,7 @@
 </div>
 <div id="toast"></div>
 
-<!-- 2. सुरक्षित फ़ेल-सेफ़ डायनामिक लोडर -->
-<script type="module">
-  (async () => {
-    const cachedJs = localStorage.getItem('ota_cached_js');
-    if (cachedJs) {
-      try {
-        const blob = new Blob([cachedJs], { type: 'application/javascript' });
-        const blobUrl = URL.createObjectURL(blob);
-        await import(blobUrl);
-        return;
-      } catch (err) {
-        console.warn('Fallback to standard app.js:', err);
-      }
-    }
-    import('./app.js');
-  })();
-</script>
+<!-- सामान्य एवं सीधा मॉड्यूल लोडर (कोई निष्पादन विफलता नहीं) -->
+<script type="module" src="app.js"></script>
 </body>
 </html>
