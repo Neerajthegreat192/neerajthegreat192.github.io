@@ -1413,7 +1413,28 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
-$('btnCancelCall').onclick = () => { stopAllCallTones(); outgoingDialog.hidden = true; hangup(); };
+$('btnCancelCall').onclick = () => {
+  stopAllCallTones();
+  outgoingDialog.hidden = true;
+  
+  // सामने वाले के फोन की घंटी तुरंत बंद करने के लिए सिग्नल भेजें
+  if (currentCallTargetId) {
+    update(ref(db, `user_inbox/${currentCallTargetId}`), { status: 'cancelled' }).catch(()=>{});
+    get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
+      const token = snap.val()?.fcmToken;
+      if (token) {
+        fetch("https://neeraj.neerajthegreat192.workers.dev/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, type: "cancel_call" })
+        }).catch(()=>{});
+      }
+    }).catch(()=>{});
+  }
+  
+  hangup();
+};
+
 $('btnAccept').onclick = async () => { stopAllCallTones(); incomingDialog.hidden = true; if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession(); };
 $('btnReject').onclick = async () => {
   stopAllCallTones(); incomingDialog.hidden = true;
