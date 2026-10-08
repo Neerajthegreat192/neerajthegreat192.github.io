@@ -1078,6 +1078,30 @@ async function sendChatMessage() {
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
 }
 
+// --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का फ़िक्स ---
+actionBtn.addEventListener('pointerdown', (e) => {
+  if (chatInput.value.trim().length > 0) {
+    e.preventDefault(); // इनपुट बॉक्स से फ़ोकस छिनने और कीबोर्ड बंद होने से रोकता है
+  }
+});
+
+actionBtn.addEventListener('mousedown', (e) => {
+  if (chatInput.value.trim().length > 0) {
+    e.preventDefault();
+  }
+});
+
+// सेंड बटन क्लिक हैंडलर (फ़ोकस बनाए रखें)
+actionBtn.addEventListener('click', async (e) => {
+  e.preventDefault();
+  if (chatInput.value.trim().length > 0) {
+    await sendChatMessage();
+    chatInput.focus(); // मैसेज जाने के तुरंत बाद कर्सर इनपुट में ही रखेगा
+  } else {
+    chatInput.blur();
+    openVoiceDock();
+  }
+});
 actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
   if (chatInput.value.trim().length > 0) await sendChatMessage();
