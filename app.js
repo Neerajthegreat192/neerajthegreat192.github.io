@@ -223,7 +223,7 @@ function startVibration() {
     navigator.vibrate([500, 300, 500, 300, 800]);
     if (!vibrationInterval) {
       vibrationInterval = setInterval(() => {
-        if (incomingDialog.hidden) { stopVibration(); return; }
+        if ($('incomingDialog').hidden) { stopVibration(); return; }
         navigator.vibrate([500, 300, 500, 300, 800]);
       }, 2500);
     }
@@ -260,37 +260,42 @@ function clearOngoingCallNotification() {
 }
 
 // --- ऐप शेयर बटन लॉजिक ---
-$('shareAppBtn').onclick = async () => {
-  const shareData = {
-    title: 'VideoCallApp',
-    text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
-    url: GITHUB_APK_URL
+const shareBtn = $('shareAppBtn');
+if (shareBtn) {
+  shareBtn.onclick = async () => {
+    const shareData = {
+      title: 'VideoCallApp',
+      text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
+      url: GITHUB_APK_URL
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(GITHUB_APK_URL);
+        toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        await navigator.clipboard.writeText(GITHUB_APK_URL);
+        toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
+      }
+    }
   };
+}
 
-  try {
-    if (navigator.share) {
-      await navigator.share(shareData);
-    } else {
-      await navigator.clipboard.writeText(GITHUB_APK_URL);
-      toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
-    }
-  } catch (err) {
-    if (err.name !== 'AbortError') {
-      await navigator.clipboard.writeText(GITHUB_APK_URL);
-      toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
-    }
-  }
-};
-
-$('directApkDlBtn').onclick = () => {
-  toast(currentLang === 'hi' ? '📥 APK डाउनलोड शुरू हो रहा है...' : '📥 Downloading APK...');
-  const a = document.createElement('a');
-  a.href = GITHUB_APK_URL;
-  a.download = 'VideoCallApp.apk';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-};
+const apkDlBtn = $('directApkDlBtn');
+if (apkDlBtn) {
+  apkDlBtn.onclick = () => {
+    toast(currentLang === 'hi' ? '📥 APK डाउनलोड शुरू हो रहा है...' : '📥 Downloading APK...');
+    const a = document.createElement('a');
+    a.href = GITHUB_APK_URL;
+    a.download = 'VideoCallApp.apk';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+}
 
 async function acquireCallMedia(audioOnly = false) {
   if (localStream) {
@@ -433,7 +438,9 @@ function handleIncomingCallNotification(data) {
   currentCallType = 'incoming';
   currentCallTargetId = data.callerId || '';
   currentCallTargetName = data.callerName || 'कोई';
-  isAudioOnlyCall = !!data.audioOnly;
+  
+  // Audio flag strictly handled
+  isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
   lobbyScreen.hidden = true;
   chatScreen.hidden = true;
@@ -1062,7 +1069,7 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
         body: textContent,
         callerName: "",
         callId: "",
-        audioOnly: false,
+        audioOnly: "false",
         chatTargetId: myUserId,
         chatTargetName: myUserName,
         messageText: textContent,
@@ -1106,14 +1113,13 @@ actionBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
   }
 });
-
 actionBtn.addEventListener('mousedown', (e) => {
   if (chatInput.value.trim().length > 0) {
     e.preventDefault();
   }
 });
 
-// सेंड बटन क्लिक लिसनर (एकल एवं साफ़)
+// सेंड बटन क्लिक लिसनर (सिर्फ एक बार काम करेगा)
 actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
   if (chatInput.value.trim().length > 0) {
@@ -1334,6 +1340,7 @@ function listenForIncoming() {
   });
 }
 
+// 100% सही स्ट्रिंग ऑडियो फ्लैग के साथ कॉल भेजना
 async function sendPushNotification(token, callerName, isVoice = false) {
   try {
     fetch("https://neeraj.neerajthegreat192.workers.dev/", {
@@ -1344,7 +1351,8 @@ async function sendPushNotification(token, callerName, isVoice = false) {
         body: `${callerName} आपको कॉल कर रहे हैं`,
         callerName,
         callId: activeCallId,
-        audioOnly: isVoice,
+        callType: isVoice ? "ऑडियो" : "वीडियो",
+        audioOnly: isVoice ? "true" : "false",
         priority: "high",
         channelId: "call_channel",
         url: window.location.href
@@ -1413,25 +1421,22 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
+// रद्द करें (Cancel Call) बटन: रिंगटोन बंद करने के लिए पेलोड भेजेगा
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
-  
-  // सामने वाले के फोन की घंटी तुरंत बंद करने के लिए सिग्नल भेजें
   if (currentCallTargetId) {
     update(ref(db, `user_inbox/${currentCallTargetId}`), { status: 'cancelled' }).catch(()=>{});
     get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
       const token = snap.val()?.fcmToken;
       if (token) {
         fetch("https://neeraj.neerajthegreat192.workers.dev/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token, type: "cancel_call" })
         }).catch(()=>{});
       }
     }).catch(()=>{});
   }
-  
   hangup();
 };
 
@@ -1909,7 +1914,7 @@ function setupHardwareBackButton() {
   });
 }
 
-// --- Visual Viewport Keyboard Resize Handling (कीबोर्ड से इनपुट टच रखना और होल्ड रोकना) ---
+// --- Visual Viewport Keyboard Resize Handling ---
 if (window.visualViewport) {
   const syncViewport = () => {
     if (!chatScreen.hidden) {
@@ -1919,7 +1924,6 @@ if (window.visualViewport) {
       if (body) body.scrollTop = body.scrollHeight;
     }
   };
-
   window.visualViewport.addEventListener('resize', syncViewport);
   window.visualViewport.addEventListener('scroll', () => {
     if (!chatScreen.hidden) window.scrollTo(0, 0);
@@ -1933,7 +1937,6 @@ chatInput.addEventListener('focus', () => {
     if (body) body.scrollTop = body.scrollHeight;
   }, 150);
 });
-
 chatInput.addEventListener('blur', () => {
   if (!chatScreen.hidden) {
     chatScreen.style.height = '100%';
@@ -1966,6 +1969,7 @@ async function checkWebOtaUpdate() {
 // --- Deep-Link & Real-time Notification Handler ---
 function handleDeepLinks() {
   try {
+    // 1. सर्विस वर्कर लिसनर
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', async (event) => {
         const data = event.data;
@@ -1989,6 +1993,7 @@ function handleDeepLinks() {
       });
     }
 
+    // 2. URL पैरामीटर्स (अगर ऐप बंद पड़ी थी)
     const urlParams = new URLSearchParams(window.location.search);
     const openChatId = urlParams.get('chatTargetId');
     const openChatName = urlParams.get('chatTargetName');
@@ -1997,9 +2002,7 @@ function handleDeepLinks() {
 
     if (openChatId) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      setTimeout(() => {
-        openChat(openChatId, openChatName || 'उपयोगकर्ता', true);
-      }, 800);
+      setTimeout(() => openChat(openChatId, openChatName || 'उपयोगकर्ता', true), 800);
     } else if (acceptCallId) {
       window.history.replaceState({}, document.title, window.location.pathname);
       setTimeout(async () => {
@@ -2010,12 +2013,33 @@ function handleDeepLinks() {
         }
       }, 800);
     }
+
+    // 3. नेटिव Capacitor AppUrlOpen (ACCEPT बटन दबाने पर जब ऐप बैकग्राउंड से सामने आती है)
+    if (isNative && App) {
+      App.addListener('appUrlOpen', async (event) => {
+        try {
+          const url = new URL(event.url);
+          const accId = url.searchParams.get('acceptCallId');
+          const isAud = url.searchParams.get('isAudio') === 'true';
+          const chatTgtId = url.searchParams.get('chatTargetId');
+          const chatTgtName = url.searchParams.get('chatTargetName');
+
+          if (accId && !isCallConnected) {
+            activeCallId = accId;
+            isAudioOnlyCall = isAud;
+            if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
+          } else if (chatTgtId) {
+            openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता', true);
+          }
+        } catch(e) {}
+      });
+    }
   } catch (e) {
     console.warn('Deep link error:', e);
   }
 }
 
-// --- App Initialization (एकल व सुरक्षित फ़ंक्शन) ---
+// --- App Initialization ---
 async function initApp() {
   try {
     applyLanguage(currentLang);
@@ -2028,12 +2052,9 @@ async function initApp() {
     console.error('UI init error:', err);
   }
 
-  setTimeout(() => {
-    checkWebOtaUpdate();
-  }, 2500);
+  setTimeout(() => checkWebOtaUpdate(), 2500);
 }
 
-// सुरक्षित स्टार्ट
 if (document.readyState === 'loading') {
   window.addEventListener('DOMContentLoaded', initApp, { once: true });
 } else {
