@@ -264,7 +264,7 @@ const Share = window.Capacitor?.Plugins?.Share;
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
   shareBtn.onclick = async () => {
-    const shareText = 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें: \n\n' + GITHUB_APK_URL;
+    const shareText = 'डायरेक्ट फुल एचडी कॉल (वीडियो/ऑडियो) के लिए यहाँ से ऐप डाउनलोड करें: 👇 \n\n' + GITHUB_APK_URL;
     
     try {
       if (isNative && Share) {
@@ -279,7 +279,7 @@ if (shareBtn) {
         // 2. वेब ब्राउज़र के लिए
         await navigator.share({
           title: 'VideoCallApp',
-          text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
+          text: 'डायरेक्ट फुल एचडी कॉल (वीडियो/ऑडियो) के लिए यहाँ से ऐप डाउनलोड करें: 👇',
           url: GITHUB_APK_URL
         });
       } else {
