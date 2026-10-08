@@ -8,11 +8,10 @@
 <meta name="theme-color" content="#090d10">
 <link rel="manifest" href="manifest.json">
 
-<!-- 1. बेस CSS और डायनामिक OTA कैश्ड स्टाइल -->
+<!-- डायनामिक OTA स्टाइल -->
 <link rel="stylesheet" href="style.css" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
-  // पेज रेंडर होने से पहले 0 मिलीसेकंड में सेव्ड CSS लागू करें
   try {
     const cachedCss = localStorage.getItem('ota_cached_css');
     if (cachedCss) {
@@ -238,7 +237,29 @@
 </div>
 <div id="toast"></div>
 
-<!-- सामान्य एवं सीधा मॉड्यूल लोडर (कोई निष्पादन विफलता नहीं) -->
-<script type="module" src="app.js"></script>
+<!-- डायनामिक स्क्रिप्ट लोडर: अगर मेमोरी में नया कोड है तो उसे चलाएगा, वरना डिफ़ॉल्ट चलाएगा -->
+<script>
+  try {
+    const otaCode = localStorage.getItem('ota_cached_js');
+    if (otaCode && otaCode.trim() !== "") {
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.textContent = otaCode;
+      document.body.appendChild(script);
+      console.log('Running Dynamic OTA App.js');
+    } else {
+      const defaultScript = document.createElement('script');
+      defaultScript.type = 'module';
+      defaultScript.src = 'app.js';
+      document.body.appendChild(defaultScript);
+    }
+  } catch(e) {
+    const defaultScript = document.createElement('script');
+    defaultScript.type = 'module';
+    defaultScript.src = 'app.js';
+    document.body.appendChild(defaultScript);
+  }
+</script>
+
 </body>
 </html>
