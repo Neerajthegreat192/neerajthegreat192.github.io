@@ -259,7 +259,8 @@ function clearOngoingCallNotification() {
   }
 }
 
-// --- शेयर बटन लॉजिक (Native Share Fix) ---
+// --- ऐप शेयर बटन लॉजिक (Native Share Fix) ---
+const Share = window.Capacitor?.Plugins?.Share;
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
   shareBtn.onclick = async () => {
@@ -269,8 +270,13 @@ if (shareBtn) {
       url: GITHUB_APK_URL
     };
     try {
-      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) {
-        await window.Capacitor.Plugins.Share.share(shareData);
+      if (isNative && Share) {
+        await Share.share({
+          title: shareData.title,
+          text: shareData.text,
+          url: shareData.url,
+          dialogTitle: 'ऐप शेयर करें'
+        });
       } else if (navigator.share) {
         await navigator.share(shareData);
       } else {
@@ -436,7 +442,6 @@ function handleIncomingCallNotification(data) {
   currentCallTargetId = data.callerId || '';
   currentCallTargetName = data.callerName || 'कोई';
   
-  // Audio flag strictly handled
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
   lobbyScreen.hidden = true;
@@ -700,6 +705,20 @@ async function recordCallLog(entry) {
         type: remoteType, callMode: entry.callMode || 'video', duration: entry.duration || '00:01', time: entry.time || Date.now()
       };
       await set(ref(db, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
+    }
+
+    if (entry.targetId) {
+      const roomPath = `chats/${getChatRoomId(myUserId, entry.targetId)}/messages`;
+      const isVoice = entry.callMode === 'audio';
+      const label = isVoice ? (currentLang === 'hi' ? 'ऑडियो कॉल' : 'Audio Call') : (currentLang === 'hi' ? 'वीडियो कॉल' : 'Video Call');
+      let callText = entry.type === 'missed' 
+        ? `${isVoice ? '📞' : '📹'} ${currentLang === 'hi' ? 'मिस्ड' : 'Missed'} ${label}` 
+        : `${isVoice ? '📞' : '📹'} ${label} (${entry.duration || '00:01'})`;
+
+      await push(ref(db, roomPath), {
+        senderId: myUserId, senderName: myUserName, type: 'system-call',
+        text: callText, time: Date.now(), delivered: true, read: false
+      }).catch(()=>{});
     }
   } catch(e) {
     console.warn("Record call log error:", e);
@@ -1056,25 +1075,15 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
   } catch(e) {}
 }
 
-let isSendingMsg = false; 
-
 async function sendChatMessage() {
-  if (isSendingMsg) return; 
   const txt = chatInput.value.trim();
   if (!txt || !currentChatTargetId) return;
-
-  isSendingMsg = true; 
-  
-  // क्लिक होते ही तुरंत इनपुट खाली करें ताकि डबल क्लिक कुछ न कर पाए
-  chatInput.value = ''; 
-  chatInput.style.height = '44px';
-  updateActionBtnState();
-  chatInput.focus(); // कीबोर्ड को लॉक करने के लिए सिंक्रोनस फोकस (app_2.js वाला फिक्स)
-  
   playMessageTickSound();
 
   const roomId = getChatRoomId(myUserId, currentChatTargetId);
   const roomPath = `chats/${roomId}/messages`;
+  chatInput.value = ''; chatInput.style.height = '44px';
+  updateActionBtnState(); chatInput.focus();
   update(ref(db, `users/${myUserId}`), { typingTo: null }).catch(()=>{});
 
   const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
@@ -1089,8 +1098,6 @@ async function sendChatMessage() {
     senderId: myUserId, senderName: myUserName, text: txt, time: Date.now(), delivered: targetOnline, read: false
   });
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
-
-  setTimeout(() => { isSendingMsg = false; }, 800);
 }
 
 // --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का परफ़ेक्ट फ़िक्स ---
@@ -1104,23 +1111,32 @@ actionBtn.addEventListener('mousedown', (e) => {
     e.preventDefault();
   }
 });
+
+// --- डबल मैसेज को रोकने के लिए सिर्फ यहाँ एक लॉक लगाया गया है ---
+let isSendingMsg = false;
 actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
+  if (isSendingMsg) return; 
   if (chatInput.value.trim().length > 0) {
+    isSendingMsg = true;
     await sendChatMessage();
     chatInput.focus();
+    setTimeout(() => { isSendingMsg = false; }, 800);
   } else {
     chatInput.blur();
     openVoiceDock();
   }
 });
 
-chatInput.onkeydown = e => { 
+chatInput.addEventListener('keydown', e => { 
   if (e.key === 'Enter' && !e.shiftKey) { 
     e.preventDefault(); 
+    if (isSendingMsg) return; 
+    isSendingMsg = true;
     sendChatMessage(); 
+    setTimeout(() => { isSendingMsg = false; }, 800);
   } 
-};
+});
 
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
@@ -1324,6 +1340,7 @@ function listenForIncoming() {
   });
 }
 
+// 100% सही स्ट्रिंग ऑडियो फ्लैग के साथ कॉल भेजना
 async function sendPushNotification(token, callerName, isVoice = false) {
   try {
     fetch("https://neeraj.neerajthegreat192.workers.dev/", {
@@ -1399,22 +1416,15 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
+// कॉलर द्वारा कॉल कैंसिल करने पर मिस्ड कॉल को चैट में अपडेट करें
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
   if (currentCallTargetId) {
-    // --- मिस्ड कॉल को चैट में सेव करें ---
     const roomId = getChatRoomId(myUserId, currentCallTargetId);
     const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
+    push(ref(db, `chats/${roomId}/messages`), { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false });
 
-    const newMsgRef = push(ref(db, `chats/${roomId}/messages`));
-    set(newMsgRef, { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false });
-
-    latestChatSnippets[currentCallTargetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: true };
-    localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
-    renderContacts();
-
-    // --- सामने वाले को कैंसिल सिग्नल भेजें ---
     update(ref(db, `user_inbox/${currentCallTargetId}`), { status: 'cancelled' }).catch(()=>{});
     get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
       const token = snap.val()?.fcmToken;
