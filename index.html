@@ -288,38 +288,41 @@
   </div>
 </div>
 
-<!-- डायनामिक OTA मल्टी-फ़ाइल लोडर -->
+<!-- सुरक्षित क्रमिक मॉड्यूल लोडर (Sequential Order-Guaranteed) -->
 <script>
-  (function() {
-    // 1. अगर पुराना करप्ट कोड अटका है तो कैश साफ़ करें
-    const CURRENT_RUN_ID = "v_clean_modules_2";
-    if (localStorage.getItem('ota_run_id') !== CURRENT_RUN_ID) {
+  (async function() {
+    // 1. पुराना अटका हुआ कैश साफ करें
+    const RUN_VER = "v_modular_seq_1";
+    if (localStorage.getItem('ota_run_ver') !== RUN_VER) {
       localStorage.removeItem('ota_cached_js');
       localStorage.removeItem('ota_cached_chat');
       localStorage.removeItem('ota_cached_kids');
-      localStorage.setItem('ota_run_id', CURRENT_RUN_ID);
+      localStorage.setItem('ota_run_ver', RUN_VER);
     }
 
-    // 2. फ़ाइलों को सुरक्षित तरीके से लोड करें
-    function injectScript(content, fallbackSrc) {
-      const s = document.createElement('script');
-      s.type = 'module';
-      if (content && content.length > 50 && !content.includes("<!DOCTYPE")) {
-        s.textContent = content;
-      } else {
-        s.src = fallbackSrc + '?t=' + Date.now();
-      }
-      document.body.appendChild(s);
+    // 2. एक-एक करके क्रम में लोड करने वाला फंक्शन
+    function loadModule(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.type = 'module';
+        s.src = src + '?t=' + Date.now();
+        s.onload = () => resolve();
+        s.onerror = (e) => reject(e);
+        document.body.appendChild(s);
+      });
     }
 
-    const cachedApp = localStorage.getItem('ota_cached_js');
-    const cachedChat = localStorage.getItem('ota_cached_chat');
-    const cachedKids = localStorage.getItem('ota_cached_kids');
-
-    // तीनों फाइलों को क्रम से लोड करें
-    injectScript(cachedApp, 'app.js');
-    injectScript(cachedChat, 'chat.js');
-    injectScript(cachedKids, 'kids.js');
+    try {
+      // पहले app.js लोड होगी और Firebase/Presence बनाएगी
+      await loadModule('app.js');
+      // फिर chat.js आकर चैट सिस्टम को बाइंड करेगी
+      await loadModule('chat.js');
+      // अंत में kids.js क्विज़ और कैनवस को जोड़ेगी
+      await loadModule('kids.js');
+      console.log('All modules loaded in perfect sequence!');
+    } catch (err) {
+      console.error('Script loading error:', err);
+    }
   })();
 </script>
 
