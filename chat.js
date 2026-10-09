@@ -1,13 +1,12 @@
-// Database instance मिलने तक सुरक्षित रखें
-const getDB = () => window._vc_db;
-const $ = id => document.getElementById(id);
 // ==========================================
 // CHAT & MEDIA MODULE (chat.js)
 // ==========================================
-import { getDatabase, ref, set, get, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { ref, set, get, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const db = window._vc_db;
+// सुरक्षित $ हेल्पर
 const $ = id => document.getElementById(id);
+// डेटाबेस रेफरेंस फंक्शन (ताकि app.js से db मिलते ही काम करे)
+const getDb = () => window._vc_db;
 
 const lobbyScreen = $('lobby'), chatScreen =$('chatScreen');
 const chatInput = $('chatInput'), actionBtn =$('actionBtn'), micSvg = $('micSvg'), sendSvg =$('sendSvg');
@@ -33,30 +32,37 @@ window.openChat = function(tId, tName, isOnline) {
   if (window.unreadCounts) window.unreadCounts[tId] = 0;
   if (typeof window.renderContacts === 'function') window.renderContacts();
 
-  $('chatTargetName').textContent = tName;
+  const nameEl = $('chatTargetName');
+  if (nameEl) nameEl.textContent = tName;
 
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
-  targetStatusUnsub = onValue(ref(db, `users/${tId}`), (snap) => {
-    const u = snap.val() || {};
-    const statusEl = $('chatTargetStatus');
-    const isTyping = u.typingTo === window.myUserId;
-    const online = !!u.online;
-    if (isTyping) { 
-      statusEl.textContent = window.translations[window.currentLang].typing; 
-      statusEl.style.color = 'var(--success)'; 
-    } else if (online) { 
-      statusEl.textContent = window.translations[window.currentLang].online; 
-      statusEl.style.color = 'var(--success)'; 
-    } else { 
-      statusEl.textContent = window.formatLastSeen(u.lastSeen) || window.translations[window.currentLang].offline; 
-      statusEl.style.color = '#94a3b8'; 
-    }
-  });
+  const currentDb = getDb();
+  if (currentDb) {
+    targetStatusUnsub = onValue(ref(currentDb, `users/${tId}`), (snap) => {
+      const u = snap.val() || {};
+      const statusEl = $('chatTargetStatus');
+      if (!statusEl) return;
+      const isTyping = u.typingTo === window.myUserId;
+      const online = !!u.online;
+      if (isTyping) { 
+        statusEl.textContent = (window.translations && window.translations[window.currentLang]) ? window.translations[window.currentLang].typing : 'लिख रहे हैं...'; 
+        statusEl.style.color = 'var(--success)'; 
+      } else if (online) { 
+        statusEl.textContent = (window.translations && window.translations[window.currentLang]) ? window.translations[window.currentLang].online : 'ऑनलाइन'; 
+        statusEl.style.color = 'var(--success)'; 
+      } else { 
+        statusEl.textContent = window.formatLastSeen ? window.formatLastSeen(u.lastSeen) : 'ऑफलाइन'; 
+        statusEl.style.color = '#94a3b8'; 
+      }
+    });
+  }
 
-  lobbyScreen.hidden = true; 
-  chatScreen.hidden = false;
-  chatInput.value = ''; 
-  chatInput.style.height = '44px';
+  if (lobbyScreen) lobbyScreen.hidden = true; 
+  if (chatScreen) chatScreen.hidden = false;
+  if (chatInput) {
+    chatInput.value = ''; 
+    chatInput.style.height = '44px';
+  }
   updateActionBtnState(); 
   loadChatMessages();
 };
@@ -65,30 +71,52 @@ window.openChat = function(tId, tName, isOnline) {
 window.closeChat = function() {
   if (chatUnsub) { chatUnsub(); chatUnsub = null; }
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
-  discardRecording();
+  window.discardRecording();
   if (activePlayingAudio) { activePlayingAudio.pause(); activePlayingAudio = null; }
   window.currentChatTargetId = null;
-  update(ref(db, `users/${window.myUserId}`), { typingTo: null }).catch(()=>{});
-  chatScreen.hidden = true; 
-  lobbyScreen.hidden = false;
+  const currentDb = getDb();
+  if (currentDb && window.myUserId) {
+    update(ref(currentDb, `users/${window.myUserId}`), { typingTo: null }).catch(()=>{});
+  }
+  if (chatScreen) chatScreen.hidden = true; 
+  if (lobbyScreen) lobbyScreen.hidden = false;
 };
 
-$('chatBackBtn').onclick = window.closeChat;
-$('chatCallBtn').onclick = () => {    if (window.currentChatTargetId && typeof window.startCall === 'function') {     window.startCall(window.currentChatTargetId, window.currentChatTargetName, false);    } };$('chatVoiceCallBtn').onclick = () => { 
-  if (window.currentChatTargetId && typeof window.startCall === 'function') {
-    window.startCall(window.currentChatTargetId, window.currentChatTargetName, true); 
-  }
-};
+// बटन्स को बाइंड करना
+const backBtn = $('chatBackBtn');
+if (backBtn) backBtn.onclick = window.closeChat;
+
+const chatCallBtn = $('chatCallBtn');
+if (chatCallBtn) {
+  chatCallBtn.onclick = () => { 
+    if (window.currentChatTargetId && typeof window.startCall === 'function') {
+      window.startCall(window.currentChatTargetId, window.currentChatTargetName, false); 
+    } 
+  };
+}
+
+const chatVoiceCallBtn = $('chatVoiceCallBtn');
+if (chatVoiceCallBtn) {
+  chatVoiceCallBtn.onclick = () => { 
+    if (window.currentChatTargetId && typeof window.startCall === 'function') {
+      window.startCall(window.currentChatTargetId, window.currentChatTargetName, true); 
+    }
+  };
+}
 
 // --- चैट मैसेजेस लोड करना ---
 function loadChatMessages() {
   const body = $('chatBody'); 
+  if (!body) return;
   body.innerHTML = '';
   if (chatUnsub) chatUnsub();
-  const roomId = window.getChatRoomId(window.myUserId, window.currentChatTargetId);
+  const currentDb = getDb();
+  if (!currentDb || !window.myUserId || !window.currentChatTargetId) return;
+
+  const roomId = window.getChatRoomId ? window.getChatRoomId(window.myUserId, window.currentChatTargetId) : [window.myUserId, window.currentChatTargetId].sort().join('__');
   const roomPath = `chats/${roomId}/messages`;
 
-  chatUnsub = onValue(ref(db, roomPath), snap => {
+  chatUnsub = onValue(ref(currentDb, roomPath), snap => {
     body.innerHTML = '';
     const msgs = snap.val() || {};
     const sortedKeys = Object.keys(msgs).sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
@@ -96,13 +124,13 @@ function loadChatMessages() {
     sortedKeys.forEach(msgId => {
       const m = msgs[msgId];
       if (m.senderId !== window.myUserId && !m.read) {
-        update(ref(db, `${roomPath}/${msgId}`), { read: true, delivered: true, readAt: Date.now() }).catch(()=>{});
+        update(ref(currentDb, `${roomPath}/${msgId}`), { read: true, delivered: true, readAt: Date.now() }).catch(()=>{});
       }
 
       const b = document.createElement('div');
       if (m.type === 'system-call') {
         b.className = 'chat-bubble system-call';
-        b.textContent = `${m.text} • ${window.formatClockTime(m.time)}`;
+        b.textContent = `${m.text} • ${window.formatClockTime ? window.formatClockTime(m.time) : ''}`;
         body.appendChild(b); 
         return;
       }
@@ -129,10 +157,10 @@ function loadChatMessages() {
           </div>
         `;
       } else {
-        contentHtml = `<div>${window.safeName(m.text)}</div>`;
+        contentHtml = `<div>${window.safeName ? window.safeName(m.text) : m.text}</div>`;
       }
 
-      b.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? window.formatClockTime(m.time) : ''}</span>${tick}</div>`;
+      b.innerHTML = `${contentHtml}<div class="chat-meta"><span>${(m.time && window.formatClockTime) ? window.formatClockTime(m.time) : ''}</span>${tick}</div>`;
       body.appendChild(b);
     });
 
@@ -194,26 +222,39 @@ function loadChatMessages() {
 
 // --- सेंड / माइक बटन टॉगल ---
 function updateActionBtnState() {
+  if (!chatInput || !micSvg || !sendSvg || !actionBtn) return;
   const hasText = chatInput.value.trim().length > 0;
-  if (hasText) { micSvg.style.display = 'none'; sendSvg.style.display = 'block'; actionBtn.classList.add('send-mode'); }
-  else { micSvg.style.display = 'block'; sendSvg.style.display = 'none'; actionBtn.classList.remove('send-mode'); }
+  if (hasText) { 
+    micSvg.style.display = 'none'; 
+    sendSvg.style.display = 'block'; 
+    actionBtn.classList.add('send-mode'); 
+  } else { 
+    micSvg.style.display = 'block'; 
+    sendSvg.style.display = 'none'; 
+    actionBtn.classList.remove('send-mode'); 
+  }
 }
 
-chatInput.addEventListener('input', () => {
-  chatInput.style.height = '44px';
-  chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
-  updateActionBtnState();
-  if (window.currentChatTargetId) {
-    update(ref(db, `users/${window.myUserId}`), { typingTo: window.currentChatTargetId }).catch(()=>{});
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => { update(ref(db, `users/${window.myUserId}`), { typingTo: null }).catch(()=>{}); }, 1800);
-  }
-});
-['keyup', 'change', 'paste', 'compositionend'].forEach(ev => chatInput.addEventListener(ev, updateActionBtnState));
+if (chatInput) {
+  chatInput.addEventListener('input', () => {
+    chatInput.style.height = '44px';
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
+    updateActionBtnState();
+    const currentDb = getDb();
+    if (window.currentChatTargetId && currentDb && window.myUserId) {
+      update(ref(currentDb, `users/${window.myUserId}`), { typingTo: window.currentChatTargetId }).catch(()=>{});
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => { update(ref(currentDb, `users/${window.myUserId}`), { typingTo: null }).catch(()=>{}); }, 1800);
+    }
+  });
+  ['keyup', 'change', 'paste', 'compositionend'].forEach(ev => chatInput.addEventListener(ev, updateActionBtnState));
+}
 
 async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
   try {
-    const tSnap = await get(ref(db, `users/${targetId}`));
+    const currentDb = getDb();
+    if (!currentDb) return;
+    const tSnap = await get(ref(currentDb, `users/${targetId}`));
     const token = tSnap.val()?.fcmToken;
     if (!token) return;
 
@@ -231,22 +272,28 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
 }
 
 async function sendChatMessage() {
+  if (!chatInput) return;
   const txt = chatInput.value.trim();
-  if (!txt || !window.currentChatTargetId) return;
+  const currentDb = getDb();
+  if (!txt || !window.currentChatTargetId || !currentDb) return;
   if (typeof window.playMessageTickSound === 'function') window.playMessageTickSound();
 
-  const roomId = window.getChatRoomId(window.myUserId, window.currentChatTargetId);
+  const roomId = window.getChatRoomId ? window.getChatRoomId(window.myUserId, window.currentChatTargetId) : [window.myUserId, window.currentChatTargetId].sort().join('__');
   const roomPath = `chats/${roomId}/messages`;
-  chatInput.value = ''; chatInput.style.height = '44px';
-  updateActionBtnState(); chatInput.focus();
-  update(ref(db, `users/${window.myUserId}`), { typingTo: null }).catch(()=>{});
+  chatInput.value = ''; 
+  chatInput.style.height = '44px';
+  updateActionBtnState(); 
+  chatInput.focus();
+  update(ref(currentDb, `users/${window.myUserId}`), { typingTo: null }).catch(()=>{});
 
-  const targetOnline = !!window.allOnlineUsers[window.currentChatTargetId]?.online;
-  const newMsgRef = push(ref(db, roomPath));
+  const targetOnline = !!(window.allOnlineUsers && window.allOnlineUsers[window.currentChatTargetId]?.online);
+  const newMsgRef = push(ref(currentDb, roomPath));
   const newMsgId = newMsgRef.key;
 
-  window.latestChatSnippets[window.currentChatTargetId] = { text: txt, time: Date.now(), senderId: window.myUserId, read: false, delivered: targetOnline };
-  localStorage.setItem('cached_snippets', JSON.stringify(window.latestChatSnippets));
+  if (window.latestChatSnippets) {
+    window.latestChatSnippets[window.currentChatTargetId] = { text: txt, time: Date.now(), senderId: window.myUserId, read: false, delivered: targetOnline };
+    localStorage.setItem('cached_snippets', JSON.stringify(window.latestChatSnippets));
+  }
   if (typeof window.renderContacts === 'function') window.renderContacts();
 
   await set(newMsgRef, {
@@ -255,32 +302,36 @@ async function sendChatMessage() {
   sendChatMessagePush(window.currentChatTargetId, txt, roomId, newMsgId);
 }
 
-actionBtn.addEventListener('pointerdown', (e) => { if (chatInput.value.trim().length > 0) e.preventDefault(); });
-actionBtn.addEventListener('mousedown', (e) => { if (chatInput.value.trim().length > 0) e.preventDefault(); });
+if (actionBtn) {
+  actionBtn.addEventListener('pointerdown', (e) => { if (chatInput && chatInput.value.trim().length > 0) e.preventDefault(); });
+  actionBtn.addEventListener('mousedown', (e) => { if (chatInput && chatInput.value.trim().length > 0) e.preventDefault(); });
 
-actionBtn.addEventListener('click', async (e) => {
-  e.preventDefault();
-  if (isSendingMsg) return; 
-  if (chatInput.value.trim().length > 0) {
-    isSendingMsg = true;
-    await sendChatMessage();
-    chatInput.focus();
-    setTimeout(() => { isSendingMsg = false; }, 800);
-  } else {
-    chatInput.blur();
-    openVoiceDock();
-  }
-});
-
-chatInput.addEventListener('keydown', e => { 
-  if (e.key === 'Enter' && !e.shiftKey) { 
-    e.preventDefault(); 
+  actionBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
     if (isSendingMsg) return; 
-    isSendingMsg = true;
-    sendChatMessage(); 
-    setTimeout(() => { isSendingMsg = false; }, 800);
-  } 
-});
+    if (chatInput && chatInput.value.trim().length > 0) {
+      isSendingMsg = true;
+      await sendChatMessage();
+      chatInput.focus();
+      setTimeout(() => { isSendingMsg = false; }, 800);
+    } else {
+      if (chatInput) chatInput.blur();
+      openVoiceDock();
+    }
+  });
+}
+
+if (chatInput) {
+  chatInput.addEventListener('keydown', e => { 
+    if (e.key === 'Enter' && !e.shiftKey) { 
+      e.preventDefault(); 
+      if (isSendingMsg) return; 
+      isSendingMsg = true;
+      sendChatMessage(); 
+      setTimeout(() => { isSendingMsg = false; }, 800);
+    } 
+  });
+}
 
 // --- वॉयस डॉक लॉजिक ---
 async function openVoiceDock() {
@@ -289,20 +340,22 @@ async function openVoiceDock() {
     dockAudioChunks = []; dockMediaRecorder = new MediaRecorder(dockStream);
     dockMediaRecorder.ondataavailable = e => { if (e.data.size > 0) dockAudioChunks.push(e.data); };
     dockMediaRecorder.start(100);
-    isDockPaused = false; dockSeconds = 0; dockTimerText.textContent = '0:00';
-    dockPauseIco.textContent = '⏸'; dockPauseText.textContent = window.currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
-    dockBlinkDot.style.animationPlayState = 'running';
-    voiceDock.hidden = false;
+    isDockPaused = false; dockSeconds = 0; 
+    if (dockTimerText) dockTimerText.textContent = '0:00';
+    if (dockPauseIco) dockPauseIco.textContent = '⏸'; 
+    if (dockPauseText) dockPauseText.textContent = window.currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
+    if (dockBlinkDot) dockBlinkDot.style.animationPlayState = 'running';
+    if (voiceDock) voiceDock.hidden = false;
     setupWaveformVisualizer(dockStream);
 
     dockTimer = setInterval(() => {
       if (!isDockPaused) {
         dockSeconds++;
-        dockTimerText.textContent = `${Math.floor(dockSeconds / 60)}:${String(dockSeconds % 60).padStart(2,'0')}`;
+        if (dockTimerText) dockTimerText.textContent = `${Math.floor(dockSeconds / 60)}:${String(dockSeconds % 60).padStart(2,'0')}`;
         if (dockSeconds >= 120) sendVoiceDock();
       }
     }, 1000);
-  } catch(e) { window.toast('माइक की अनुमति नहीं मिल सकी'); }
+  } catch(e) { if (window.toast) window.toast('माइक की अनुमति नहीं मिल सकी'); }
 }
 
 function setupWaveformVisualizer(stream) {
@@ -316,7 +369,7 @@ function setupWaveformVisualizer(stream) {
     function drawWave() {
       dockAnimFrame = requestAnimationFrame(drawWave);
       dockAnalyser.getByteFrequencyData(dataArray);
-      if (!waveCanvas) return;
+      if (!waveCanvas || !waveCtx) return;
       waveCanvas.width = waveCanvas.offsetWidth; waveCanvas.height = waveCanvas.offsetHeight;
       waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
       const barWidth = (waveCanvas.width / bufferLength) * 1.5;
@@ -337,27 +390,35 @@ function stopWaveformVisualizer() {
   if (dockAudioContext) { dockAudioContext.close().catch(()=>{}); dockAudioContext = null; }
 }
 
-dockPauseResumeBtn.onclick = () => {
-  if (!dockMediaRecorder) return;
-  if (!isDockPaused) {
-    dockMediaRecorder.pause(); isDockPaused = true;
-    dockPauseIco.textContent = '🎙'; dockPauseText.textContent = window.currentLang === 'hi' ? 'जारी रखें' : 'Resume';
-    dockBlinkDot.style.animationPlayState = 'paused';
-  } else {
-    dockMediaRecorder.resume(); isDockPaused = false;
-    dockPauseIco.textContent = '⏸'; dockPauseText.textContent = window.currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
-    dockBlinkDot.style.animationPlayState = 'running';
-  }
-};
+if (dockPauseResumeBtn) {
+  dockPauseResumeBtn.onclick = () => {
+    if (!dockMediaRecorder) return;
+    if (!isDockPaused) {
+      dockMediaRecorder.pause(); isDockPaused = true;
+      if (dockPauseIco) dockPauseIco.textContent = '🎙'; 
+      if (dockPauseText) dockPauseText.textContent = window.currentLang === 'hi' ? 'जारी रखें' : 'Resume';
+      if (dockBlinkDot) dockBlinkDot.style.animationPlayState = 'paused';
+    } else {
+      dockMediaRecorder.resume(); isDockPaused = false;
+      if (dockPauseIco) dockPauseIco.textContent = '⏸'; 
+      if (dockPauseText) dockPauseText.textContent = window.currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
+      if (dockBlinkDot) dockBlinkDot.style.animationPlayState = 'running';
+    }
+  };
+}
 
 window.discardRecording = function() {
   if (dockTimer) { clearInterval(dockTimer); dockTimer = null; }
   stopWaveformVisualizer();
   if (dockStream) { dockStream.getTracks().forEach(t => t.stop()); dockStream = null; }
   if (dockMediaRecorder && dockMediaRecorder.state !== 'inactive') dockMediaRecorder.stop();
-  dockAudioChunks = []; voiceDock.hidden = true; updateActionBtnState();
+  dockAudioChunks = []; 
+  if (voiceDock) voiceDock.hidden = true; 
+  updateActionBtnState();
 };
-$('dockTrashBtn').onclick = window.discardRecording;
+
+const trashBtn = $('dockTrashBtn');
+if (trashBtn) trashBtn.onclick = window.discardRecording;
 
 function sendVoiceDock() {
   if (!dockMediaRecorder) return;
@@ -367,23 +428,26 @@ function sendVoiceDock() {
 
   dockMediaRecorder.onstop = async () => {
     if (dockStream) dockStream.getTracks().forEach(t => t.stop());
-    if (dockAudioChunks.length > 0 && window.currentChatTargetId) {
+    const currentDb = getDb();
+    if (dockAudioChunks.length > 0 && window.currentChatTargetId && currentDb) {
       if (typeof window.playMessageTickSound === 'function') window.playMessageTickSound();
       const audioBlob = new Blob(dockAudioChunks, { type: 'audio/webm' });
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64Audio = reader.result;
-        const roomId = window.getChatRoomId(window.myUserId, window.currentChatTargetId);
+        const roomId = window.getChatRoomId ? window.getChatRoomId(window.myUserId, window.currentChatTargetId) : [window.myUserId, window.currentChatTargetId].sort().join('__');
         const roomPath = `chats/${roomId}/messages`;
         const durStr = `${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}`;
-        const targetOnline = !!window.allOnlineUsers[window.currentChatTargetId]?.online;
-        const newMsgRef = push(ref(db, roomPath));
+        const targetOnline = !!(window.allOnlineUsers && window.allOnlineUsers[window.currentChatTargetId]?.online);
+        const newMsgRef = push(ref(currentDb, roomPath));
         const newMsgId = newMsgRef.key;
 
-        window.latestChatSnippets[window.currentChatTargetId] = {
-          text: '🎙 ' + (window.currentLang==='hi'?'वॉयस नोट':'Voice Note'), time: Date.now(), senderId: window.myUserId, read: false, delivered: targetOnline
-        };
-        localStorage.setItem('cached_snippets', JSON.stringify(window.latestChatSnippets));
+        if (window.latestChatSnippets) {
+          window.latestChatSnippets[window.currentChatTargetId] = {
+            text: '🎙 ' + (window.currentLang==='hi'?'वॉयस नोट':'Voice Note'), time: Date.now(), senderId: window.myUserId, read: false, delivered: targetOnline
+          };
+          localStorage.setItem('cached_snippets', JSON.stringify(window.latestChatSnippets));
+        }
         if (typeof window.renderContacts === 'function') window.renderContacts();
 
         await set(newMsgRef, {
@@ -397,49 +461,61 @@ function sendVoiceDock() {
     dockAudioChunks = [];
   };
   if (dockMediaRecorder.state !== 'inactive') dockMediaRecorder.stop();
-  voiceDock.hidden = true; updateActionBtnState();
+  if (voiceDock) voiceDock.hidden = true; 
+  updateActionBtnState();
 }
-$('dockSendBtn').onclick = sendVoiceDock;
+
+const sendDockBtn = $('dockSendBtn');
+if (sendDockBtn) sendDockBtn.onclick = sendVoiceDock;
 
 // --- फ़ोटो भेजना ---
-$('attachBtn').onclick = () => $('photoFileInput').click();$('photoFileInput').onchange = e => {
-  const file = e.target.files[0];
-  if (!file || !window.currentChatTargetId) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = async () => {
-      if (typeof window.playMessageTickSound === 'function') window.playMessageTickSound();
-      const canvas = document.createElement('canvas');
-      const maxDim = 900;
-      let w = img.width, h = img.height;
-      if (w > h && w > maxDim) { h = Math.round(h * (maxDim / w)); w = maxDim; }
-      else if (h > maxDim) { w = Math.round(h * (maxDim / h)); h = maxDim; }
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      const compressedData = canvas.toDataURL('image/jpeg', 0.65);
-      const roomId = window.getChatRoomId(window.myUserId, window.currentChatTargetId);
-      const roomPath = `chats/${roomId}/messages`;
-      const targetOnline = !!window.allOnlineUsers[window.currentChatTargetId]?.online;
-      const newMsgRef = push(ref(db, roomPath));
-      const newMsgId = newMsgRef.key;
+const attachBtn = $('attachBtn');
+if (attachBtn) attachBtn.onclick = () => $('photoFileInput').click();
 
-      window.latestChatSnippets[window.currentChatTargetId] = {
-        text: '📷 ' + (window.currentLang==='hi'?'फ़ोटो':'Photo'), time: Date.now(), senderId: window.myUserId, read: false, delivered: targetOnline
+const photoInput = $('photoFileInput');
+if (photoInput) {
+  photoInput.onchange = e => {
+    const file = e.target.files[0];
+    const currentDb = getDb();
+    if (!file || !window.currentChatTargetId || !currentDb) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = async () => {
+        if (typeof window.playMessageTickSound === 'function') window.playMessageTickSound();
+        const canvas = document.createElement('canvas');
+        const maxDim = 900;
+        let w = img.width, h = img.height;
+        if (w > h && w > maxDim) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+        else if (h > maxDim) { w = Math.round(h * (maxDim / h)); w = maxDim; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const compressedData = canvas.toDataURL('image/jpeg', 0.65);
+        const roomId = window.getChatRoomId ? window.getChatRoomId(window.myUserId, window.currentChatTargetId) : [window.myUserId, window.currentChatTargetId].sort().join('__');
+        const roomPath = `chats/${roomId}/messages`;
+        const targetOnline = !!(window.allOnlineUsers && window.allOnlineUsers[window.currentChatTargetId]?.online);
+        const newMsgRef = push(ref(currentDb, roomPath));
+        const newMsgId = newMsgRef.key;
+
+        if (window.latestChatSnippets) {
+          window.latestChatSnippets[window.currentChatTargetId] = {
+            text: '📷 ' + (window.currentLang==='hi'?'फ़ोटो':'Photo'), time: Date.now(), senderId: window.myUserId, read: false, delivered: targetOnline
+          };
+          localStorage.setItem('cached_snippets', JSON.stringify(window.latestChatSnippets));
+        }
+        if (typeof window.renderContacts === 'function') window.renderContacts();
+
+        await set(newMsgRef, {
+          senderId: window.myUserId, senderName: window.myUserName, type: 'image', data: compressedData,
+          time: Date.now(), delivered: targetOnline, read: false
+        });
+        if (window.toast) window.toast(window.currentLang==='hi'?'फ़ोटो भेज दी गई':'Photo sent');
+        sendChatMessagePush(window.currentChatTargetId, '📷 Photo', roomId, newMsgId);
       };
-      localStorage.setItem('cached_snippets', JSON.stringify(window.latestChatSnippets));
-      if (typeof window.renderContacts === 'function') window.renderContacts();
-
-      await set(newMsgRef, {
-        senderId: window.myUserId, senderName: window.myUserName, type: 'image', data: compressedData,
-        time: Date.now(), delivered: targetOnline, read: false
-      });
-      window.toast(window.currentLang==='hi'?'फ़ोटो भेज दी गई':'Photo sent');
-      sendChatMessagePush(window.currentChatTargetId, '📷 Photo', roomId, newMsgId);
+      img.src = ev.target.result;
     };
-    img.src = ev.target.result;
+    reader.readAsDataURL(file); 
+    e.target.value = '';
   };
-  reader.readAsDataURL(file); 
-  e.target.value = '';
-};
+}
