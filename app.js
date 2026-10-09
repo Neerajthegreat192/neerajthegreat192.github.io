@@ -1928,7 +1928,7 @@ chatInput.addEventListener('blur', () => {
   }
 });
 
-// --- डायनामिक OTA (JS और CSS लाइव अपडेट) ---
+// --- डायनामिक OTA (चारों फ़ाइलों का लाइव अपडेट) ---
 async function checkWebOtaUpdate(manual = false) {
   try {
     if (manual) toast(currentLang === 'hi' ? 'अपडेट की जांच हो रही है...' : 'Checking for update...');
@@ -1945,14 +1945,22 @@ async function checkWebOtaUpdate(manual = false) {
     if (info.version && String(info.version) !== activeVer) {
       if (manual) toast(currentLang === 'hi' ? 'नया अपडेट डाउनलोड हो रहा है...' : 'Downloading new update...');
       
-      const jsRes = await fetch('https://neerajthegreat192.github.io/app.js?t=' + Date.now(), { cache: 'no-store' });
-      const cssRes = await fetch('https://neerajthegreat192.github.io/style.css?t=' + Date.now(), { cache: 'no-store' });
+      const [jsRes, chatRes, kidsRes, cssRes] = await Promise.all([
+        fetch('https://neerajthegreat192.github.io/app.js?t=' + Date.now(), { cache: 'no-store' }),
+        fetch('https://neerajthegreat192.github.io/chat.js?t=' + Date.now(), { cache: 'no-store' }),
+        fetch('https://neerajthegreat192.github.io/kids.js?t=' + Date.now(), { cache: 'no-store' }),
+        fetch('https://neerajthegreat192.github.io/style.css?t=' + Date.now(), { cache: 'no-store' })
+      ]);
       
-      if (jsRes.ok && cssRes.ok) {
+      if (jsRes.ok && chatRes.ok && kidsRes.ok && cssRes.ok) {
         const newJs = await jsRes.text();
+        const newChat = await chatRes.text();
+        const newKids = await kidsRes.text();
         const newCss = await cssRes.text();
         
         localStorage.setItem('ota_cached_js', newJs);
+        localStorage.setItem('ota_cached_chat', newChat);
+        localStorage.setItem('ota_cached_kids', newKids);
         localStorage.setItem('ota_cached_css', newCss);
         localStorage.setItem('ota_active_ver', String(info.version));
         
