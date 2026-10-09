@@ -344,10 +344,10 @@
     }
 
     try {
-      // पहले Core App लोड होगी, फिर Chat, फिर Kids
-      await loadScriptSequentially('app.js', 'ota_cached_js');
-      await loadScriptSequentially('chat.js', 'ota_cached_chat');
-      await loadScriptSequentially('kids.js', 'ota_cached_kids');
+      <!-- स्टैंडर्ड डायरेक्ट मॉड्यूल लोडर -->
+<script type="module" src="app.js"></script>
+<script type="module" src="chat.js"></script>
+<script type="module" src="kids.js"></script>
       console.log('All modules loaded successfully!');
     } catch(err) {
       console.error('Module load failure:', err);
