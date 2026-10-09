@@ -920,7 +920,7 @@ let activePlayingBtn = null;
 function openChat(tId, tName, isOnline) {
   currentChatTargetId = tId; currentChatTargetName = tName;
   unreadCounts[tId] = 0; renderContacts();
-  if ($('chatTargetName')) $('chatTargetName').textContent = tName;
+  if ($('chatTargetName'))$('chatTargetName').textContent = tName;
 
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
   targetStatusUnsub = onValue(ref(db, `users/${tId}`), (snap) => {
@@ -945,6 +945,13 @@ function openChat(tId, tName, isOnline) {
 
   if (chatInput) { chatInput.value = ''; chatInput.style.height = '44px'; }
   updateActionBtnState(); loadChatMessages();
+
+  // --- YEH 4 LINE JODI GAYI HAIN ---
+  const vBtn = $('chatCallBtn');
+  if (vBtn) vBtn.onclick = () => startCall(tId, tName, false);
+
+  const aBtn = $('chatVoiceCallBtn');
+  if (aBtn) aBtn.onclick = () => startCall(tId, tName, true);
 }
 window.openChat = openChat;
 
