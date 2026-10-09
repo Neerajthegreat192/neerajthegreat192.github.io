@@ -291,10 +291,20 @@
 <!-- डायनामिक OTA मल्टी-फ़ाइल लोडर -->
 <script>
   (function() {
+    // 1. अगर पुराना करप्ट कोड अटका है तो कैश साफ़ करें
+    const CURRENT_RUN_ID = "v_clean_modules_2";
+    if (localStorage.getItem('ota_run_id') !== CURRENT_RUN_ID) {
+      localStorage.removeItem('ota_cached_js');
+      localStorage.removeItem('ota_cached_chat');
+      localStorage.removeItem('ota_cached_kids');
+      localStorage.setItem('ota_run_id', CURRENT_RUN_ID);
+    }
+
+    // 2. फ़ाइलों को सुरक्षित तरीके से लोड करें
     function injectScript(content, fallbackSrc) {
       const s = document.createElement('script');
       s.type = 'module';
-      if (content && content.length > 50) {
+      if (content && content.length > 50 && !content.includes("<!DOCTYPE")) {
         s.textContent = content;
       } else {
         s.src = fallbackSrc + '?t=' + Date.now();
@@ -310,48 +320,6 @@
     injectScript(cachedApp, 'app.js');
     injectScript(cachedChat, 'chat.js');
     injectScript(cachedKids, 'kids.js');
-  })();
-</script>
-
-  <!-- सुरक्षित डायनामिक लोडर -->
-<script>
-  (async function() {
-    // 1. अगर पुराना करप्ट कोड अटका है, तो कैश साफ़ करें
-    const CURRENT_RUN_ID = "v_clean_modules_1";
-    if (localStorage.getItem('ota_run_id') !== CURRENT_RUN_ID) {
-      localStorage.removeItem('ota_cached_js');
-      localStorage.removeItem('ota_cached_chat');
-      localStorage.removeItem('ota_cached_kids');
-      localStorage.setItem('ota_run_id', CURRENT_RUN_ID);
-    }
-
-    async function loadScriptSequentially(src, cacheKey) {
-      return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.type = 'module';
-        const cached = localStorage.getItem(cacheKey);
-        if (cached && cached.trim().length > 50 && !cached.includes("<!DOCTYPE")) {
-          s.textContent = cached;
-          document.body.appendChild(s);
-          resolve();
-        } else {
-          s.src = src + '?t=' + Date.now();
-          s.onload = () => resolve();
-          s.onerror = (e) => reject(e);
-          document.body.appendChild(s);
-        }
-      });
-    }
-
-    try {
-      <!-- स्टैंडर्ड डायरेक्ट मॉड्यूल लोडर -->
-<script type="module" src="app.js"></script>
-<script type="module" src="chat.js"></script>
-<script type="module" src="kids.js"></script>
-      console.log('All modules loaded successfully!');
-    } catch(err) {
-      console.error('Module load failure:', err);
-    }
   })();
 </script>
 
