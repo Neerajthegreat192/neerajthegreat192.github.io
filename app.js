@@ -918,9 +918,13 @@ let activePlayingAudio = null;
 let activePlayingBtn = null;
 
 function openChat(tId, tName, isOnline) {
-  currentChatTargetId = tId; currentChatTargetName = tName;
-  unreadCounts[tId] = 0; renderContacts();
-  if ($('chatTargetName'))$('chatTargetName').textContent = tName;
+  currentChatTargetId = tId; 
+  currentChatTargetName = tName;
+  unreadCounts[tId] = 0; 
+  renderContacts();
+  
+  const nameEl = $('chatTargetName');
+  if (nameEl) nameEl.textContent = tName;
 
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
   targetStatusUnsub = onValue(ref(db, `users/${tId}`), (snap) => {
@@ -929,9 +933,16 @@ function openChat(tId, tName, isOnline) {
     if (!statusEl) return;
     const isTyping = u.typingTo === myUserId;
     const online = !!u.online;
-    if (isTyping) { statusEl.textContent = translations[currentLang].typing; statusEl.style.color = 'var(--success)'; }
-    else if (online) { statusEl.textContent = translations[currentLang].online; statusEl.style.color = 'var(--success)'; }
-    else { statusEl.textContent = formatLastSeen(u.lastSeen) || translations[currentLang].offline; statusEl.style.color = '#94a3b8'; }
+    if (isTyping) { 
+      statusEl.textContent = translations[currentLang].typing; 
+      statusEl.style.color = 'var(--success)'; 
+    } else if (online) { 
+      statusEl.textContent = translations[currentLang].online; 
+      statusEl.style.color = 'var(--success)'; 
+    } else { 
+      statusEl.textContent = formatLastSeen(u.lastSeen) || translations[currentLang].offline; 
+      statusEl.style.color = '#94a3b8'; 
+    }
   });
 
   if (lobbyScreen) {
@@ -943,10 +954,13 @@ function openChat(tId, tName, isOnline) {
     chatScreen.style.setProperty('display', 'flex', 'important');
   }
 
-  if (chatInput) { chatInput.value = ''; chatInput.style.height = '44px'; }
-  updateActionBtnState(); loadChatMessages();
+  if (chatInput) { 
+    chatInput.value = ''; 
+    chatInput.style.height = '44px'; 
+  }
+  updateActionBtnState(); 
+  loadChatMessages();
 
-  // --- YEH 4 LINE JODI GAYI HAIN ---
   const vBtn = $('chatCallBtn');
   if (vBtn) vBtn.onclick = () => startCall(tId, tName, false);
 
@@ -973,9 +987,7 @@ function closeChat() {
 }
 window.closeChat = closeChat;
 
-if ($('chatBackBtn')) $('chatBackBtn').onclick = closeChat;
-if ($('chatCallBtn')) $('chatCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, false); };
-if ($('chatVoiceCallBtn')) $('chatVoiceCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, true); };
+if ($('chatBackBtn'))$('chatBackBtn').onclick = closeChat;
 
 function loadChatMessages() {
   const body = $('chatBody'); if (!body) return; body.innerHTML = '';
