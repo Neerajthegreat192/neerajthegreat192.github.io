@@ -1,14 +1,3 @@
-// ==========================================
-// CHAT & MEDIA MODULE (chat.js)
-// ==========================================
-import { ref, set, get, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-const db = window._vc_db;
-// ==========================================
-// CHAT & MEDIA MODULE (chat.js)
-// ==========================================
-import { ref, set, get, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
 // Database instance मिलने तक सुरक्षित रखें
 const getDB = () => window._vc_db;
 const $ = id => document.getElementById(id);
