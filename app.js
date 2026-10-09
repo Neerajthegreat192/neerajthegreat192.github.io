@@ -39,7 +39,7 @@ const ICE_SERVERS = {
 };
 
 const $ = id => document.getElementById(id);
-const lobbyScreen = $('lobby'), callScreen = $('call');
+const lobbyScreen = $('lobby'), callScreen = $('call'), chatScreen = $('chatScreen');
 const contactsList = $('contactsList'), callLogsList = $('callLogsList'), myHeaderName = $('myHeaderName'), adminBtn = $('adminBtn');
 const incomingDialog = $('incomingDialog'), outgoingDialog = $('outgoingDialog');
 const callTimer = $('callTimer'), controlsBar = $('controlsBar'), topPill = $('topPill');
@@ -970,6 +970,12 @@ $('audioModeBtn').onclick = () => {
   scheduleAutoHide();
 };
 
+$('kidsFunBtn').onclick = (e) => {
+  e.stopPropagation();
+  $('kidsMenuModal').hidden = false;
+  scheduleAutoHide();
+};
+
 async function boostPeerBitrate(pc) {
   try {
     for (const sender of pc.getSenders()) {
@@ -1332,10 +1338,12 @@ function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); w
 let backPressedOnce = false;
 function setupHardwareBackButton() {
   window.addEventListener('popstate', (e) => {
-    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
+    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('kidsMenuModal')];
     for (const m of openModals) {
-      if (!m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+      if (m && !m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     }
+    const wb = $('kidsWhiteboardModal');
+    if (wb && !wb.hidden) { wb.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     const voiceDock = $('voiceDock');
     if (voiceDock && !voiceDock.hidden) { if (typeof window.discardRecording === 'function') window.discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!$('chatScreen').hidden) { if (typeof window.closeChat === 'function') window.closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
@@ -1348,8 +1356,10 @@ function setupHardwareBackButton() {
 
   if (!isNative || !App) return;
   App.addListener('backButton', () => {
-    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
-    for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
+    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('kidsMenuModal')];
+    for (const m of openModals) { if (m && !m.hidden) { m.hidden = true; return; } }
+    const wb = $('kidsWhiteboardModal');
+    if (wb && !wb.hidden) { wb.hidden = true; return; }
     const voiceDock = $('voiceDock');
     if (voiceDock && !voiceDock.hidden) { if (typeof window.discardRecording === 'function') window.discardRecording(); return; }
     if (!$('chatScreen').hidden) { if (typeof window.closeChat === 'function') window.closeChat(); return; }
