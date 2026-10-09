@@ -529,3 +529,6 @@ if (photoInput) {
     e.target.value = '';
   };
 }
+if (typeof window.renderContacts === 'function') {
+  window.renderContacts();
+}
