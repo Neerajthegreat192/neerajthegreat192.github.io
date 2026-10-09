@@ -237,28 +237,37 @@
 </div>
 <div id="toast"></div>
 
-<!-- डायनामिक स्क्रिप्ट लोडर: अगर मेमोरी में नया कोड है तो उसे चलाएगा, वरना डिफ़ॉल्ट चलाएगा -->
+<!-- डायनामिक OTA मल्टी-फ़ाइल लोडर -->
 <script>
-  try {
-    const otaCode = localStorage.getItem('ota_cached_js');
-    if (otaCode && otaCode.trim() !== "") {
-      const script = document.createElement('script');
-      script.type = 'module';
-      script.textContent = otaCode;
-      document.body.appendChild(script);
-      console.log('Running Dynamic OTA App.js');
-    } else {
-      const defaultScript = document.createElement('script');
-      defaultScript.type = 'module';
-      defaultScript.src = 'app.js';
-      document.body.appendChild(defaultScript);
+  (function() {
+    function injectScript(content, fallbackSrc) {
+      const s = document.createElement('script');
+      s.type = 'module';
+      if (content) {
+        s.textContent = content;
+      } else {
+        s.src = fallbackSrc + '?t=' + Date.now();
+      }
+      document.body.appendChild(s);
     }
-  } catch(e) {
-    const defaultScript = document.createElement('script');
-    defaultScript.type = 'module';
-    defaultScript.src = 'app.js';
-    document.body.appendChild(defaultScript);
-  }
+
+    const cachedApp = localStorage.getItem('ota_cached_js');
+    const cachedChat = localStorage.getItem('ota_cached_chat');
+    const cachedKids = localStorage.getItem('ota_cached_kids');
+    const cachedCss = localStorage.getItem('ota_cached_css');
+
+    // 1. स्टाइलशीट इंजेक्ट करें
+    if (cachedCss) {
+      const style = document.createElement('style');
+      style.textContent = cachedCss;
+      document.head.appendChild(style);
+    }
+
+    // 2. तीनों स्क्रिप्ट्स को क्रम से लोड करें (पहले Core app, फिर Chat, फिर Kids)
+    injectScript(cachedApp, 'app.js');
+    injectScript(cachedChat, 'chat.js');
+    injectScript(cachedKids, 'kids.js');
+  })();
 </script>
 
 </body>
