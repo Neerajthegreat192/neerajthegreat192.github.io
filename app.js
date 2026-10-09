@@ -1,6 +1,6 @@
 // ==========================================
 // ALL-IN-ONE CORE APP MODULE (app.js)
-// Calling + Chat + Kids Live Features (Single File Architecture)
+// Calling + Chat + Kids Live Features (Bug-Free Screen Switch)
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -47,6 +47,18 @@ const remoteGrid = $('remoteGrid'), localVideo = $('localVideo'), pipWrap = $('p
 const pipRestoreBtn = $('pipRestoreBtn');
 const chatInput = $('chatInput'), actionBtn = $('actionBtn'), micSvg = $('micSvg'), sendSvg = $('sendSvg');
 const networkBanner = $('networkBanner'), searchInput = $('searchInput');
+
+// --- सेफ़ स्क्रीन स्विचर (Stuck Fix) ---
+function setScreenVisible(el, visible, displayType = 'flex') {
+  if (!el) return;
+  if (visible) {
+    el.hidden = false;
+    el.style.setProperty('display', displayType, 'important');
+  } else {
+    el.hidden = true;
+    el.style.setProperty('display', 'none', 'important');
+  }
+}
 
 let currentLang = localStorage.getItem('vc_lang') || 'hi';
 const translations = {
@@ -123,7 +135,6 @@ try {
   allCallLogs = JSON.parse(localStorage.getItem('cached_call_logs') || '[]');
 } catch(e) {}
 
-// तुरंत हेडर नाम दिखाएं
 function updateHeaderTitle() {
   if (myHeaderName) myHeaderName.textContent = myUserName || (currentLang === 'hi' ? 'एचडी कॉलिंग' : 'HD Calling');
   if (adminBtn) adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
@@ -345,7 +356,6 @@ async function checkMediaPermissions(showNotice = false) {
   }
 }
 
-// FCM टोकन जनरेशन
 async function requestNotificationPermission() {
   if (isNative && PushNotifications) {
     try {
@@ -451,10 +461,10 @@ function handleIncomingCallNotification(data) {
   
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
-  if (lobbyScreen) lobbyScreen.hidden = true;
-  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.setProperty('display', 'none', 'important'); }
+  setScreenVisible(lobbyScreen, false);
+  setScreenVisible(chatScreen, false);
   if ($('incomingName')) $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
-  if (incomingDialog) incomingDialog.hidden = false;
+  setScreenVisible(incomingDialog, true, 'flex');
   startIncomingRingtone();
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
 }
@@ -512,9 +522,9 @@ function listenSelfAccountStatus() {
       hangup(true); localStorage.clear();
       myUserId = ''; myUserName = '';
       if (myHeaderName) myHeaderName.textContent = '...';
-      if (chatScreen) { chatScreen.hidden = true; chatScreen.style.setProperty('display', 'none', 'important'); }
-      if (callScreen) callScreen.hidden = true;
-      if (lobbyScreen) { lobbyScreen.hidden = false; lobbyScreen.style.setProperty('display', 'flex', 'important'); }
+      setScreenVisible(chatScreen, false);
+      setScreenVisible(callScreen, false);
+      setScreenVisible(lobbyScreen, true, 'flex');
       if ($('nameInput')) $('nameInput').value = '';
       if ($('nameModal')) $('nameModal').hidden = false;
       toast(currentLang === 'hi' ? '⚠️ आपकी आईडी रीसेट हो गई है।' : '⚠️ Your ID was reset.');
@@ -601,9 +611,7 @@ if ($('recheckPermsBtn')) {
 
 if ($('clearChatHistoryBtn')) {
   $('clearChatHistoryBtn').onclick = async () => {
-    const confirmMsg = currentLang === 'hi' 
-      ? 'क्या आप अपनी सभी चैट हिस्ट्री साफ़ करना चाहते हैं?' 
-      : 'Clear all chat history?';
+    const confirmMsg = currentLang === 'hi' ? 'क्या आप अपनी सभी चैट हिस्ट्री साफ़ करना चाहते हैं?' : 'Clear all chat history?';
     if (!confirm(confirmMsg)) return;
 
     try {
@@ -919,12 +927,11 @@ let activePlayingBtn = null;
 
 function openChat(tId, tName, isOnline) {
   currentChatTargetId = tId; 
-  currentChatTargetName = tName;
+  currentChatTargetName = tName || 'उपयोगकर्ता';
   unreadCounts[tId] = 0; 
   renderContacts();
   
-  const nameEl = $('chatTargetName');
-  if (nameEl) nameEl.textContent = tName;
+  if ($('chatTargetName')) $('chatTargetName').textContent = currentChatTargetName;
 
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
   targetStatusUnsub = onValue(ref(db, `users/${tId}`), (snap) => {
@@ -933,39 +940,24 @@ function openChat(tId, tName, isOnline) {
     if (!statusEl) return;
     const isTyping = u.typingTo === myUserId;
     const online = !!u.online;
-    if (isTyping) { 
-      statusEl.textContent = translations[currentLang].typing; 
-      statusEl.style.color = 'var(--success)'; 
-    } else if (online) { 
-      statusEl.textContent = translations[currentLang].online; 
-      statusEl.style.color = 'var(--success)'; 
-    } else { 
-      statusEl.textContent = formatLastSeen(u.lastSeen) || translations[currentLang].offline; 
-      statusEl.style.color = '#94a3b8'; 
-    }
+    if (isTyping) { statusEl.textContent = translations[currentLang].typing; statusEl.style.color = 'var(--success)'; }
+    else if (online) { statusEl.textContent = translations[currentLang].online; statusEl.style.color = 'var(--success)'; }
+    else { statusEl.textContent = formatLastSeen(u.lastSeen) || translations[currentLang].offline; statusEl.style.color = '#94a3b8'; }
   });
 
-  if (lobbyScreen) {
-    lobbyScreen.hidden = true;
-    lobbyScreen.style.setProperty('display', 'none', 'important');
-  }
-  if (chatScreen) {
-    chatScreen.hidden = false;
-    chatScreen.style.setProperty('display', 'flex', 'important');
-  }
+  setScreenVisible(lobbyScreen, false);
+  setScreenVisible(chatScreen, true, 'flex');
 
-  if (chatInput) { 
-    chatInput.value = ''; 
-    chatInput.style.height = '44px'; 
-  }
+  if (chatInput) { chatInput.value = ''; chatInput.style.height = '44px'; }
   updateActionBtnState(); 
   loadChatMessages();
 
+  // कॉल बटन्स को चैट खुलते ही पक्का बाइंड करें
   const vBtn = $('chatCallBtn');
-  if (vBtn) vBtn.onclick = () => startCall(tId, tName, false);
+  if (vBtn) vBtn.onclick = () => startCall(tId, currentChatTargetName, false);
 
   const aBtn = $('chatVoiceCallBtn');
-  if (aBtn) aBtn.onclick = () => startCall(tId, tName, true);
+  if (aBtn) aBtn.onclick = () => startCall(tId, currentChatTargetName, true);
 }
 window.openChat = openChat;
 
@@ -976,18 +968,13 @@ function closeChat() {
   if (activePlayingAudio) { activePlayingAudio.pause(); activePlayingAudio = null; }
   currentChatTargetId = null;
   update(ref(db, `users/${myUserId}`), { typingTo: null }).catch(()=>{});
-  if (chatScreen) {
-    chatScreen.hidden = true;
-    chatScreen.style.setProperty('display', 'none', 'important');
-  }
-  if (lobbyScreen) {
-    lobbyScreen.hidden = false;
-    lobbyScreen.style.setProperty('display', 'flex', 'important');
-  }
+  
+  setScreenVisible(chatScreen, false);
+  setScreenVisible(lobbyScreen, true, 'flex');
 }
 window.closeChat = closeChat;
 
-if ($('chatBackBtn'))$('chatBackBtn').onclick = closeChat;
+if ($('chatBackBtn')) $('chatBackBtn').onclick = closeChat;
 
 function loadChatMessages() {
   const body = $('chatBody'); if (!body) return; body.innerHTML = '';
@@ -1397,7 +1384,7 @@ function listenForIncoming() {
         });
       }
       stopAllCallTones(); 
-      if (incomingDialog) incomingDialog.hidden = true; 
+      setScreenVisible(incomingDialog, false); 
       hangup(true);
     }
   });
@@ -1418,58 +1405,6 @@ async function sendPushNotification(token, callerName, isVoice = false) {
   } catch(e) {}
 }
 
-async function startCall(remoteId, remoteName, audioOnly = false) {
-  try {
-    const bSnap = await get(ref(db, `users/${remoteId}/activeCallId`));
-    if (bSnap.exists() && bSnap.val()) { 
-      toast(`${remoteName} ${currentLang==='hi'?'अभी दूसरी कॉल में व्यस्त है':'is busy on another call'}`); 
-      return; 
-    }
-  } catch(e) {}
-
-  isAudioOnlyCall = audioOnly;
-  const stream = await acquireCallMedia(audioOnly);
-  if (!stream) return;
-
-  activeCallId = `call_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-  isCaller = true;
-  currentCallType = 'outgoing';
-  currentCallTargetId = remoteId;
-  currentCallTargetName = remoteName;
-
-  if ($('outgoingName')) $('outgoingName').textContent = remoteName + (audioOnly ? (currentLang==='hi'?' (ऑडियो)...':' (Audio)...') : (currentLang==='hi'?' (वीडियो)...':' (Video)...'));
-  if ($('outgoingStatusText')) $('outgoingStatusText').textContent = currentLang==='hi'?'कनेक्ट किया जा रहा है...':'Connecting...';
-  if (outgoingDialog) outgoingDialog.hidden = false;
-  startOutgoingCallTone();
-
-  await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
-  
-  const sessionRef = ref(db, `call_sessions/${activeCallId}`);
-  onDisconnect(sessionRef).update({ status: 'ended' });
-
-  await set(sessionRef, {
-    callId: activeCallId, callerId: myUserId, callerName: myUserName, targetId: remoteId, audioOnly: !!audioOnly, status: 'calling', createdAt: serverTimestamp()
-  });
-  await set(ref(db, `user_inbox/${remoteId}`), { callId: activeCallId, callerId: myUserId, callerName: myUserName, audioOnly: !!audioOnly, status: 'calling' });
-
-  const unsubSession = onValue(sessionRef, (snap) => {
-    const d = snap.val(); if (!d) return;
-    if (d.status === 'ringing' && $('outgoingStatusText')) $('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
-    if (d.status === 'busy') { stopAllCallTones(); unsubSession(); if (outgoingDialog) outgoingDialog.hidden = true; toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy'); hangup(true); }
-    if (d.status === 'rejected') { stopAllCallTones(); unsubSession(); if (outgoingDialog) outgoingDialog.hidden = true; toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined'); hangup(true); }
-    if (d.status === 'ended' && isCallConnected) { unsubSession(); toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); hangup(true); }
-  });
-  unsubs.push(unsubSession);
-
-  clearTimeout(callTimeoutTimer);
-  callTimeoutTimer = setTimeout(() => {
-    if (activeCallId && !isCallConnected) { toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer'); hangup(true); }
-  }, 45000);
-
-  try {
-    const tSnap = await get(ref(db, `users/${remoteId}`));
-    const td = tSnap.val();
-    if (td && td.fcmToken) sendPushNotification(td.fcmToken, myUserName, audioOnly);
 async function startCall(remoteId, remoteName, audioOnly = false) {
   if (!remoteId) {
     toast(currentLang === 'hi' ? 'उपयोगकर्ता उपलब्ध नहीं है' : 'User not available');
@@ -1496,28 +1431,14 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   currentCallTargetId = remoteId;
   currentCallTargetName = targetName;
 
-  // 1. चैट और लॉबी दोनों स्क्रीन्स को जबरन छिपाएँ
-  if (lobbyScreen) {
-    lobbyScreen.hidden = true;
-    lobbyScreen.style.setProperty('display', 'none', 'important');
-  }
-  if (chatScreen) {
-    chatScreen.hidden = true;
-    chatScreen.style.setProperty('display', 'none', 'important');
-  }
+  // स्क्रीन्स को ठीक से सेट करें
+  setScreenVisible(lobbyScreen, false);
+  setScreenVisible(chatScreen, false);
+  setScreenVisible(outgoingDialog, true, 'flex');
 
-  // 2. आउटगोइंग डायलॉग को जबरन सामने लाएँ
-  const outDlg = $('outgoingDialog');
-  if (outDlg) {
-    outDlg.hidden = false;
-    outDlg.style.setProperty('display', 'flex', 'important');
-  }
-
-  if ($('outgoingName')) {$('outgoingName').textContent = targetName + (audioOnly ? (currentLang==='hi'?' (ऑडियो)...':' (Audio)...') : (currentLang==='hi'?' (वीडियो)...':' (Video)...'));
-  }
-  if ($('outgoingStatusText')) {$('outgoingStatusText').textContent = currentLang==='hi'?'कनेक्ट किया जा रहा है...':'Connecting...';
-  }
-
+  if ($('outgoingName')) $('outgoingName').textContent = targetName + (audioOnly ? (currentLang==='hi'?' (ऑडियो)...':' (Audio)...') : (currentLang==='hi'?' (वीडियो)...':' (Video)...'));
+  if ($('outgoingStatusText')) $('outgoingStatusText').textContent = currentLang==='hi'?'कनेक्ट किया जा रहा है...':'Connecting...';
+  
   startOutgoingCallTone();
 
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
@@ -1532,16 +1453,16 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 
   const unsubSession = onValue(sessionRef, (snap) => {
     const d = snap.val(); if (!d) return;
-    if (d.status === 'ringing' && $('outgoingStatusText'))$('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
+    if (d.status === 'ringing' && $('outgoingStatusText')) $('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
     if (d.status === 'busy') { 
       stopAllCallTones(); unsubSession(); 
-      if (outDlg) { outDlg.hidden = true; outDlg.style.setProperty('display', 'none', 'important'); }
+      setScreenVisible(outgoingDialog, false);
       toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy'); 
       hangup(true); 
     }
     if (d.status === 'rejected') { 
       stopAllCallTones(); unsubSession(); 
-      if (outDlg) { outDlg.hidden = true; outDlg.style.setProperty('display', 'none', 'important'); }
+      setScreenVisible(outgoingDialog, false);
       toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined'); 
       hangup(true); 
     }
@@ -1567,7 +1488,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   const unsubAns = onValue(ref(db, `call_sessions/${activeCallId}/members/${remoteId}`), (snap) => {
     if (snap.exists()) { 
       stopAllCallTones(); 
-      if (outDlg) { outDlg.hidden = true; outDlg.style.setProperty('display', 'none', 'important'); }
+      setScreenVisible(outgoingDialog, false);
       unsubAns(); 
       joinCallSession(); 
     }
@@ -1575,6 +1496,45 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
+if ($('btnCancelCall')) {
+  $('btnCancelCall').onclick = () => {
+    stopAllCallTones();
+    setScreenVisible(outgoingDialog, false);
+    if (currentCallTargetId) {
+      const roomId = getChatRoomId(myUserId, currentCallTargetId);
+      const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
+      push(ref(db, `chats/${roomId}/messages`), { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false });
+
+      update(ref(db, `user_inbox/${currentCallTargetId}`), { status: 'cancelled' }).catch(()=>{});
+      get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
+        const token = snap.val()?.fcmToken;
+        if (token) {
+          fetch("https://neeraj.neerajthegreat192.workers.dev/", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, title: "Cancel", body: "Call Cancelled", callId: "CANCEL_" + activeCallId })
+          }).catch(()=>{});
+        }
+      }).catch(()=>{});
+    }
+    hangup();
+  };
+}
+
+if ($('btnAccept')) $('btnAccept').onclick = async () => { stopAllCallTones(); setScreenVisible(incomingDialog, false); if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession(); };
+if ($('btnReject')) {
+  $('btnReject').onclick = async () => {
+    stopAllCallTones(); 
+    setScreenVisible(incomingDialog, false);
+    clearOngoingCallNotification();
+    recordCallLog({
+      callId: activeCallId, targetId: currentCallTargetId, name: currentCallTargetName,
+      type: 'missed', callMode: isAudioOnlyCall ? 'audio' : 'video', duration: '00:00', time: Date.now()
+    });
+    if (activeCallId) await update(ref(db, `call_sessions/${activeCallId}`), { status: 'rejected' }).catch(()=>{});
+    await update(ref(db, `user_inbox/${myUserId}`), { status: 'rejected' }).catch(()=>{});
+    setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
+  };
+}
 
 async function toggleVideoTrackMode(enableCam) {
   try {
@@ -1711,9 +1671,10 @@ function stopNetworkQualityMonitor() {
 
 async function joinCallSession() {
   clearTimeout(callTimeoutTimer); callTimeoutTimer = null;
-  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.setProperty('display', 'none', 'important'); }
-  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.setProperty('display', 'none', 'important'); }
-  if (callScreen) { callScreen.hidden = false; callScreen.style.setProperty('display', 'block', 'important'); }
+  setScreenVisible(lobbyScreen, false);
+  setScreenVisible(chatScreen, false);
+  setScreenVisible(callScreen, true, 'block');
+
   isCallConnected = true; isHangingUp = false;
   await requestWakeLock();
   startNetworkQualityMonitor();
@@ -1751,7 +1712,6 @@ async function joinCallSession() {
     updateRemoteGridClass();
   });
 
-  // कॉल जुड़ते ही क्विज़ और लाइव व्हाइटबोर्ड लिसनर्स चालू करें
   initKidsQuizListener();
   initLiveCanvas();
 }
@@ -1986,7 +1946,6 @@ async function hangup(silent = false) {
     callTimeoutTimer = null;
     stopNetworkQualityMonitor();
 
-    // Kids क्लीनअप
     cleanupKidsModules();
 
     if (isCallConnected && currentCallTargetId) {
@@ -2030,10 +1989,12 @@ async function hangup(silent = false) {
     if ($('micBtn'))$('micBtn').classList.remove('off');
     if ($('speakerBtn'))$('speakerBtn').classList.remove('off');
     
-    if (callScreen) callScreen.hidden = true; 
-    if (incomingDialog) incomingDialog.hidden = true; 
-    if (outgoingDialog) outgoingDialog.hidden = true; 
-    if (lobbyScreen) { lobbyScreen.hidden = false; lobbyScreen.style.setProperty('display', 'flex', 'important'); }
+    // सभी कॉलिंग स्क्रीन्स बंद और केवल लॉबी चालू
+    setScreenVisible(callScreen, false);
+    setScreenVisible(incomingDialog, false);
+    setScreenVisible(outgoingDialog, false);
+    setScreenVisible(chatScreen, false);
+    setScreenVisible(lobbyScreen, true, 'flex');
     isHangingUp = false;
   }
 }
@@ -2324,7 +2285,7 @@ if (window.visualViewport) {
   };
   window.visualViewport.addEventListener('resize', syncViewport);
   window.visualViewport.addEventListener('scroll', () => {
-    if (chatScreen && !chatScreen.hidden) window.scrollTo(0, 0);
+    if (!chatScreen.hidden) window.scrollTo(0, 0);
   });
 }
 
