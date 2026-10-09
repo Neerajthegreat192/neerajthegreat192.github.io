@@ -16,7 +16,7 @@ let isSendingMsg = false;
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
 
-// --- चैट खोलना (Direct DOM & Style Override Guaranteed) ---
+// --- चैट खोलना (Screen Toggle Guaranteed) ---
 window.openChat = function(tId, tName, isOnline) {
   if (!tId) return;
 
@@ -52,16 +52,16 @@ window.openChat = function(tId, tName, isOnline) {
     });
   }
 
-  // स्क्रीन स्विच (hidden और style display दोनों सेट करें ताकि CSS ब्लॉक न करे)
+  // स्क्रीन स्विच
   const lScreen = $('lobby');
   const cScreen = $('chatScreen');
   if (lScreen) {
     lScreen.hidden = true;
-    lScreen.style.display = 'none';
+    lScreen.style.setProperty('display', 'none', 'important');
   }
   if (cScreen) {
     cScreen.hidden = false;
-    cScreen.style.display = 'flex';
+    cScreen.style.setProperty('display', 'flex', 'important');
   }
 
   const cInput = $('chatInput');
@@ -74,11 +74,10 @@ window.openChat = function(tId, tName, isOnline) {
   loadChatMessages();
 };
 
-// --- चैट बंद करना ---
 window.closeChat = function() {
   if (chatUnsub) { chatUnsub(); chatUnsub = null; }
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
-  window.discardRecording();
+  if (typeof window.discardRecording === 'function') window.discardRecording();
   if (activePlayingAudio) { activePlayingAudio.pause(); activePlayingAudio = null; }
   
   window.currentChatTargetId = null;
@@ -91,15 +90,14 @@ window.closeChat = function() {
   const cScreen = $('chatScreen');
   if (cScreen) {
     cScreen.hidden = true;
-    cScreen.style.display = 'none';
+    cScreen.style.setProperty('display', 'none', 'important');
   }
   if (lScreen) {
     lScreen.hidden = false;
-    lScreen.style.display = 'flex';
+    lScreen.style.setProperty('display', 'flex', 'important');
   }
 };
 
-// --- चैट मैसेजेस लोड करना ---
 function loadChatMessages() {
   const body = $('chatBody'); 
   if (!body) return;
@@ -282,6 +280,44 @@ async function sendChatMessage() {
   sendChatMessagePush(window.currentChatTargetId, txt, roomId, newMsgId);
 }
 
+window.recordCallLog = async function(entry) {
+  const currentDb = getDb();
+  if (!currentDb || !window.myUserId) return;
+  try {
+    const logId = entry.callId || `call_${Date.now()}`;
+    const myLogEntry = {
+      callId: logId, targetId: entry.targetId, name: entry.name || 'उपयोगकर्ता',
+      type: entry.type, callMode: entry.callMode || 'video', duration: entry.duration || '00:01', time: entry.time || Date.now()
+    };
+    
+    await set(ref(currentDb, `call_logs/${window.myUserId}/${logId}`), myLogEntry);
+
+    if (entry.targetId && entry.targetId !== window.myUserId) {
+      const remoteType = entry.type === 'outgoing' ? 'incoming' : (entry.type === 'incoming' ? 'outgoing' : 'missed');
+      const remoteLogEntry = {
+        callId: logId, targetId: window.myUserId, name: window.myUserName,
+        type: remoteType, callMode: entry.callMode || 'video', duration: entry.duration || '00:01', time: entry.time || Date.now()
+      };
+      await set(ref(currentDb, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
+    }
+
+    if (entry.targetId) {
+      const roomId = window.getChatRoomId ? window.getChatRoomId(window.myUserId, entry.targetId) : [window.myUserId, entry.targetId].sort().join('__');
+      const roomPath = `chats/${roomId}/messages`;
+      const isVoice = entry.callMode === 'audio';
+      const label = isVoice ? (window.currentLang === 'hi' ? 'ऑडियो कॉल' : 'Audio Call') : (window.currentLang === 'hi' ? 'वीडियो कॉल' : 'Video Call');
+      let callText = entry.type === 'missed' 
+        ? `${isVoice ? '📞' : '📹'} ${window.currentLang === 'hi' ? 'मिस्ड' : 'Missed'} ${label}` 
+        : `${isVoice ? '📞' : '📹'} ${label} (${entry.duration || '00:01'})`;
+
+      await push(ref(currentDb, roomPath), {
+        senderId: window.myUserId, senderName: window.myUserName, type: 'system-call',
+        text: callText, time: Date.now(), delivered: true, read: false
+      }).catch(()=>{});
+    }
+  } catch(e) {}
+};
+
 async function openVoiceDock() {
   try {
     dockStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -330,7 +366,7 @@ function setupWaveformVisualizer(stream) {
       for (let i = 0; i < bufferLength; i++) {
         const barHeight = isDockPaused ? 2 : (dataArray[i] / 255) * wCanvas.height;
         wCtx.fillStyle = '#10b981';
-        wCtx.fillRect(x, (waveCanvas.height - barHeight)/2, barWidth - 1, Math.max(barHeight, 2));
+        wCtx.fillRect(x, (wCanvas.height - barHeight)/2, barWidth - 1, Math.max(barHeight, 2));
         x += barWidth;
       }
     }
@@ -541,14 +577,8 @@ function initChatEvents() {
       e.target.value = '';
     };
   }
-
-  // जब सब तैयार हो जाए, तब कॉन्टैक्ट्स पर क्लिक इवेंट फिर से लगाएं
-  if (typeof window.renderContacts === 'function') {
-    window.renderContacts();
-  }
 }
 
-// DOM रेडी होते ही बाइंड करें
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initChatEvents);
 } else {
