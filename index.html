@@ -313,5 +313,47 @@
   })();
 </script>
 
+  <!-- सुरक्षित डायनामिक लोडर -->
+<script>
+  (async function() {
+    // 1. अगर पुराना करप्ट कोड अटका है, तो कैश साफ़ करें
+    const CURRENT_RUN_ID = "v_clean_modules_1";
+    if (localStorage.getItem('ota_run_id') !== CURRENT_RUN_ID) {
+      localStorage.removeItem('ota_cached_js');
+      localStorage.removeItem('ota_cached_chat');
+      localStorage.removeItem('ota_cached_kids');
+      localStorage.setItem('ota_run_id', CURRENT_RUN_ID);
+    }
+
+    async function loadScriptSequentially(src, cacheKey) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.type = 'module';
+        const cached = localStorage.getItem(cacheKey);
+        if (cached && cached.trim().length > 50 && !cached.includes("<!DOCTYPE")) {
+          s.textContent = cached;
+          document.body.appendChild(s);
+          resolve();
+        } else {
+          s.src = src + '?t=' + Date.now();
+          s.onload = () => resolve();
+          s.onerror = (e) => reject(e);
+          document.body.appendChild(s);
+        }
+      });
+    }
+
+    try {
+      // पहले Core App लोड होगी, फिर Chat, फिर Kids
+      await loadScriptSequentially('app.js', 'ota_cached_js');
+      await loadScriptSequentially('chat.js', 'ota_cached_chat');
+      await loadScriptSequentially('kids.js', 'ota_cached_kids');
+      console.log('All modules loaded successfully!');
+    } catch(err) {
+      console.error('Module load failure:', err);
+    }
+  })();
+</script>
+
 </body>
 </html>
