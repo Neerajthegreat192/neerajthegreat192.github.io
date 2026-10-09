@@ -6,7 +6,7 @@
   --line-strong:rgba(255,255,255,0.14);
   --text:#f8fafc;
   --text-muted:#94a3b8;
-  --c-user:#FFD700 !important
+  --c-user:#FFD700 !important;
   --c-admin:#a855f7;
   --c-chat-tab:#FFD700;
   --c-call-tab:#0ea5e9;
@@ -44,7 +44,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   font-weight:800;
   text-align:center;
   padding:5px 8px;
-  z-index:999;
+  z-index:999999;
   flex-shrink:0;
   transition:transform .3s;
 }
@@ -214,7 +214,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .tick-mark{font-size:11px;font-weight:900;letter-spacing:-1px}
 .tick-sent{color:rgba(255,255,255,0.4)}
 .tick-delivered{color:rgba(255,255,255,0.75)}
-.tick-read{color:#FF0000 !important;font-weight:900}
+.tick-read{color:#38bdf8 !important;font-weight:900}
 
 .call-log-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700}
 .call-missed{color:var(--danger)}
@@ -236,7 +236,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .call-action-btn:active{transform:scale(0.9)}
 .call-action-btn svg{width:18px;height:18px;fill:currentColor}
 
-/* Chat Screen - Layout Fixes for Notch & Keyboard */
+/* Chat Screen */
 #chatScreen{
   background:#090d10;
   z-index:40;
@@ -438,7 +438,8 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .dock-btn-send{background:#10b981;border:0;color:#fff;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;box-shadow:0 0 12px rgba(16,185,129,0.5)}
 .dock-btn-send svg{width:20px;height:20px;fill:currentColor}
 
-#call{background:#000;overflow:hidden}
+/* Active Call Screen */
+#call{background:#000;overflow:hidden;z-index:100}
 #remoteGrid{position:absolute;inset:0;display:grid;background:#000;z-index:1}
 #remoteGrid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}
 #remoteGrid.count-2{grid-template-columns:1fr;grid-template-rows:1fr 1fr;gap:4px}
@@ -475,7 +476,8 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .ctl-txt{font-size:10px;font-weight:700}
 .fade-out{opacity:0 !important;pointer-events:none !important;transform:translateY(12px)}
 
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:99;padding:16px}
+/* Modals */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px}
 .modal-box{background:linear-gradient(160deg,#18212b,#0f151c);border:1px solid var(--line-strong);border-radius:22px;padding:22px;width:100%;max-width:340px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.6)}
 .modal-box h2{font-size:18px;margin-bottom:10px;color:#fff}
 .modal-box p{font-size:12.5px;color:var(--text-muted);margin-bottom:14px}
@@ -485,14 +487,30 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .btn-danger-outline{width:100%;background:transparent;border:1px solid rgba(244,63,94,.4);color:#fda4af;padding:11px;border-radius:12px;font-size:13px;margin-top:8px}
 .btn-cancel-box{width:100%;background:rgba(255,255,255,0.05);border:1px solid var(--line);color:#cbd5e1;padding:11px;border-radius:12px;font-size:13px;font-weight:700;margin-top:8px}
 
-.call-dialog{position:fixed;inset:0;background:rgba(9,13,16,0.96);backdrop-filter:blur(10px);display:flex;flex-direction:column;align-items:center;justify-content:space-around;z-index:9999;padding:40px 16px}
+/* Incoming / Outgoing Call Dialogs (Top Priority Visibility) */
+.call-dialog{
+  position:fixed;
+  inset:0;
+  background:rgba(9,13,16,0.98);
+  backdrop-filter:blur(12px);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:space-around;
+  z-index:99999 !important;
+  padding:40px 16px;
+}
+#outgoingDialog, #incomingDialog{
+  z-index:99999 !important;
+}
+
 .caller-photo{width:88px;height:88px;border-radius:50%;background:#182029;border:2px solid var(--c-user);display:grid;place-items:center;font-size:38px;box-shadow:0 0 24px rgba(251,191,36,0.25)}
 .circle-btn{width:66px;height:66px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:0;color:#fff;font-weight:800;font-size:11px;box-shadow:0 4px 16px rgba(0,0,0,0.5);transition:transform 0.15s}
 .circle-btn:active{transform:scale(0.92)}
 .btn-accept{background:#10b981;box-shadow:0 4px 20px rgba(16,185,129,0.5)}
 .btn-reject{background:var(--danger);box-shadow:0 4px 20px rgba(244,63,94,0.5)}
 
-/* Toast Single Line Wrap Fix */
+/* Toast */
 #toast{
   position:fixed;
   top:calc(14px + env(safe-area-inset-top, 24px));
@@ -505,7 +523,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   border-radius:20px;
   font-size:12px;
   font-weight:700;
-  z-index:10000;
+  z-index:100000;
   opacity:0;
   pointer-events:none;
   transition:.2s;
@@ -514,29 +532,36 @@ button{font-family:inherit;cursor:pointer;outline:none}
 }
 #toast.show{opacity:1}
 
-#myHeaderName, 
-.user-title, 
-.contact-name, 
-#chatTargetName {
-  color: #FFD700 !important;
+/* Kids Features Styles */
+#kidsQuizBox{
+  position:fixed;
+  top:calc(70px + env(safe-area-inset-top, 24px));
+  left:50%;
+  transform:translateX(-50%);
+  width:92%;
+  max-width:380px;
+  background:rgba(15,23,42,0.95);
+  backdrop-filter:blur(14px);
+  border:2px solid #10b981;
+  border-radius:20px;
+  padding:16px;
+  z-index:150;
+  box-shadow:0 12px 35px rgba(0,0,0,0.85);
+}
+#kidsWhiteboardModal{
+  position:fixed;
+  inset:0;
+  background:rgba(9,13,16,0.98);
+  z-index:9999;
+  display:flex;
+  flex-direction:column;
 }
 
-/* 1. जब भी hidden लगा हो, स्क्रीन 100% छिपनी ही चाहिए */
-[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden] {
+/* Visibility Rules */
+[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], .call-dialog[hidden] {
   display: none !important;
 }
 
-/* 2. सामान्य बॉडी सेटिंग्स (स्क्रीन लॉक बिना अटके) */
-html, body {
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-/* 3. चैट स्क्रीन केवल तभी फ्लेक्स होगी जब वह hidden न हो */
 #chatScreen:not([hidden]) {
   position: fixed;
   top: 0;
@@ -552,85 +577,9 @@ html, body {
   z-index: 50;
 }
 
-.chat-header {
-  flex-shrink: 0;
-}
-
-.chat-body {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 8px;
-}
-
-/* टाइपिंग एरिया: चौड़ा और कीबोर्ड से सटा हुआ */
-.chat-footer {
-  flex-shrink: 0;
-  position: relative;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 4px) 8px;
-  background: #0e161c;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  box-sizing: border-box;
-  z-index: 100;
-}
-
-.attach-btn {
-  width: 38px;
-  height: 38px;
-  flex-shrink: 0;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.input-wrap {
-  flex: 1 1 auto;
-  min-width: 0;
-  background: #18222d;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  display: flex;
-  align-items: center;
-  padding: 2px 10px;
-}
-
-.chat-input {
-  width: 100%;
-  min-height: 38px;
-  max-height: 100px;
-  padding: 8px 4px;
-  font-size: 15px;
-  color: #fff;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  box-sizing: border-box;
-}
-
-.action-btn {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* --- ब्लू कलर ओवरराइड (यूज़रनेम और हेडिंग्स) --- */
 #myHeaderName, 
 .user-title, 
 .contact-name, 
 #chatTargetName {
   color: #38bdf8 !important;
 }
-
