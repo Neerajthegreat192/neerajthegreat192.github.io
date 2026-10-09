@@ -3,8 +3,9 @@
 // ==========================================
 import { ref, set, update, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const db = window._vc_db;
+// सुरक्षित $ हेल्पर एवं डायनामिक DB
 const $ = id => document.getElementById(id);
+const getDb = () => window._vc_db;
 
 let allQuizQuestions = null;
 let quizSessionUnsub = null;
@@ -27,14 +28,15 @@ async function fetchQuizQuestions() {
 
 // --- 2. नया सवाल भेजना (होस्ट द्वारा ट्रिगर) ---
 window.sendQuizQuestion = async function(category = 'lkg_ukg') {
-  if (!window.activeCallId) {
-    window.toast(window.currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही क्विज़ चलाएँ' : 'Start quiz during active call');
+  const currentDb = getDb();
+  if (!window.activeCallId || !currentDb) {
+    if (window.toast) window.toast(window.currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही क्विज़ चलाएँ' : 'Start quiz during active call');
     return;
   }
 
   const data = await fetchQuizQuestions();
   if (!data || !data[category] || data[category].length === 0) {
-    window.toast('सवाल लोड नहीं हो सके!');
+    if (window.toast) window.toast('सवाल लोड नहीं हो सके!');
     return;
   }
 
@@ -42,7 +44,7 @@ window.sendQuizQuestion = async function(category = 'lkg_ukg') {
   const randomQ = list[Math.floor(Math.random() * list.length)];
 
   // Firebase पर क्विज़ स्टेट अपडेट करें (दोनों फोन पर सिंक होगा)
-  const quizRef = ref(db, `call_sessions/${window.activeCallId}/quiz_state`);
+  const quizRef = ref(currentDb, `call_sessions/${window.activeCallId}/quiz_state`);
   await set(quizRef, {
     category,
     question: randomQ.q,
@@ -56,10 +58,11 @@ window.sendQuizQuestion = async function(category = 'lkg_ukg') {
 
 // --- 3. क्विज़ का लाइव लिसनर (दोनों फ़ोनों के लिए) ---
 window.initKidsQuizListener = function() {
-  if (!window.activeCallId) return;
+  const currentDb = getDb();
+  if (!window.activeCallId || !currentDb) return;
   if (quizSessionUnsub) quizSessionUnsub();
 
-  const quizRef = ref(db, `call_sessions/${window.activeCallId}/quiz_state`);
+  const quizRef = ref(currentDb, `call_sessions/${window.activeCallId}/quiz_state`);
   quizSessionUnsub = onValue(quizRef, snap => {
     const qState = snap.val();
     const box = $('kidsQuizBox');
@@ -71,8 +74,10 @@ window.initKidsQuizListener = function() {
     }
 
     box.hidden = false;
-    $('quizQuestionText').textContent = qState.question;
+    const qText = $('quizQuestionText');
+    if (qText) qText.textContent = qState.question;
     const optsArea = $('quizOptionsArea');
+    if (!optsArea) return;
     optsArea.innerHTML = '';
 
     qState.options.forEach(opt => {
@@ -109,8 +114,9 @@ window.initKidsQuizListener = function() {
 
 // --- 4. क्विज़ बंद करना ---
 window.closeKidsQuiz = async function() {
-  if (window.activeCallId) {
-    await remove(ref(db, `call_sessions/${window.activeCallId}/quiz_state`)).catch(()=>{});
+  const currentDb = getDb();
+  if (window.activeCallId && currentDb) {
+    await remove(ref(currentDb, `call_sessions/${window.activeCallId}/quiz_state`)).catch(()=>{});
   }
   const box = $('kidsQuizBox');
   if (box) box.hidden = true;
@@ -124,6 +130,7 @@ let currentColor = '#10b981';
 let currentLineWidth = 4;
 let canvasEl = null;
 let ctx = null;
+let canvasEventsAttached = false;
 
 window.initLiveCanvas = function() {
   canvasEl = $('kidsWhiteboardCanvas');
@@ -131,50 +138,54 @@ window.initLiveCanvas = function() {
   ctx = canvasEl.getContext('2d');
 
   function resizeCanvas() {
-    canvasEl.width = canvasEl.offsetWidth;
-    canvasEl.height = canvasEl.offsetHeight;
+    canvasEl.width = canvasEl.offsetWidth || window.innerWidth;
+    canvasEl.height = canvasEl.offsetHeight || (window.innerHeight - 80);
   }
-  resizeCanvas();
+  setTimeout(resizeCanvas, 50);
 
-  // ड्राइंग इवेंट्स (टच और माउस दोनों के लिए)
-  const startDraw = (e) => {
-    isDrawing = true;
-    const pt = getCanvasPoint(e);
-    broadcastDrawPoint(pt.x, pt.y, 'start');
-  };
+  if (!canvasEventsAttached) {
+    const startDraw = (e) => {
+      isDrawing = true;
+      const pt = getCanvasPoint(e);
+      broadcastDrawPoint(pt.x, pt.y, 'start');
+    };
 
-  const moveDraw = (e) => {
-    if (!isDrawing) return;
-    const pt = getCanvasPoint(e);
-    broadcastDrawPoint(pt.x, pt.y, 'draw');
-  };
+    const moveDraw = (e) => {
+      if (!isDrawing) return;
+      const pt = getCanvasPoint(e);
+      broadcastDrawPoint(pt.x, pt.y, 'draw');
+    };
 
-  const stopDraw = () => {
-    if (!isDrawing) return;
-    isDrawing = false;
-    broadcastDrawPoint(0, 0, 'stop');
-  };
+    const stopDraw = () => {
+      if (!isDrawing) return;
+      isDrawing = false;
+      broadcastDrawPoint(0, 0, 'stop');
+    };
 
-  canvasEl.addEventListener('pointerdown', startDraw);
-  canvasEl.addEventListener('pointermove', moveDraw);
-  canvasEl.addEventListener('pointerup', stopDraw);
-  canvasEl.addEventListener('pointercancel', stopDraw);
+    canvasEl.addEventListener('pointerdown', startDraw);
+    canvasEl.addEventListener('pointermove', moveDraw);
+    canvasEl.addEventListener('pointerup', stopDraw);
+    canvasEl.addEventListener('pointercancel', stopDraw);
+    canvasEventsAttached = true;
+  }
 
   listenRemoteCanvas();
 };
 
 function getCanvasPoint(e) {
+  if (!canvasEl) return { x: 0, y: 0 };
   const rect = canvasEl.getBoundingClientRect();
   return {
-    x: (e.clientX - rect.left) / rect.width,   // रेश्यो ताकि अलग स्क्रीन साइज़ पर भी सही जगह दिखे
+    x: (e.clientX - rect.left) / rect.width,
     y: (e.clientY - rect.top) / rect.height
   };
 }
 
 // पॉइंट को Firebase पर ब्रॉडकास्ट करना
 function broadcastDrawPoint(x, y, action) {
-  if (!window.activeCallId) return;
-  const drawRef = ref(db, `call_sessions/${window.activeCallId}/canvas_draw`);
+  const currentDb = getDb();
+  if (!window.activeCallId || !currentDb) return;
+  const drawRef = ref(currentDb, `call_sessions/${window.activeCallId}/canvas_draw`);
   set(drawRef, {
     x, y,
     action,
@@ -187,10 +198,11 @@ function broadcastDrawPoint(x, y, action) {
 
 // सामने वाले के ड्रॉइंग पॉइंट्स को स्क्रीन पर रेंडर करना
 function listenRemoteCanvas() {
-  if (!window.activeCallId) return;
+  const currentDb = getDb();
+  if (!window.activeCallId || !currentDb) return;
   if (canvasSessionUnsub) canvasSessionUnsub();
 
-  const drawRef = ref(db, `call_sessions/${window.activeCallId}/canvas_draw`);
+  const drawRef = ref(currentDb, `call_sessions/${window.activeCallId}/canvas_draw`);
   canvasSessionUnsub = onValue(drawRef, snap => {
     const pt = snap.val();
     if (!pt || !ctx || !canvasEl) return;
@@ -222,8 +234,9 @@ window.clearLiveCanvas = function() {
   if (ctx && canvasEl) {
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
   }
-  if (window.activeCallId) {
-    set(ref(db, `call_sessions/${window.activeCallId}/canvas_draw`), {
+  const currentDb = getDb();
+  if (window.activeCallId && currentDb) {
+    set(ref(currentDb, `call_sessions/${window.activeCallId}/canvas_draw`), {
       action: 'clear',
       ts: Date.now()
     });
