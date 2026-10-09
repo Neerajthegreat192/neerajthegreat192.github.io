@@ -315,31 +315,94 @@ if (apkDlBtn) {
 }
 
 async function acquireCallMedia(audioOnly = false) {
-  if (localStream) {
-    if (!audioOnly && localStream.getVideoTracks().length === 0) {
-      try {
-        const vStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } }
-        });
-        const vt = vStream.getVideoTracks()[0];
-        localStream.addTrack(vt);
-      } catch(e) {}
-    }
-    if (localVideo) localVideo.srcObject = localStream;
-    return localStream;
+  // Mobile cameras vary widely; use ideal constraints rather than mandatory
+  // minimums that can reject otherwise-working devices.
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast(currentLang === 'hi' ? 'इस डिवाइस पर कैमरा/माइक उपलब्ध नहीं है' : 'Camera/microphone is unavailable');
+    return null;
   }
+
   try {
-    const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } };
-    if (!audioOnly) {
-      constraints.video = { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } };
-    } else {
-      constraints.video = false;
+    if (localStream) {
+      const hasAudio = localStream.getAudioTracks().some(t => t.readyState === 'live');
+      const hasVideo = localStream.getVideoTracks().some(t => t.readyState === 'live');
+
+      if (!hasAudio) {
+        const aStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        aStream.getAudioTracks().forEach(t => localStream.addTrack(t));
+      }
+
+      if (!audioOnly && !hasVideo) {
+        let vStream;
+        try {
+          vStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facingMode },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 24, max: 30 }
+            }
+          });
+        } catch (_) {
+          // Last-resort camera request for devices with limited capabilities.
+          vStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode } });
+        }
+        vStream.getVideoTracks().forEach(t => localStream.addTrack(t));
+      }
+
+      if (localVideo) localVideo.srcObject = localStream;
+      return localStream;
     }
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    if (localVideo) localVideo.srcObject = localStream;
-    return localStream;
-  } catch(e) {
-    toast(currentLang === 'hi' ? 'कैमरा/माइक अनुमति उपलब्ध नहीं है' : 'Camera/Mic permission unavailable');
+
+    const audio = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    };
+    let stream;
+
+    if (audioOnly) {
+      stream = await navigator.mediaDevices.getUserMedia({ audio, video: false });
+    } else {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio,
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 24, max: 30 }
+          }
+        });
+      } catch (firstError) {
+        // Retry with browser defaults if HD constraints aren't supported.
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        } catch (fallbackError) {
+          throw fallbackError;
+        }
+      }
+    }
+
+    localStream = stream;
+    if (localVideo) {
+      localVideo.srcObject = stream;
+      localVideo.muted = true;
+      const playPromise = localVideo.play();
+      if (playPromise?.catch) playPromise.catch(() => {});
+    }
+    return stream;
+  } catch (e) {
+    console.error('[Call] acquireCallMedia failed:', e);
+    if (localStream) {
+      localStream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+      localStream = null;
+    }
+    toast(currentLang === 'hi'
+      ? `कैमरा/माइक शुरू नहीं हुआ: ${e?.name || 'अनुमति/डिवाइस त्रुटि'}`
+      : `Could not start camera/mic: ${e?.name || 'permission/device error'}`);
     return null;
   }
 }
@@ -1405,95 +1468,187 @@ async function sendPushNotification(token, callerName, isVoice = false) {
   } catch(e) {}
 }
 
+let isStartingCall = false;
+
 async function startCall(remoteId, remoteName, audioOnly = false) {
-  if (!remoteId) {
+  if (isStartingCall || activeCallId) {
+    toast(currentLang === 'hi' ? 'कॉल पहले से शुरू हो रही है' : 'A call is already starting or active');
+    return;
+  }
+  if (!remoteId || !myUserId) {
     toast(currentLang === 'hi' ? 'उपयोगकर्ता उपलब्ध नहीं है' : 'User not available');
     return;
   }
+  if (remoteId === myUserId) {
+    toast(currentLang === 'hi' ? 'आप स्वयं को कॉल नहीं कर सकते' : 'You cannot call yourself');
+    return;
+  }
 
+  isStartingCall = true;
   const targetName = remoteName || currentChatTargetName || 'उपयोगकर्ता';
-
-  try {
-    const bSnap = await get(ref(db, `users/${remoteId}/activeCallId`));
-    if (bSnap.exists() && bSnap.val()) { 
-      toast(`${targetName} ${currentLang==='hi'?'अभी दूसरी कॉल में व्यस्त है':'is busy on another call'}`); 
-      return; 
-    }
-  } catch(e) {}
-
-  isAudioOnlyCall = audioOnly;
-  const stream = await acquireCallMedia(audioOnly);
-  if (!stream) return;
-
-  activeCallId = `call_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-  isCaller = true;
+  isAudioOnlyCall = !!audioOnly;
   currentCallType = 'outgoing';
   currentCallTargetId = remoteId;
   currentCallTargetName = targetName;
 
-  // स्क्रीन्स को ठीक से सेट करें
+  // Show feedback before any permission prompt / camera startup can wait.
   setScreenVisible(lobbyScreen, false);
   setScreenVisible(chatScreen, false);
   setScreenVisible(outgoingDialog, true, 'flex');
-
-  if ($('outgoingName')) $('outgoingName').textContent = targetName + (audioOnly ? (currentLang==='hi'?' (ऑडियो)...':' (Audio)...') : (currentLang==='hi'?' (वीडियो)...':' (Video)...'));
-  if ($('outgoingStatusText')) $('outgoingStatusText').textContent = currentLang==='hi'?'कनेक्ट किया जा रहा है...':'Connecting...';
-  
-  startOutgoingCallTone();
-
-  await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
-  
-  const sessionRef = ref(db, `call_sessions/${activeCallId}`);
-  onDisconnect(sessionRef).update({ status: 'ended' });
-
-  await set(sessionRef, {
-    callId: activeCallId, callerId: myUserId, callerName: myUserName, targetId: remoteId, audioOnly: !!audioOnly, status: 'calling', createdAt: serverTimestamp()
-  });
-  await set(ref(db, `user_inbox/${remoteId}`), { callId: activeCallId, callerId: myUserId, callerName: myUserName, audioOnly: !!audioOnly, status: 'calling' });
-
-  const unsubSession = onValue(sessionRef, (snap) => {
-    const d = snap.val(); if (!d) return;
-    if (d.status === 'ringing' && $('outgoingStatusText')) $('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
-    if (d.status === 'busy') { 
-      stopAllCallTones(); unsubSession(); 
-      setScreenVisible(outgoingDialog, false);
-      toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy'); 
-      hangup(true); 
-    }
-    if (d.status === 'rejected') { 
-      stopAllCallTones(); unsubSession(); 
-      setScreenVisible(outgoingDialog, false);
-      toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined'); 
-      hangup(true); 
-    }
-    if (d.status === 'ended' && isCallConnected) { 
-      unsubSession(); 
-      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); 
-      hangup(true); 
-    }
-  });
-  unsubs.push(unsubSession);
-
-  clearTimeout(callTimeoutTimer);
-  callTimeoutTimer = setTimeout(() => {
-    if (activeCallId && !isCallConnected) { toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer'); hangup(true); }
-  }, 45000);
+  if ($('outgoingName')) {
+    $('outgoingName').textContent = targetName + (audioOnly
+      ? (currentLang === 'hi' ? ' (ऑडियो)...' : ' (Audio)...')
+      : (currentLang === 'hi' ? ' (वीडियो)...' : ' (Video)...'));
+  }
+  if ($('outgoingStatusText')) {
+    $('outgoingStatusText').textContent = currentLang === 'hi' ? 'कैमरा/माइक तैयार कर रहे हैं...' : 'Preparing camera/microphone...';
+  }
 
   try {
-    const tSnap = await get(ref(db, `users/${remoteId}`));
-    const td = tSnap.val();
-    if (td && td.fcmToken) sendPushNotification(td.fcmToken, myUserName, audioOnly);
-  } catch(e) {}
+    // AudioContext is best resumed directly from the user's click; tone failure
+    // must never prevent the actual call flow.
+    try { ensureAudioContext(); } catch (_) {}
+    try { startOutgoingCallTone(); } catch (toneError) { console.warn('[Call] outgoing tone failed:', toneError); }
 
-  const unsubAns = onValue(ref(db, `call_sessions/${activeCallId}/members/${remoteId}`), (snap) => {
-    if (snap.exists()) { 
-      stopAllCallTones(); 
-      setScreenVisible(outgoingDialog, false);
-      unsubAns(); 
-      joinCallSession(); 
+    let busy = false;
+    try {
+      const bSnap = await get(ref(db, `users/${remoteId}/activeCallId`));
+      busy = bSnap.exists() && !!bSnap.val();
+    } catch (e) {
+      console.warn('[Call] busy check failed; continuing:', e);
     }
-  });
-  unsubs.push(unsubAns);
+    if (busy) {
+      stopAllCallTones();
+      setScreenVisible(outgoingDialog, false);
+      setScreenVisible(lobbyScreen, true, 'flex');
+      toast(`${targetName} ${currentLang === 'hi' ? 'अभी दूसरी कॉल में व्यस्त है' : 'is busy on another call'}`);
+      return;
+    }
+
+    const stream = await acquireCallMedia(audioOnly);
+    if (!stream) {
+      stopAllCallTones();
+      setScreenVisible(outgoingDialog, false);
+      setScreenVisible(lobbyScreen, true, 'flex');
+      return;
+    }
+
+    activeCallId = `call_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    isCaller = true;
+    if ($('outgoingStatusText')) {
+      $('outgoingStatusText').textContent = currentLang === 'hi' ? 'कनेक्ट किया जा रहा है...' : 'Connecting...';
+    }
+
+    await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(e => {
+      console.warn('[Call] could not update caller presence:', e);
+    });
+
+    const callId = activeCallId;
+    const sessionRef = ref(db, `call_sessions/${callId}`);
+
+    try {
+      await onDisconnect(sessionRef).update({ status: 'ended' });
+    } catch (e) {
+      console.warn('[Call] onDisconnect registration failed:', e);
+    }
+
+    // These writes are essential. Surface permission/rules/network errors instead
+    // of leaving the UI and ringtone silently stuck.
+    await set(sessionRef, {
+      callId,
+      callerId: myUserId,
+      callerName: myUserName,
+      targetId: remoteId,
+      audioOnly: !!audioOnly,
+      status: 'calling',
+      createdAt: serverTimestamp()
+    });
+
+    await set(ref(db, `user_inbox/${remoteId}`), {
+      callId,
+      callerId: myUserId,
+      callerName: myUserName,
+      audioOnly: !!audioOnly,
+      status: 'calling'
+    });
+
+    const unsubSession = onValue(sessionRef, snap => {
+      const d = snap.val();
+      if (!d || activeCallId !== callId) return;
+      if (d.status === 'ringing' && $('outgoingStatusText')) {
+        $('outgoingStatusText').textContent = currentLang === 'hi' ? 'घंटी बज रही है... (Ringing)' : 'Ringing...';
+      }
+      if (d.status === 'busy' || d.status === 'rejected') {
+        stopAllCallTones();
+        setScreenVisible(outgoingDialog, false);
+        toast(d.status === 'busy'
+          ? (currentLang === 'hi' ? '📵 सामने वाला अभी व्यस्त है' : '📵 User is busy')
+          : (currentLang === 'hi' ? '❌ कॉल अस्वीकार कर दी गई' : '❌ Call declined'));
+        hangup(true);
+      } else if (d.status === 'ended' && isCallConnected) {
+        toast(currentLang === 'hi' ? 'कॉल समाप्त हो गई है' : 'Call ended');
+        hangup(true);
+      }
+    }, err => {
+      console.error('[Call] session listener failed:', err);
+      toast(currentLang === 'hi' ? 'कॉल सिग्नलिंग पढ़ने में त्रुटि' : 'Call signaling read failed');
+    });
+    unsubs.push(unsubSession);
+
+    clearTimeout(callTimeoutTimer);
+    callTimeoutTimer = setTimeout(() => {
+      if (activeCallId === callId && !isCallConnected) {
+        toast(currentLang === 'hi' ? '⏱ कॉल का जवाब नहीं मिला' : '⏱ No answer');
+        hangup(true);
+      }
+    }, 45000);
+
+    try {
+      const tSnap = await get(ref(db, `users/${remoteId}`));
+      const td = tSnap.val();
+      if (td?.fcmToken) sendPushNotification(td.fcmToken, myUserName, audioOnly);
+    } catch (e) {
+      console.warn('[Call] push-token lookup failed:', e);
+    }
+
+    const unsubAns = onValue(ref(db, `call_sessions/${callId}/members/${remoteId}`), snap => {
+      if (snap.exists() && activeCallId === callId) {
+        stopAllCallTones();
+        setScreenVisible(outgoingDialog, false);
+        unsubAns();
+        joinCallSession().catch(err => {
+          console.error('[Call] joinCallSession failed:', err);
+          toast(currentLang === 'hi' ? 'कॉल कनेक्ट नहीं हो सकी' : 'Could not join call');
+          hangup(true);
+        });
+      }
+    }, err => {
+      console.error('[Call] answer/member listener failed:', err);
+      toast(currentLang === 'hi' ? 'कॉल का जवाब प्राप्त नहीं हुआ' : 'Could not receive call answer');
+    });
+    unsubs.push(unsubAns);
+  } catch (e) {
+    console.error('[Call] startCall failed:', e);
+    stopAllCallTones();
+    if (activeCallId) {
+      await update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(() => {});
+      await update(ref(db, `call_sessions/${activeCallId}`), { status: 'failed', error: String(e?.code || e?.message || 'unknown').slice(0, 160) }).catch(() => {});
+      await update(ref(db, `user_inbox/${remoteId}`), { status: 'failed' }).catch(() => {});
+    }
+    if (localStream) {
+      localStream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+      localStream = null;
+    }
+    activeCallId = null;
+    setScreenVisible(outgoingDialog, false);
+    setScreenVisible(callScreen, false);
+    setScreenVisible(lobbyScreen, true, 'flex');
+    toast(currentLang === 'hi'
+      ? `कॉल शुरू नहीं हुई: ${e?.code || e?.message || 'Firebase/नेटवर्क त्रुटि'}`
+      : `Call failed: ${e?.code || e?.message || 'Firebase/network error'}`);
+  } finally {
+    isStartingCall = false;
+  }
 }
 
 if ($('btnCancelCall')) {
@@ -1675,7 +1830,7 @@ async function joinCallSession() {
   setScreenVisible(chatScreen, false);
   setScreenVisible(callScreen, true, 'block');
 
-  isCallConnected = true; isHangingUp = false;
+  isHangingUp = false;
   await requestWakeLock();
   startNetworkQualityMonitor();
   if (pipWrap) {
@@ -1693,6 +1848,7 @@ async function joinCallSession() {
   await set(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), {
     name: myUserName, camEnabled: !isAudioOnlyCall, micEnabled, joinedAt: Date.now()
   });
+  isCallConnected = true;
 
   if (callSessionUnsub) callSessionUnsub();
   callSessionUnsub = onValue(ref(db, `call_sessions/${activeCallId}/status`), snap => {
