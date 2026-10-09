@@ -3,7 +3,6 @@
 // ==========================================
 import { ref, set, get, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-// सुरक्षित $ हेल्पर एवं डायनामिक DB
 const $ = id => document.getElementById(id);
 const getDb = () => window._vc_db;
 
@@ -14,11 +13,10 @@ let activePlayingBtn = null;
 let typingTimeout = null;
 let isSendingMsg = false;
 
-// वॉयस डॉक रिकॉर्डर वैरियेबल्स
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
 
-// --- चैट खोलना (Direct DOM Guaranteed) ---
+// --- चैट खोलना (Direct DOM & Style Override Guaranteed) ---
 window.openChat = function(tId, tName, isOnline) {
   if (!tId) return;
 
@@ -54,11 +52,17 @@ window.openChat = function(tId, tName, isOnline) {
     });
   }
 
-  // स्क्रीन टॉगल (डायरेक्ट एलिमेंट पकड़ना)
+  // स्क्रीन स्विच (hidden और style display दोनों सेट करें ताकि CSS ब्लॉक न करे)
   const lScreen = $('lobby');
   const cScreen = $('chatScreen');
-  if (lScreen) lScreen.hidden = true;
-  if (cScreen) cScreen.hidden = false;
+  if (lScreen) {
+    lScreen.hidden = true;
+    lScreen.style.display = 'none';
+  }
+  if (cScreen) {
+    cScreen.hidden = false;
+    cScreen.style.display = 'flex';
+  }
 
   const cInput = $('chatInput');
   if (cInput) {
@@ -70,7 +74,7 @@ window.openChat = function(tId, tName, isOnline) {
   loadChatMessages();
 };
 
-// --- चैट बंद करना (Direct DOM Guaranteed) ---
+// --- चैट बंद करना ---
 window.closeChat = function() {
   if (chatUnsub) { chatUnsub(); chatUnsub = null; }
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
@@ -85,8 +89,14 @@ window.closeChat = function() {
 
   const lScreen = $('lobby');
   const cScreen = $('chatScreen');
-  if (cScreen) cScreen.hidden = true;
-  if (lScreen) lScreen.hidden = false;
+  if (cScreen) {
+    cScreen.hidden = true;
+    cScreen.style.display = 'none';
+  }
+  if (lScreen) {
+    lScreen.hidden = false;
+    lScreen.style.display = 'flex';
+  }
 };
 
 // --- चैट मैसेजेस लोड करना ---
@@ -149,7 +159,6 @@ function loadChatMessages() {
       body.appendChild(b);
     });
 
-    // वॉयस प्लेबैक कंट्रोल्स
     body.querySelectorAll('.voice-play-circle').forEach(btn => {
       btn.onclick = (e) => {
         e.stopPropagation();
@@ -205,7 +214,6 @@ function loadChatMessages() {
   });
 }
 
-// --- सेंड / माइक बटन टॉगल ---
 function updateActionBtnState() {
   const cInput = $('chatInput'), mSvg =$('micSvg'), sSvg = $('sendSvg'), aBtn =$('actionBtn');
   if (!cInput || !mSvg || !sSvg || !aBtn) return;
@@ -274,7 +282,6 @@ async function sendChatMessage() {
   sendChatMessagePush(window.currentChatTargetId, txt, roomId, newMsgId);
 }
 
-// --- वॉयस डॉक लॉजिक ---
 async function openVoiceDock() {
   try {
     dockStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -323,7 +330,7 @@ function setupWaveformVisualizer(stream) {
       for (let i = 0; i < bufferLength; i++) {
         const barHeight = isDockPaused ? 2 : (dataArray[i] / 255) * wCanvas.height;
         wCtx.fillStyle = '#10b981';
-        wCtx.fillRect(x, (wCanvas.height - barHeight)/2, barWidth - 1, Math.max(barHeight, 2));
+        wCtx.fillRect(x, (waveCanvas.height - barHeight)/2, barWidth - 1, Math.max(barHeight, 2));
         x += barWidth;
       }
     }
@@ -393,7 +400,6 @@ function sendVoiceDock() {
   updateActionBtnState();
 }
 
-// --- सभी इवेंट्स को सुरक्षित तरीके से बाइंड करना ---
 function initChatEvents() {
   const backBtn = $('chatBackBtn');
   if (backBtn) backBtn.onclick = window.closeChat;
@@ -536,12 +542,13 @@ function initChatEvents() {
     };
   }
 
+  // जब सब तैयार हो जाए, तब कॉन्टैक्ट्स पर क्लिक इवेंट फिर से लगाएं
   if (typeof window.renderContacts === 'function') {
     window.renderContacts();
   }
 }
 
-// DOM रेडी होते ही इनिशियलाइज़ करें
+// DOM रेडी होते ही बाइंड करें
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initChatEvents);
 } else {
