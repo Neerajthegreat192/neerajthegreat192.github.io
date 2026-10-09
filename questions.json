@@ -1,0 +1,51 @@
+{
+  "lkg_ukg": [
+    {
+      "q": "What color is an Apple?",
+      "opts": ["Red", "Blue", "Black"],
+      "ans": "Red"
+    },
+    {
+      "q": "Which animal says 'Meow'?",
+      "opts": ["Dog", "Cat", "Cow"],
+      "ans": "Cat"
+    },
+    {
+      "q": "2 + 3 = ?",
+      "opts": ["4", "5", "6"],
+      "ans": "5"
+    },
+    {
+      "q": "How many legs does a dog have?",
+      "opts": ["2", "4", "6"],
+      "ans": "4"
+    }
+  ],
+  "class_3": [
+    {
+      "q": "Which is the National Bird of India?",
+      "opts": ["Peacock", "Parrot", "Sparrow", "Pigeon"],
+      "ans": "Peacock"
+    },
+    {
+      "q": "How many hours are there in a day?",
+      "opts": ["12", "24", "48", "60"],
+      "ans": "24"
+    },
+    {
+      "q": "7 x 6 = ?",
+      "opts": ["36", "42", "48", "54"],
+      "ans": "42"
+    },
+    {
+      "q": "What is the opposite of 'Hot'?",
+      "opts": ["Cold", "Warm", "Dry", "Soft"],
+      "ans": "Cold"
+    },
+    {
+      "q": "How many days are in a Leap Year?",
+      "opts": ["365", "366", "364", "360"],
+      "ans": "366"
+    }
+  ]
+}
