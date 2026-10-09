@@ -366,31 +366,41 @@ async function requestNotificationPermission() {
       let perm = await PushNotifications.checkPermissions();
       if (perm.receive !== 'granted') perm = await PushNotifications.requestPermissions();
       if (perm.receive === 'granted') await PushNotifications.register();
-    } catch(e) {
-      console.warn("Native Push Warning:", e);
-    }
+    } catch(e) {}
     return;
   }
 
   try {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') return;
+    if (perm !== 'granted') {
+      console.warn("Notification permission denied!");
+      return;
+    }
 
-    await navigator.serviceWorker.register('./firebase-messaging-sw.js', { updateViaCache: 'none' });
-    const swReg = await navigator.serviceWorker.ready;
+    // Root path '/firebase-messaging-sw.js' use karein
+    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+    await navigator.serviceWorker.ready;
 
     const { getMessaging, getToken } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js");
-    const token = await getToken(getMessaging(app), { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+    const messaging = getMessaging(app);
+
+    const token = await getToken(messaging, { 
+      vapidKey: VAPID_KEY, 
+      serviceWorkerRegistration: swReg 
+    });
 
     if (token) {
+      console.log("FCM Token Generated Successfully:", token);
       myFcmToken = token;
       localStorage.setItem('vc_fcm_token', token);
       const currentUid = myUserId || localStorage.getItem('vc_user_id');
-      if (currentUid) await update(ref(db, `users/${currentUid}`), { fcmToken: token });
+      if (currentUid) {
+        await update(ref(db, `users/${currentUid}`), { fcmToken: token });
+      }
     }
   } catch(err) {
-    console.warn("FCM Token Silent Error:", err);
+    console.error("FCM Token Generation Failed:", err);
   }
 }
 
