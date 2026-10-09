@@ -1711,9 +1711,9 @@ function stopNetworkQualityMonitor() {
 
 async function joinCallSession() {
   clearTimeout(callTimeoutTimer); callTimeoutTimer = null;
-  if (lobbyScreen) lobbyScreen.hidden = true; 
+  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.setProperty('display', 'none', 'important'); }
   if (chatScreen) { chatScreen.hidden = true; chatScreen.style.setProperty('display', 'none', 'important'); }
-  if (callScreen) callScreen.hidden = false;
+  if (callScreen) { callScreen.hidden = false; callScreen.style.setProperty('display', 'block', 'important'); }
   isCallConnected = true; isHangingUp = false;
   await requestWakeLock();
   startNetworkQualityMonitor();
