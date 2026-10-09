@@ -202,35 +202,6 @@
     <div class="timer-pill" id="callTimer">00:00</div>
     <div class="network-pill high" id="networkPill"><span class="network-dot"></span><span id="networkText">नेटवर्क: हाई</span></div>
   </div>
-
-  <!-- बच्चों के लिए लाइव क्विज़ बॉक्स -->
-  <div id="kidsQuizBox" style="position:absolute;top:65px;left:12px;right:12px;background:rgba(9,13,16,0.92);border:2px solid #10b981;border-radius:16px;padding:14px;z-index:90;box-shadow:0 10px 30px rgba(0,0,0,0.8);backdrop-filter:blur(8px)" hidden>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span style="font-size:12px;font-weight:900;color:#10b981;letter-spacing:0.5px">🎯 KIDS LIVE QUIZ</span>
-      <button onclick="window.closeKidsQuiz && window.closeKidsQuiz()" style="background:none;border:none;color:#94a3b8;font-size:18px;font-weight:900;padding:0 4px">✕</button>
-    </div>
-    <div id="quizQuestionText" style="font-size:15px;font-weight:800;color:#fff;margin-bottom:12px;line-height:1.4">सवाल लोड हो रहा है...</div>
-    <div id="quizOptionsArea" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
-  </div>
-
-  <!-- बच्चों के लिए लाइव व्हाइटबोर्ड / कैनवस -->
-  <div id="kidsWhiteboardModal" style="position:absolute;inset:0;background:rgba(0,0,0,0.92);z-index:95;display:flex;flex-direction:column;padding:12px" hidden>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:13px;font-weight:900;color:#38bdf8">🎨 व्हाइटबोर्ड</span>
-        <button onclick="window.setCanvasColor && window.setCanvasColor('#10b981')" style="width:24px;height:24px;border-radius:50%;background:#10b981;border:2px solid #fff"></button>
-        <button onclick="window.setCanvasColor && window.setCanvasColor('#f43f5e')" style="width:24px;height:24px;border-radius:50%;background:#f43f5e;border:2px solid #fff"></button>
-        <button onclick="window.setCanvasColor && window.setCanvasColor('#38bdf8')" style="width:24px;height:24px;border-radius:50%;background:#38bdf8;border:2px solid #fff"></button>
-        <button onclick="window.setCanvasColor && window.setCanvasColor('#fbbf24')" style="width:24px;height:24px;border-radius:50%;background:#fbbf24;border:2px solid #fff"></button>
-        <button onclick="window.clearLiveCanvas && window.clearLiveCanvas()" style="background:#334155;border:0;color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px">साफ़ करें</button>
-      </div>
-      <button onclick="document.getElementById('kidsWhiteboardModal').hidden=true" style="background:#f43f5e;border:0;color:#fff;font-size:13px;font-weight:900;padding:4px 10px;border-radius:8px">बंद करें</button>
-    </div>
-    <div style="flex:1;background:#fff;border-radius:12px;overflow:hidden;position:relative;touch-action:none">
-      <canvas id="kidsWhiteboardCanvas" style="width:100%;height:100%;display:block"></canvas>
-    </div>
-  </div>
-
   <div class="controls" id="controlsBar">
     <div class="controls-grid">
       <button class="ctl-box" id="micBtn">
@@ -253,22 +224,17 @@
         <span class="ctl-ic" id="audioModeIco"><svg viewBox="0 0 24 24"><path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/></svg></span>
         <span class="ctl-txt" id="lblAudioMode">ऑडियो मोड</span>
       </button>
-      <button class="ctl-box" id="kidsFunBtn" style="border-color:rgba(16,185,129,0.4)">
-        <span class="ctl-ic" style="font-size:18px">🎮</span>
-        <span class="ctl-txt" style="color:#10b981">Kids Fun</span>
-      </button>
       <button class="ctl-box add" id="btnAddPerson">
         <span class="ctl-ic"><svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
         <span class="ctl-txt" id="lblAdd">जोड़ें</span>
       </button>
-      <button class="ctl-box hang" id="hangBtn">
+      <button class="ctl-box hang" id="hangBtn" style="grid-column: span 2">
         <span class="ctl-ic"><svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C3.25 8.78 7.37 7 12 7c4.63 0 8.75 1.78 11.71 4.67.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29s-.52-.11-.7-.28c-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg></span>
         <span class="ctl-txt" id="lblHang">काटें</span>
       </button>
     </div>
   </div>
 </div>
-<div id="toast"></div>
 
 <!-- बच्चों के फीचर्स का मेन्यू मॉडल -->
 <div id="kidsMenuModal" class="modal-overlay" hidden>
@@ -288,11 +254,10 @@
   </div>
 </div>
 
-<!-- सुरक्षित क्रमिक मॉड्यूल लोडर (Sequential Order-Guaranteed) -->
+<!-- सुरक्षित क्रमिक मॉड्यूल लोडर -->
 <script>
   (async function() {
-    // 1. पुराना अटका हुआ कैश साफ करें
-    const RUN_VER = "v_modular_seq_1";
+    const RUN_VER = "v_modular_seq_2";
     if (localStorage.getItem('ota_run_ver') !== RUN_VER) {
       localStorage.removeItem('ota_cached_js');
       localStorage.removeItem('ota_cached_chat');
@@ -300,7 +265,6 @@
       localStorage.setItem('ota_run_ver', RUN_VER);
     }
 
-    // 2. एक-एक करके क्रम में लोड करने वाला फंक्शन
     function loadModule(src) {
       return new Promise((resolve, reject) => {
         const s = document.createElement('script');
@@ -313,11 +277,8 @@
     }
 
     try {
-      // पहले app.js लोड होगी और Firebase/Presence बनाएगी
       await loadModule('app.js');
-      // फिर chat.js आकर चैट सिस्टम को बाइंड करेगी
       await loadModule('chat.js');
-      // अंत में kids.js क्विज़ और कैनवस को जोड़ेगी
       await loadModule('kids.js');
       console.log('All modules loaded in perfect sequence!');
     } catch (err) {
