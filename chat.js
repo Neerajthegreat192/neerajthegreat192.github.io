@@ -25,22 +25,26 @@ const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseR
 const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot =$('dockBlinkDot');
 const waveCanvas = $('waveCanvas'), waveCtx = waveCanvas ? waveCanvas.getContext('2d') : null;
 
-// --- चैट खोलना ---
+// --- चैट खोलना (100% Safe) ---
 window.openChat = function(tId, tName, isOnline) {
+  if (!tId) return;
+
   window.currentChatTargetId = tId;
-  window.currentChatTargetName = tName;
+  window.currentChatTargetName = tName || 'User';
+
   if (window.unreadCounts) window.unreadCounts[tId] = 0;
   if (typeof window.renderContacts === 'function') window.renderContacts();
 
-  const nameEl = $('chatTargetName');
-  if (nameEl) nameEl.textContent = tName;
+  const nameEl = document.getElementById('chatTargetName');
+  if (nameEl) nameEl.textContent = window.currentChatTargetName;
 
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
+  
   const currentDb = getDb();
   if (currentDb) {
     targetStatusUnsub = onValue(ref(currentDb, `users/${tId}`), (snap) => {
       const u = snap.val() || {};
-      const statusEl = $('chatTargetStatus');
+      const statusEl = document.getElementById('chatTargetStatus');
       if (!statusEl) return;
       const isTyping = u.typingTo === window.myUserId;
       const online = !!u.online;
@@ -57,12 +61,18 @@ window.openChat = function(tId, tName, isOnline) {
     });
   }
 
-  if (lobbyScreen) lobbyScreen.hidden = true; 
-  if (chatScreen) chatScreen.hidden = false;
-  if (chatInput) {
-    chatInput.value = ''; 
-    chatInput.style.height = '44px';
+  // Screens toggle
+  const lobbyScreenEl = document.getElementById('lobby');
+  const chatScreenEl = document.getElementById('chatScreen');
+  if (lobbyScreenEl) lobbyScreenEl.hidden = true;
+  if (chatScreenEl) chatScreenEl.hidden = false;
+
+  const chatInputEl = document.getElementById('chatInput');
+  if (chatInputEl) {
+    chatInputEl.value = ''; 
+    chatInputEl.style.height = '44px';
   }
+
   updateActionBtnState(); 
   loadChatMessages();
 };
