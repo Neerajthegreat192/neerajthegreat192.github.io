@@ -1470,52 +1470,111 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
     const tSnap = await get(ref(db, `users/${remoteId}`));
     const td = tSnap.val();
     if (td && td.fcmToken) sendPushNotification(td.fcmToken, myUserName, audioOnly);
+async function startCall(remoteId, remoteName, audioOnly = false) {
+  if (!remoteId) {
+    toast(currentLang === 'hi' ? 'उपयोगकर्ता उपलब्ध नहीं है' : 'User not available');
+    return;
+  }
+
+  const targetName = remoteName || currentChatTargetName || 'उपयोगकर्ता';
+
+  try {
+    const bSnap = await get(ref(db, `users/${remoteId}/activeCallId`));
+    if (bSnap.exists() && bSnap.val()) { 
+      toast(`${targetName} ${currentLang==='hi'?'अभी दूसरी कॉल में व्यस्त है':'is busy on another call'}`); 
+      return; 
+    }
+  } catch(e) {}
+
+  isAudioOnlyCall = audioOnly;
+  const stream = await acquireCallMedia(audioOnly);
+  if (!stream) return;
+
+  activeCallId = `call_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+  isCaller = true;
+  currentCallType = 'outgoing';
+  currentCallTargetId = remoteId;
+  currentCallTargetName = targetName;
+
+  // 1. चैट और लॉबी दोनों स्क्रीन्स को जबरन छिपाएँ
+  if (lobbyScreen) {
+    lobbyScreen.hidden = true;
+    lobbyScreen.style.setProperty('display', 'none', 'important');
+  }
+  if (chatScreen) {
+    chatScreen.hidden = true;
+    chatScreen.style.setProperty('display', 'none', 'important');
+  }
+
+  // 2. आउटगोइंग डायलॉग को जबरन सामने लाएँ
+  const outDlg = $('outgoingDialog');
+  if (outDlg) {
+    outDlg.hidden = false;
+    outDlg.style.setProperty('display', 'flex', 'important');
+  }
+
+  if ($('outgoingName')) {$('outgoingName').textContent = targetName + (audioOnly ? (currentLang==='hi'?' (ऑडियो)...':' (Audio)...') : (currentLang==='hi'?' (वीडियो)...':' (Video)...'));
+  }
+  if ($('outgoingStatusText')) {$('outgoingStatusText').textContent = currentLang==='hi'?'कनेक्ट किया जा रहा है...':'Connecting...';
+  }
+
+  startOutgoingCallTone();
+
+  await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
+  
+  const sessionRef = ref(db, `call_sessions/${activeCallId}`);
+  onDisconnect(sessionRef).update({ status: 'ended' });
+
+  await set(sessionRef, {
+    callId: activeCallId, callerId: myUserId, callerName: myUserName, targetId: remoteId, audioOnly: !!audioOnly, status: 'calling', createdAt: serverTimestamp()
+  });
+  await set(ref(db, `user_inbox/${remoteId}`), { callId: activeCallId, callerId: myUserId, callerName: myUserName, audioOnly: !!audioOnly, status: 'calling' });
+
+  const unsubSession = onValue(sessionRef, (snap) => {
+    const d = snap.val(); if (!d) return;
+    if (d.status === 'ringing' && $('outgoingStatusText'))$('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
+    if (d.status === 'busy') { 
+      stopAllCallTones(); unsubSession(); 
+      if (outDlg) { outDlg.hidden = true; outDlg.style.setProperty('display', 'none', 'important'); }
+      toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy'); 
+      hangup(true); 
+    }
+    if (d.status === 'rejected') { 
+      stopAllCallTones(); unsubSession(); 
+      if (outDlg) { outDlg.hidden = true; outDlg.style.setProperty('display', 'none', 'important'); }
+      toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined'); 
+      hangup(true); 
+    }
+    if (d.status === 'ended' && isCallConnected) { 
+      unsubSession(); 
+      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); 
+      hangup(true); 
+    }
+  });
+  unsubs.push(unsubSession);
+
+  clearTimeout(callTimeoutTimer);
+  callTimeoutTimer = setTimeout(() => {
+    if (activeCallId && !isCallConnected) { toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer'); hangup(true); }
+  }, 45000);
+
+  try {
+    const tSnap = await get(ref(db, `users/${remoteId}`));
+    const td = tSnap.val();
+    if (td && td.fcmToken) sendPushNotification(td.fcmToken, myUserName, audioOnly);
   } catch(e) {}
 
   const unsubAns = onValue(ref(db, `call_sessions/${activeCallId}/members/${remoteId}`), (snap) => {
-    if (snap.exists()) { stopAllCallTones(); if (outgoingDialog) outgoingDialog.hidden = true; unsubAns(); joinCallSession(); }
+    if (snap.exists()) { 
+      stopAllCallTones(); 
+      if (outDlg) { outDlg.hidden = true; outDlg.style.setProperty('display', 'none', 'important'); }
+      unsubAns(); 
+      joinCallSession(); 
+    }
   });
   unsubs.push(unsubAns);
 }
 
-if ($('btnCancelCall')) {
-  $('btnCancelCall').onclick = () => {
-    stopAllCallTones();
-    if (outgoingDialog) outgoingDialog.hidden = true;
-    if (currentCallTargetId) {
-      const roomId = getChatRoomId(myUserId, currentCallTargetId);
-      const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
-      push(ref(db, `chats/${roomId}/messages`), { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false });
-
-      update(ref(db, `user_inbox/${currentCallTargetId}`), { status: 'cancelled' }).catch(()=>{});
-      get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
-        const token = snap.val()?.fcmToken;
-        if (token) {
-          fetch("https://neeraj.neerajthegreat192.workers.dev/", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token, title: "Cancel", body: "Call Cancelled", callId: "CANCEL_" + activeCallId })
-          }).catch(()=>{});
-        }
-      }).catch(()=>{});
-    }
-    hangup();
-  };
-}
-
-if ($('btnAccept')) $('btnAccept').onclick = async () => { stopAllCallTones(); if (incomingDialog) incomingDialog.hidden = true; if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession(); };
-if ($('btnReject')) {
-  $('btnReject').onclick = async () => {
-    stopAllCallTones(); if (incomingDialog) incomingDialog.hidden = true;
-    clearOngoingCallNotification();
-    recordCallLog({
-      callId: activeCallId, targetId: currentCallTargetId, name: currentCallTargetName,
-      type: 'missed', callMode: isAudioOnlyCall ? 'audio' : 'video', duration: '00:00', time: Date.now()
-    });
-    if (activeCallId) await update(ref(db, `call_sessions/${activeCallId}`), { status: 'rejected' }).catch(()=>{});
-    await update(ref(db, `user_inbox/${myUserId}`), { status: 'rejected' }).catch(()=>{});
-    setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
-  };
-}
 
 async function toggleVideoTrackMode(enableCam) {
   try {
