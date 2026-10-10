@@ -35,7 +35,7 @@ html,body{
   flex-direction:column;
   overflow:hidden;
 }
-[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden]{
+[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden]{
   display:none !important;
 }
 button{font-family:inherit;cursor:pointer;outline:none}
@@ -468,7 +468,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .remote-off-avatar{width:64px;height:64px;border-radius:50%;background:#1e293b;border:2px solid var(--c-user);color:var(--c-user);display:grid;place-items:center;font-size:24px;font-weight:800}
 .remote-mute-badge{position:absolute;top:8px;left:8px;background:rgba(244,63,94,0.85);border-radius:14px;padding:3px 9px;font-size:10px;font-weight:800;color:#fff;z-index:5}
 
-/* वॉइस कॉल सेंट्रल अवतार स्टाइल */
+/* वॉइस कॉल सेंट्रल अवतार */
 .voice-central-area{
   position:absolute;
   inset:0;
@@ -523,7 +523,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .pip-wrap.pip-hidden{transform:translateX(140%);opacity:0;pointer-events:none}
 .pip-restore-btn{position:absolute;top:calc(60px + env(safe-area-inset-top, 24px));right:0;background:rgba(255,255,255,0.2);border:1px solid #fff;border-right:0;color:#fff;border-radius:16px 0 0 16px;padding:8px 10px;font-size:12px;font-weight:800;z-index:32}
 
-/* नया टॉप कंट्रोल बार (Top Bar: टाइमर + '+' + 'मोड स्विच') */
+/* टॉप कंट्रोल बार */
 .call-top-bar{
   position:absolute;
   top:calc(10px + env(safe-area-inset-top, 24px));
@@ -583,7 +583,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .top-action-btn svg{width:18px;height:18px;fill:currentColor}
 .top-action-btn.off{background:rgba(244,63,94,0.3);border-color:var(--danger);color:#fda4af}
 
-/* Controls Bar (Clean Bottom Grid) */
+/* Controls Bar (साफ-सुथरा 5-बटन ग्रिड) */
 .controls{
   position:absolute;
   bottom:calc(15px + env(safe-area-inset-bottom, 0px));
@@ -592,15 +592,15 @@ button{font-family:inherit;cursor:pointer;outline:none}
   display:flex;
   justify-content:center;
   z-index:35;
-  padding:0 12px;
+  padding:0 10px;
   transition:opacity .25s, transform .25s;
 }
-.controls-grid{
+.controls-grid-5{
   display:grid;
-  grid-template-columns:repeat(4, 1fr);
-  gap:8px;
+  grid-template-columns:repeat(5, 1fr);
+  gap:6px;
   width:100%;
-  max-width:380px;
+  max-width:420px;
 }
 .ctl-box{
   display:flex;
@@ -611,7 +611,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   backdrop-filter:blur(10px);
   border:1px solid var(--line-strong);
   border-radius:14px;
-  padding:8px 4px;
+  padding:8px 2px;
   color:#fff;
   gap:4px;
   min-height:58px;
@@ -624,6 +624,11 @@ button{font-family:inherit;cursor:pointer;outline:none}
   border-color:#fb7185;
 }
 .ctl-box.hang svg{fill:#fff}
+.ctl-box.fun-btn{
+  background:linear-gradient(135deg, rgba(168,85,247,0.25), rgba(56,189,248,0.25));
+  border-color:rgba(168,85,247,0.45);
+  color:#e9d5ff;
+}
 .ctl-box svg{width:22px;height:22px;fill:currentColor}
 .ctl-ic{font-size:20px;display:flex;align-items:center;justify-content:center}
 .ctl-txt{font-size:10px;font-weight:700}
@@ -631,6 +636,100 @@ button{font-family:inherit;cursor:pointer;outline:none}
   opacity:0 !important;
   pointer-events:none !important;
   transform:translateY(12px);
+}
+
+/* ===================================================
+   🪄 फन मोड बॉटम स्लाइड-अप ट्रे स्टाइलिंग
+   =================================================== */
+.fun-tray-modal{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.65);
+  backdrop-filter:blur(6px);
+  z-index:55;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  animation:fadeInOverlay .2s ease-out;
+}
+@keyframes fadeInOverlay{
+  from{opacity:0}
+  to{opacity:1}
+}
+.fun-tray-content{
+  background:rgba(18,24,33,0.96);
+  backdrop-filter:blur(18px);
+  border-top:1px solid rgba(255,255,255,0.14);
+  border-radius:24px 24px 0 0;
+  padding:16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  box-shadow:0 -10px 40px rgba(0,0,0,0.85);
+  animation:slideUpTray .25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slideUpTray{
+  from{transform:translateY(100%)}
+  to{transform:translateY(0)}
+}
+.fun-tray-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:14px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--line);
+}
+.fun-tray-title{
+  font-size:15px;
+  font-weight:900;
+  color:var(--c-user);
+  letter-spacing:0.3px;
+}
+.fun-tray-close{
+  background:rgba(255,255,255,0.08);
+  border:1px solid var(--line);
+  color:var(--text-muted);
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  font-size:13px;
+  transition:transform .15s;
+}
+.fun-tray-close:active{transform:scale(0.9)}
+.fun-tray-grid{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:10px;
+  max-height:55vh;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.tray-item{
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--line-strong);
+  border-radius:14px;
+  padding:12px 6px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  color:#fff;
+  transition:transform .15s, background .15s;
+}
+.tray-item:active{
+  transform:scale(0.94);
+  background:rgba(255,255,255,0.1);
+}
+.tray-icon{
+  font-size:24px;
+  line-height:1;
+}
+.tray-label{
+  font-size:11px;
+  font-weight:800;
+  color:#e2e8f0;
+  text-align:center;
 }
 
 /* 🎯 KIDS MODULE: QUIZ FLOATING BOX STYLING */
@@ -699,6 +798,23 @@ button{font-family:inherit;cursor:pointer;outline:none}
 }
 .quiz-close-btn:active{transform:scale(0.9)}
 
+/* 15s क्विज़ उल्टी गिनती टाइमर बार */
+.quiz-timer-wrap{
+  width:100%;
+  height:4px;
+  background:rgba(255,255,255,0.12);
+  border-radius:2px;
+  overflow:hidden;
+  margin:2px 0;
+}
+.quiz-timer-bar{
+  height:100%;
+  width:100%;
+  background:linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+  border-radius:2px;
+  transition:width 0.25s linear;
+}
+
 .quiz-question{
   font-size:14.5px;
   font-weight:800;
@@ -730,7 +846,6 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .quiz-opt-btn:active{transform:scale(0.96);background:rgba(255,255,255,0.12)}
 .quiz-opt-btn:disabled{opacity:0.95;cursor:default}
 
-/* बड़ा चौड़ा टच-फ्रेंडली क्विज़ रिफ्रेश बटन */
 .quiz-next-big-btn{
   width:100%;
   background:linear-gradient(135deg, #10b981, #059669);
@@ -845,7 +960,6 @@ button{font-family:inherit;cursor:pointer;outline:none}
   touch-action:none;
   background:#05070a;
 }
-/* 4-लाइन / नोटबुक ग्रिड बैकग्राउंड */
 .whiteboard-canvas-wrap.grid-bg{
   background-color:#070b10;
   background-image:

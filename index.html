@@ -98,7 +98,7 @@
     <div class="user-title" id="myHeaderName">...</div>
     <div class="header-actions">
       <button id="adminBtn" class="admin-badge">👑 एडमिन</button>
-      <!-- सीधा WhatsApp शेयर बटन (ऑफिशियल WhatsApp लोगो) -->
+      <!-- सीधा WhatsApp शेयर बटन -->
       <button class="icon-hdr-btn" id="shareAppBtn" title="WhatsApp पर शेयर करें" style="color:#25D366;background:rgba(37,211,102,0.14);border-color:rgba(37,211,102,0.4)">
         <svg viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m0 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32c-.82-1.3-1.25-2.82-1.25-4.38 0-4.54 3.69-8.24 8.24-8.24m-2.52 3.68c-.2 0-.53.07-.8.36-.27.29-1.03 1.01-1.03 2.47s1.06 2.87 1.21 3.07c.15.2 2.05 3.13 4.96 4.39.69.3 1.23.48 1.65.61.7.22 1.33.19 1.83.12.56-.09 1.72-.71 1.96-1.39.24-.68.24-1.26.17-1.38-.07-.12-.27-.19-.57-.34-.3-.15-1.77-.88-2.04-.98-.27-.1-.47-.15-.67.15-.2.3-.78.98-.95 1.18-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.39-1.47-.88-.79-1.47-1.76-1.64-2.05-.17-.3-.02-.46.13-.61.14-.14.31-.36.46-.53.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.08-.15-.68-1.63-.93-2.23-.25-.59-.5-.51-.67-.52z"/></svg>
       </button>
@@ -136,7 +136,7 @@
       <button class="wp-call-btn" id="chatVoiceCallBtn" title="ऑडियो कॉल">
         <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
       </button>
-      <!-- WhatsApp वीडियो कॉल आइकन (स्मूथ राउंडेड कैमरा) -->
+      <!-- WhatsApp वीडियो कॉल आइकन -->
       <button class="wp-call-btn" id="chatCallBtn" title="वीडियो कॉल">
         <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4c.39.39 1.06.11 1.06-.45V6.95c0-.56-.67-.84-1.06-.45l-4 4z"/></svg>
       </button>
@@ -151,7 +151,6 @@
                 data-lpignore="true" data-form-type="other" enterkeyhint="send"></textarea>
     </div>
     <button id="actionBtn" class="action-btn" title="वॉयस नोट">
-      <!-- WhatsApp स्टाइल माइक -->
       <svg id="micSvg" viewBox="0 0 24 24" style="display:block"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
       <svg id="sendSvg" viewBox="0 0 24 24" style="display:none"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
     </button>
@@ -206,7 +205,7 @@
 <div id="call" class="screen" hidden>
   <div id="remoteGrid"></div>
 
-  <!-- वॉइस कॉल सेंट्रल अवतार (केवल ऑडियो कॉल में दिखेगा) -->
+  <!-- वॉइस कॉल सेंट्रल अवतार -->
   <div id="voiceCallArea" class="voice-central-area" hidden>
     <div class="voice-avatar-ring">
       <div class="voice-avatar">👤</div>
@@ -218,7 +217,7 @@
   <div class="pip-wrap mirror" id="pipWrap"><video id="localVideo" autoplay playsinline muted></video></div>
   <button id="pipRestoreBtn" class="pip-restore-btn" hidden>‹ 📹</button>
 
-  <!-- नया टॉप कंट्रोल बार (Top Bar: टाइमर + 'जोड़ें' + 'मोड स्विच') -->
+  <!-- टॉप कंट्रोल बार -->
   <div class="call-top-bar" id="callTopBar">
     <div class="top-pill" id="topPill">
       <div class="timer-pill" id="callTimer">00:00</div>
@@ -229,7 +228,7 @@
       <button class="top-action-btn" id="btnAddPerson" title="सदस्य जोड़ें">
         <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       </button>
-      <!-- टॉप में ऑडियो/वीडियो मोड टॉगल बटन (WhatsApp स्टाइल) -->
+      <!-- टॉप में ऑडियो/वीडियो मोड टॉगल बटन -->
       <button class="top-action-btn" id="audioModeBtn" title="मोड बदलें">
         <span id="audioModeIco">
           <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
@@ -238,7 +237,55 @@
     </div>
   </div>
 
-  <!-- किड्स क्विज़ फ़्लोटिंग कार्ड -->
+  <!-- 🪄 फन मोड बॉटम स्लाइड-अप ट्रे -->
+  <div id="funModeTray" class="fun-tray-modal" hidden>
+    <div class="fun-tray-content">
+      <div class="fun-tray-header">
+        <div class="fun-tray-title">🪄 फन मोड एवं टूल्स</div>
+        <button id="closeFunTrayBtn" class="fun-tray-close">✕</button>
+      </div>
+      <div class="fun-tray-grid">
+        <button class="tray-item" id="btnKidsQuiz">
+          <span class="tray-icon">🎯</span>
+          <span class="tray-label">किड्स क्विज़</span>
+        </button>
+        <button class="tray-item" id="btnWhiteboard">
+          <span class="tray-icon">🎨</span>
+          <span class="tray-label">वाइटबोर्ड</span>
+        </button>
+        <button class="tray-item" id="trayBtnColoring">
+          <span class="tray-icon">🖍️</span>
+          <span class="tray-label">कलरिंग बुक</span>
+        </button>
+        <button class="tray-item" id="trayBtnTictactoe">
+          <span class="tray-icon">❌⭕</span>
+          <span class="tray-label">टिक-टैक-टो</span>
+        </button>
+        <button class="tray-item" id="trayBtnAnnotation">
+          <span class="tray-icon">✨</span>
+          <span class="tray-label">लाइव ड्रॉइंग</span>
+        </button>
+        <button class="tray-item" id="trayBtnVoiceChanger">
+          <span class="tray-icon">🎙️</span>
+          <span class="tray-label">वॉइस चेंजर</span>
+        </button>
+        <button class="tray-item" id="trayBtnReactions">
+          <span class="tray-icon">🎉</span>
+          <span class="tray-label">रिएक्शन</span>
+        </button>
+        <button class="tray-item" id="trayBtnScreenShare">
+          <span class="tray-icon">🖥️</span>
+          <span class="tray-label">स्क्रीन शेयर</span>
+        </button>
+        <button class="tray-item" id="flipBtn">
+          <span class="tray-icon">🔄</span>
+          <span class="tray-label">कैमरा पलटें</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- किड्स क्विज़ फ़्लोटिंग कार्ड (15s टाइमर बार सहित) -->
   <div id="kidsQuizBox" class="quiz-floating-box" hidden>
     <div class="quiz-header">
       <div class="quiz-header-title">🎯 किड्स क्विज़</div>
@@ -250,13 +297,16 @@
         <button id="closeQuizBtn" class="quiz-close-btn" title="बंद करें">✕</button>
       </div>
     </div>
+    <!-- 15s उल्टी गिनती टाइमर बार -->
+    <div class="quiz-timer-wrap">
+      <div id="quizTimerBar" class="quiz-timer-bar"></div>
+    </div>
     <div id="quizQuestionText" class="quiz-question">सवाल लोड हो रहा है...</div>
     <div id="quizOptionsArea" class="quiz-options-grid"></div>
-    <!-- नीचे बड़ा, चौड़ा टच-फ्रेंडली रिफ्रेश बटन -->
     <button id="nextQuizBtn" class="quiz-next-big-btn">🔄 अगला सवाल (Next Question)</button>
   </div>
 
-  <!-- लाइव वाइटबोर्ड ओवरले (अतिरिक्त टूल्स सहित) -->
+  <!-- लाइव वाइटबोर्ड ओवरले -->
   <div id="kidsWhiteboardModal" class="whiteboard-overlay" hidden>
     <div class="whiteboard-top-bar">
       <span class="whiteboard-title">🎨 लाइव वाइटबोर्ड</span>
@@ -280,47 +330,37 @@
     </div>
   </div>
 
-  <!-- नीचे का साफ-सुथरा बॉटम बार (कम बटन) -->
+  <!-- नीचे का साफ-सुथरा बॉटम बार (केवल 5 मुख्य बटन्स) -->
   <div class="controls" id="controlsBar">
-    <div class="controls-grid">
-      <!-- WhatsApp स्टाइल माइक -->
+    <div class="controls-grid-5">
       <button class="ctl-box" id="micBtn">
         <span class="ctl-ic" id="micIco">
           <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
         </span>
         <span class="ctl-txt" id="lblMic">माइक</span>
       </button>
-      <!-- WhatsApp स्टाइल स्मूथ कैमरा -->
+
       <button class="ctl-box" id="camBtn">
         <span class="ctl-ic" id="camIco">
           <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4c.39.39 1.06.11 1.06-.45V6.95c0-.56-.67-.84-1.06-.45l-4 4z"/></svg>
         </span>
         <span class="ctl-txt" id="lblCam">कैमरा</span>
       </button>
-      <!-- WhatsApp स्टाइल स्पीकर -->
+
       <button class="ctl-box" id="speakerBtn">
         <span class="ctl-ic" id="speakerIco">
           <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
         </span>
         <span class="ctl-txt" id="lblSpeaker">स्पीकर</span>
       </button>
-      <!-- WhatsApp स्टाइल फ्लिप कैमरा -->
-      <button class="ctl-box" id="flipBtn">
-        <span class="ctl-ic">
-          <svg viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-        </span>
-        <span class="ctl-txt" id="lblFlip">पलटें</span>
+
+      <!-- 🪄 फन मोड बटन (ट्रे ट्रिगर) -->
+      <button class="ctl-box fun-btn" id="funModeBtn">
+        <span class="ctl-ic">🪄</span>
+        <span class="ctl-txt">फन मोड</span>
       </button>
-      <button class="ctl-box" id="btnKidsQuiz">
-        <span class="ctl-ic">🎯</span>
-        <span class="ctl-txt">क्विज़</span>
-      </button>
-      <button class="ctl-box" id="btnWhiteboard">
-        <span class="ctl-ic">🎨</span>
-        <span class="ctl-txt">बोर्ड</span>
-      </button>
-      <!-- WhatsApp स्टाइल कॉल एंड बटन -->
-      <button class="ctl-box hang" id="hangBtn" style="grid-column: span 2">
+
+      <button class="ctl-box hang" id="hangBtn">
         <span class="ctl-ic">
           <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C3.25 8.78 7.37 7 12 7c4.63 0 8.75 1.78 11.71 4.67.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29s-.52-.11-.7-.28c-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
         </span>
