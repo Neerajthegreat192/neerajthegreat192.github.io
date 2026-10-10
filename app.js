@@ -1601,7 +1601,7 @@ let canvasSessionUnsub = null;
 async function fetchQuizQuestions() {
   if (allQuizQuestions) return allQuizQuestions;
   try {
-    const res = await fetch('questions.json?t=' + Date.now(), { cache: 'no-store' });
+    const res = await fetch('https://neerajthegreat192.github.io/questions.json?t=' + Date.now(), { cache: 'no-store' });
     if (res.ok) {
       allQuizQuestions = await res.json();
       return allQuizQuestions;
