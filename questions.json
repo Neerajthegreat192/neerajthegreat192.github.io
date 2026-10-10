@@ -291,8 +291,6 @@
     { "q": "What comes after 49?", "opts": ["48", "50", "51"], "ans": "50" },
     { "q": "What comes before 100?", "opts": ["98", "99", "101"], "ans": "99" },
     { "q": "What comes after 99?", "opts": ["98", "100", "101"], "ans": "100" }
-  ]
-}
     { "q": "Which one is different? Apple, Banana, Carrot", "opts": ["Apple", "Banana", "Carrot"], "ans": "Carrot" },
     { "q": "Which one is different? Dog, Cat, Table", "opts": ["Dog", "Cat", "Table"], "ans": "Table" },
     { "q": "Which one is different? Rose, Lotus, Mango", "opts": ["Rose", "Lotus", "Mango"], "ans": "Mango" },
@@ -542,6 +540,7 @@
     { "q": "Which planet has rings?", "opts": ["Saturn", "Earth", "Mars"], "ans": "Saturn" },
     { "q": "What is the shape of the Earth?", "opts": ["Round", "Square", "Triangle"], "ans": "Round" },
     { "q": "Which is the hottest planet?", "opts": ["Venus", "Mars", "Earth"], "ans": "Venus" }
+  ],
   "class_3": [
     { "q": "Which is the National Bird of India?", "opts": ["Peacock", "Parrot", "Sparrow", "Pigeon"], "ans": "Peacock" },
     { "q": "Which is the National Animal of India?", "opts": ["Lion", "Tiger", "Elephant", "Leopard"], "ans": "Tiger" },
@@ -1075,4 +1074,3 @@
     { "q": "Which food is rich in carbohydrate?", "opts": ["Rice", "Egg", "Oil", "Fish"], "ans": "Rice" }
   ]
 }
-
