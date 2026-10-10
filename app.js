@@ -54,7 +54,7 @@ const translations = {
     tabChats: "💬 चैट", tabCalls: "📞 कॉल", inputPlaceholder: "संदेश लिखें...", incomingSub: "बात करने के लिए कॉल उठाएँ",
     reject: "काटें", accept: "उठाएँ", cancelCall: "रद्द करें", mic: "माइक", cam: "कैमरा", speaker: "स्पीकर", flip: "पलटें",
     audioMode: "ऑडियो मोड", add: "जोड़ें", hang: "काटें", online: "ऑनलाइन", offline: "ऑफलाइन", typing: "लिख रहे हैं...",
-    netOnline: "नेटवर्क: हाई", netMedium: "नेटवर्क: मीडियम"
+    netOnline: "हाई", netMedium: "मीडियम"
   },
   en: {
     pageTitle: "VideoCallApp", welcome: "Welcome!", enterName: "Enter your name to start calling and chatting",
@@ -64,7 +64,7 @@ const translations = {
     tabChats: "💬 Chats", tabCalls: "📞 Calls", inputPlaceholder: "Type a message...", incomingSub: "Tap to answer the call",
     reject: "Decline", accept: "Answer", cancelCall: "Cancel", mic: "Mic", cam: "Camera", speaker: "Speaker", flip: "Flip",
     audioMode: "Audio Mode", add: "Add", hang: "End", online: "Online", offline: "Offline", typing: "typing...",
-    netOnline: "Network: High", netMedium: "Network: Medium"
+    netOnline: "High", netMedium: "Medium"
   }
 };
 
@@ -96,8 +96,6 @@ function applyLanguage(lang) {
   $('lblCam').textContent = t.cam;
   $('lblSpeaker').textContent = t.speaker;
   $('lblFlip').textContent = t.flip;
-  $('lblAudioMode').textContent = t.audioMode;
-  $('lblAdd').textContent = t.add;
   $('lblHang').textContent = t.hang;
   renderContacts();
 }
@@ -137,6 +135,7 @@ let targetStatusUnsub = null;
 const MAX_CALL_MEMBERS = 4;
 let qualityLevel = 'high', qualityTimer = null, wakeLock = null, vibrationInterval = null;
 let isHangingUp = false, typingTimeout = null;
+let ignoreBackUntil = 0;
 
 const ringtoneAudio = new Audio('ringtone.mp3');
 ringtoneAudio.loop = true;
@@ -172,6 +171,37 @@ function playMessageBeep() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(); osc.stop(ctx.currentTime + 0.18);
+  } catch(e) {}
+}
+
+function playCheerSound() {
+  try {
+    const ctx = ensureAudioContext(); if (!ctx) return;
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+      gain.gain.setValueAtTime(0.25, now + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.4);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.4);
+    });
+  } catch(e) {}
+}
+
+function playOopsSound() {
+  try {
+    const ctx = ensureAudioContext(); if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.linearRampToValueAtTime(130, now + 0.32);
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.35);
   } catch(e) {}
 }
 
@@ -259,31 +289,18 @@ function clearOngoingCallNotification() {
   }
 }
 
-// शेयर बटन लॉजिक
-const Share = window.Capacitor?.Plugins?.Share;
+// डायरेक्ट WhatsApp शेयर लॉजिक
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
-  shareBtn.onclick = async () => {
-    const shareData = {
-      title: 'VideoCallApp',
-      text: 'मुझसे सीधे एचडी वीडियो और ऑडियो कॉल पर बात करने के लिए यह ऐप डाउनलोड करें:',
-      url: GITHUB_APK_URL
-    };
-    try {
-      if (isNative && Share) {
-        await Share.share({
-          title: shareData.title,
-          text: shareData.text,
-          url: shareData.url,
-          dialogTitle: 'ऐप शेयर करें'
-        });
-      } else if (navigator.share) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(shareData.url);
-        toast(currentLang === 'hi' ? '📋 डाउनलोड लिंक कॉपी हो गया!' : '📋 Download link copied!');
-      }
-    } catch (err) {}
+  shareBtn.onclick = () => {
+    const shareText = "डायरेक्ट फुल एचडी कॉल (वीडियो/ऑडियो) के लिए यहाँ से ऐप डाउनलोड करें: 👇 \n\n" + GITHUB_APK_URL;
+    const waUrl = "whatsapp://send?text=" + encodeURIComponent(shareText);
+    const webWaUrl = "https://api.whatsapp.com/send?text=" + encodeURIComponent(shareText);
+    window.location.href = waUrl;
+    setTimeout(() => {
+      if (document.hidden) return;
+      window.open(webWaUrl, '_blank');
+    }, 1200);
   };
 }
 
@@ -731,7 +748,7 @@ function renderCallLogs() {
 
     const actionIconSvg = isVoice
       ? `<svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>`
-      : `<svg viewBox="0 0 24 24"><path d="M16 7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2.5l4.3 2.87A1 1 0 0 0 22 18.53V5.47a1 1 0 0 0-1.7-.84L16 7.5V7z"/></svg>`;
+      : `<svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4c.39.39 1.06.11 1.06-.45V6.95c0-.56-.67-.84-1.06-.45l-4 4z"/></svg>`;
 
     card.innerHTML = `
       <div class="contact-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
@@ -1467,6 +1484,40 @@ $('btnReject').onclick = async () => {
   setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
 };
 
+// ऑडियो/वीडियो मोड के अनुसार स्क्रीन लेआउट और कैमरा टॉगल
+function updateCallModeVisuals(isVoiceMode) {
+  const voiceArea = $('voiceCallArea');
+  const remoteGridEl = $('remoteGrid');
+  const flipBtn = $('flipBtn');
+  const modeIco = $('audioModeIco');
+
+  if (isVoiceMode) {
+    if (voiceArea) voiceArea.hidden = false;
+    $('voiceCallRemoteName').textContent = currentCallTargetName || 'उपयोगकर्ता';
+    remoteGridEl.style.display = 'none';
+    pipWrap.style.display = 'none';
+    if (flipBtn) flipBtn.style.display = 'none';
+    $('camBtn').classList.add('off');
+    $('audioModeBtn').classList.add('off');
+    // वीडियो कॉल पर वापस स्विच करने का कैमरा आइकन
+    if (modeIco) {
+      modeIco.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4c.39.39 1.06.11 1.06-.45V6.95c0-.56-.67-.84-1.06-.45l-4 4z"/></svg>';
+    }
+  } else {
+    if (voiceArea) voiceArea.hidden = true;
+    remoteGridEl.style.display = 'grid';
+    pipWrap.style.display = 'block';
+    pipWrap.style.opacity = '1';
+    if (flipBtn) flipBtn.style.display = 'flex';
+    $('camBtn').classList.remove('off');
+    $('audioModeBtn').classList.remove('off');
+    // ऑडियो कॉल पर स्विच करने का फोन आइकन
+    if (modeIco) {
+      modeIco.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>';
+    }
+  }
+}
+
 async function toggleVideoTrackMode(enableCam) {
   try {
     if (enableCam) {
@@ -1479,9 +1530,9 @@ async function toggleVideoTrackMode(enableCam) {
         if (localStream) localStream.addTrack(vTrack);
       } else vTrack.enabled = true;
 
-      localVideo.srcObject = localStream; pipWrap.style.opacity = '1';
-      $('camBtn').classList.remove('off'); $('audioModeBtn').classList.remove('off');
+      localVideo.srcObject = localStream;
       isAudioOnlyCall = false; camEnabled = true;
+      updateCallModeVisuals(false);
 
       for (const pId of Object.keys(peerConnections)) {
         const pc = peerConnections[pId];
@@ -1497,20 +1548,22 @@ async function toggleVideoTrackMode(enableCam) {
         }
         boostPeerBitrate(pc);
       }
-      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: true }).catch(()=>{});
-      toast(currentLang === 'hi' ? '📹 वीडियो चालू हो गया' : '📹 Video switched ON');
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: true, audioOnly: false }).catch(()=>{});
+      toast(currentLang === 'hi' ? '📹 वीडियो मोड चालू' : '📹 Video mode active');
     } else {
       if (localStream) localStream.getVideoTracks().forEach(t => { t.enabled = false; });
-      pipWrap.style.opacity = '0.2'; $('camBtn').classList.add('off'); camEnabled = false;
-      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
+      camEnabled = false; isAudioOnlyCall = true;
+      updateCallModeVisuals(true);
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false, audioOnly: true }).catch(()=>{});
+      toast(currentLang === 'hi' ? '📞 ऑडियो मोड चालू' : '📞 Voice mode active');
     }
-  } catch(e) { toast('कैमरा शुरू नहीं हो सका'); }
+  } catch(e) { toast('कैमरा स्विच नहीं हो सका'); }
 }
 
-$('audioModeBtn').onclick = () => {
+$('audioModeBtn').onclick = (e) => {
+  e.stopPropagation();
   isAudioOnlyCall = !isAudioOnlyCall;
   toggleVideoTrackMode(!isAudioOnlyCall);
-  $('audioModeBtn').classList.toggle('off', isAudioOnlyCall);
   scheduleAutoHide();
 };
 
@@ -1597,7 +1650,9 @@ function stopNetworkQualityMonitor() {
 let allQuizQuestions = null;
 let quizSessionUnsub = null;
 let canvasSessionUnsub = null;
+let whiteboardSyncUnsub = null;
 
+// सवाल लोड करने का पूर्ण GitHub Pages URL
 async function fetchQuizQuestions() {
   if (allQuizQuestions) return allQuizQuestions;
   try {
@@ -1655,6 +1710,9 @@ function initKidsQuizListener() {
     }
 
     box.hidden = false;
+    // क्विज़ खुला होने पर कॉल कंट्रोल्स को पूरी तरह छिपाएँ
+    controlsBar.classList.add('fade-out');
+
     const qText = $('quizQuestionText');
     if (qText) qText.textContent = qState.question;
     const catSelect = $('quizCategorySelect');
@@ -1682,10 +1740,11 @@ function initKidsQuizListener() {
         btn.disabled = true;
       }
 
-      btn.onclick = () => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
         const isRight = (opt === qState.answer);
-        if (isRight) playMessageTickSound();
-        else playMessageBeep();
+        if (isRight) playCheerSound();
+        else playOopsSound();
 
         update(quizRef, {
           selectedAnswer: opt,
@@ -1734,9 +1793,13 @@ $('btnKidsQuiz').onclick = (e) => {
   scheduleAutoHide();
 };
 
+// ==========================================
+// 🎨 LIVE COLLABORATIVE WHITEBOARD
+// ==========================================
 let isDrawing = false;
 let currentColor = '#10b981';
 let currentLineWidth = 4;
+let isEraserActive = false;
 let canvasEl = null;
 let ctx = null;
 let canvasEventsAttached = false;
@@ -1797,8 +1860,8 @@ function broadcastDrawPoint(x, y, action) {
   set(drawRef, {
     x, y,
     action,
-    color: currentColor,
-    size: currentLineWidth,
+    color: isEraserActive ? '#05070a' : currentColor,
+    size: isEraserActive ? 18 : currentLineWidth,
     sender: myUserId,
     ts: Date.now()
   }).catch(()=>{});
@@ -1835,6 +1898,29 @@ function listenRemoteCanvas() {
   });
 }
 
+// 2-वे ऑटो सिंक: दोनों फ़ोनों पर वाइटबोर्ड एक साथ खुलेगा और बंद होगा
+function listenWhiteboardAutoSync() {
+  if (!activeCallId) return;
+  if (whiteboardSyncUnsub) whiteboardSyncUnsub();
+
+  whiteboardSyncUnsub = onValue(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), snap => {
+    const val = snap.val();
+    const wb = $('kidsWhiteboardModal');
+    if (!wb) return;
+    if (val && val.active) {
+      if (wb.hidden) {
+        wb.hidden = false;
+        initLiveCanvas();
+        controlsBar.classList.add('fade-out');
+      }
+    } else {
+      if (!wb.hidden) {
+        wb.hidden = true;
+      }
+    }
+  });
+}
+
 function clearLiveCanvas() {
   if (ctx && canvasEl) {
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
@@ -1850,19 +1936,52 @@ function clearLiveCanvas() {
 document.querySelectorAll('.color-dot').forEach(btn => {
   btn.onclick = (e) => {
     e.stopPropagation();
+    isEraserActive = false;
+    $('eraserBtn').classList.remove('active');
     document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
     btn.classList.add('active');
     currentColor = btn.dataset.color || '#10b981';
   };
 });
+
+// इरेज़र टूल
+$('eraserBtn').onclick = (e) => {
+  e.stopPropagation();
+  isEraserActive = !isEraserActive;
+  $('eraserBtn').classList.toggle('active', isEraserActive);
+};
+
+// ब्रश साइज़ टॉगल (2px -> 4px -> 8px -> 16px)
+const brushSizes = [2, 4, 8, 16];
+let brushIdx = 1;
+$('brushSizeBtn').onclick = (e) => {
+  e.stopPropagation();
+  brushIdx = (brushIdx + 1) % brushSizes.length;
+  currentLineWidth = brushSizes[brushIdx];
+  $('brushSizeBtn').textContent = `✏️ ${currentLineWidth}px`;
+};
+
+// 4-लाइन नोटबुक ग्रिड बैकग्राउंड टॉगल
+$('gridBgBtn').onclick = (e) => {
+  e.stopPropagation();
+  const wrap = $('whiteboardCanvasWrap');
+  const isGrid = wrap.classList.toggle('grid-bg');
+  $('gridBgBtn').classList.toggle('active', isGrid);
+};
+
 $('clearCanvasBtn').onclick = (e) => {
   e.stopPropagation();
   clearLiveCanvas();
 };
+
 $('closeWhiteboardBtn').onclick = (e) => {
   e.stopPropagation();
+  if (activeCallId) {
+    update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
+  }
   $('kidsWhiteboardModal').hidden = true;
 };
+
 $('btnWhiteboard').onclick = (e) => {
   e.stopPropagation();
   if (!isCallConnected) {
@@ -1870,9 +1989,9 @@ $('btnWhiteboard').onclick = (e) => {
     return;
   }
   const wb = $('kidsWhiteboardModal');
-  wb.hidden = !wb.hidden;
-  if (!wb.hidden) {
-    initLiveCanvas();
+  const willOpen = wb.hidden;
+  if (activeCallId) {
+    update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: willOpen }).catch(()=>{});
   }
   scheduleAutoHide();
 };
@@ -1880,6 +1999,7 @@ $('btnWhiteboard').onclick = (e) => {
 function cleanupKidsModules() {
   if (quizSessionUnsub) { quizSessionUnsub(); quizSessionUnsub = null; }
   if (canvasSessionUnsub) { canvasSessionUnsub(); canvasSessionUnsub = null; }
+  if (whiteboardSyncUnsub) { whiteboardSyncUnsub(); whiteboardSyncUnsub = null; }
   const box = $('kidsQuizBox');
   if (box) box.hidden = true;
   const wb = $('kidsWhiteboardModal');
@@ -1893,25 +2013,27 @@ async function joinCallSession() {
   clearTimeout(callTimeoutTimer); callTimeoutTimer = null;
   lobbyScreen.hidden = true; chatScreen.hidden = true; callScreen.hidden = false;
   isCallConnected = true; isHangingUp = false;
+  ignoreBackUntil = Date.now() + 2000;
   await requestWakeLock();
   startNetworkQualityMonitor();
   pipWrap.classList.remove('pip-hidden'); pipRestoreBtn.hidden = true;
   localVideo.srcObject = localStream; localVideo.play().catch(()=>{});
-  if (isAudioOnlyCall) {
-    pipWrap.style.opacity = '0';
-    $('audioModeBtn').classList.add('off');
-  }
+
+  // कॉल मोड विज़ुअल्स सिंक
+  updateCallModeVisuals(isAudioOnlyCall);
+
   startTimer(); scheduleAutoHide();
 
-  // किड्स क्विज़ एवं कैनवस लिसनर्स सक्रिय करें
+  // किड्स क्विज़, वाइटबोर्ड और 2-वे सिंक लिसनर्स सक्रिय करें
   initKidsQuizListener();
   listenRemoteCanvas();
+  listenWhiteboardAutoSync();
 
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
   onDisconnect(sessionRef).update({ status: 'ended' });
 
   await set(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), {
-    name: myUserName, camEnabled: !isAudioOnlyCall, micEnabled, joinedAt: Date.now()
+    name: myUserName, camEnabled: !isAudioOnlyCall, micEnabled, audioOnly: isAudioOnlyCall, joinedAt: Date.now()
   });
 
   if (callSessionUnsub) callSessionUnsub();
@@ -2029,7 +2151,8 @@ function closePeer(id) {
   removeRemoteVideoCell(id); updateRemoteGridClass();
 }
 
-$('btnAddPerson').onclick = () => {
+$('btnAddPerson').onclick = (e) => {
+  e.stopPropagation();
   const list = $('addContactsList'); list.innerHTML = '';
   const amIAdmin = isNeerajBadola(myUserName);
   const avail = Object.keys(allOnlineUsers).filter(id => id !== myUserId && !peerConnections[id] && (!allOnlineUsers[id].hidden || amIAdmin));
@@ -2069,16 +2192,17 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     if (isCallConnected && $('kidsQuizBox').hidden &&$('kidsWhiteboardModal').hidden) {
-      controlsBar.classList.add('fade-out'); topPill.classList.add('fade-out');
+      controlsBar.classList.add('fade-out');
+      $('callTopBar').classList.add('fade-out');
     }
   }, 3500);
 }
 
 callScreen.addEventListener('click', e => {
-  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal')) return;
+  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar')) return;
   const isH = controlsBar.classList.contains('fade-out');
   controlsBar.classList.toggle('fade-out', !isH);
-  topPill.classList.toggle('fade-out', !isH);
+  $('callTopBar').classList.toggle('fade-out', !isH);
   if (isH) scheduleAutoHide();
 });
 
@@ -2097,10 +2221,12 @@ $('camBtn').onclick = async (e) => {
   scheduleAutoHide();
 };
 
+// लाउडस्पीकर एवं हियरिंग स्पीकर (Earpiece) स्विचिंग
 $('speakerBtn').onclick = (e) => {
   e.stopPropagation(); speakerEnabled = !speakerEnabled;
   remoteGrid.querySelectorAll('video').forEach(v => { v.muted = !speakerEnabled; });
   $('speakerBtn').classList.toggle('off', !speakerEnabled);
+  toast(speakerEnabled ? (currentLang === 'hi' ? '🔊 लाउडस्पीकर चालू' : '🔊 Speaker ON') : (currentLang === 'hi' ? '👂 हियरिंग स्पीकर (कान पर लगाएँ)' : '👂 Earpiece mode'));
   scheduleAutoHide();
 };
 
@@ -2152,7 +2278,6 @@ async function hangup(silent = false) {
     callTimeoutTimer = null;
     stopNetworkQualityMonitor();
 
-    // किड्स मॉड्यूल्स क्लीनअप
     cleanupKidsModules();
 
     if (isCallConnected && currentCallTargetId) {
@@ -2184,11 +2309,15 @@ async function hangup(silent = false) {
     remoteGrid.innerHTML = ''; activeCallId = null; isCallConnected = false; isAudioOnlyCall = false;
     callStartTime = 0;
 
-    controlsBar.classList.remove('fade-out'); topPill.classList.remove('fade-out');
+    controlsBar.classList.remove('fade-out');
+    $('callTopBar').classList.remove('fade-out');
     pipWrap.classList.remove('pip-hidden'); pipRestoreBtn.hidden = true;
     pipWrap.style.opacity = '1';
-    $('audioModeBtn').classList.remove('off');$('camBtn').classList.remove('off');
+    $('camBtn').classList.remove('off');
     $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
+    remoteGrid.style.display = 'grid';
+    pipWrap.style.display = 'block';
     
     callScreen.hidden = true; incomingDialog.hidden = true; outgoingDialog.hidden = true; lobbyScreen.hidden = false;
     isHangingUp = false;
@@ -2213,6 +2342,11 @@ function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); w
 let backPressedOnce = false;
 function setupHardwareBackButton() {
   window.addEventListener('popstate', (e) => {
+    if (Date.now() < ignoreBackUntil) {
+      history.pushState(null, '', window.location.href);
+      e.preventDefault();
+      return;
+    }
     const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) {
       if (!m.hidden) {
@@ -2222,7 +2356,10 @@ function setupHardwareBackButton() {
         return;
       }
     }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
+      history.pushState(null, '', window.location.href); e.preventDefault(); return; 
+    }
     if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!voiceDock.hidden) { discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!chatScreen.hidden) { closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
@@ -2235,9 +2372,13 @@ function setupHardwareBackButton() {
 
   if (!isNative || !App) return;
   App.addListener('backButton', () => {
+    if (Date.now() < ignoreBackUntil) return;
     const openModals = [$('adminPanelModal'),$('adminPinModal'),$('profileModal'),$('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
+      return; 
+    }
     if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
     if (!voiceDock.hidden) { discardRecording(); return; }
     if (!chatScreen.hidden) { closeChat(); return; }

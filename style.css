@@ -35,7 +35,7 @@ html,body{
   flex-direction:column;
   overflow:hidden;
 }
-[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden]{
+[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden]{
   display:none !important;
 }
 button{font-family:inherit;cursor:pointer;outline:none}
@@ -468,23 +468,140 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .remote-off-avatar{width:64px;height:64px;border-radius:50%;background:#1e293b;border:2px solid var(--c-user);color:var(--c-user);display:grid;place-items:center;font-size:24px;font-weight:800}
 .remote-mute-badge{position:absolute;top:8px;left:8px;background:rgba(244,63,94,0.85);border-radius:14px;padding:3px 9px;font-size:10px;font-weight:800;color:#fff;z-index:5}
 
-.pip-wrap{position:absolute;top:calc(12px + env(safe-area-inset-top, 24px));right:12px;width:104px;aspect-ratio:3/4;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,0.4);background:#090d10;z-index:30;transition:transform .3s,opacity .3s;box-shadow:0 4px 16px rgba(0,0,0,0.6)}
+/* वॉइस कॉल सेंट्रल अवतार स्टाइल */
+.voice-central-area{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  background:radial-gradient(circle at 50% 45%, #182330 0%, #090d10 80%);
+  z-index:3;
+}
+.voice-avatar-ring{
+  width:120px;
+  height:120px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:rgba(16,185,129,0.1);
+  border:2px solid rgba(16,185,129,0.3);
+  animation:voicePulse 2s infinite ease-in-out;
+}
+@keyframes voicePulse{
+  0%, 100%{transform:scale(1);box-shadow:0 0 0 0 rgba(16,185,129,0.4)}
+  50%{transform:scale(1.05);box-shadow:0 0 0 18px rgba(16,185,129,0)}
+}
+.voice-avatar{
+  width:90px;
+  height:90px;
+  border-radius:50%;
+  background:#1a2530;
+  border:2px solid var(--c-user);
+  display:grid;
+  place-items:center;
+  font-size:42px;
+  color:var(--c-user);
+}
+.voice-target-name{
+  font-size:20px;
+  font-weight:900;
+  color:#fff;
+  letter-spacing:0.3px;
+}
+.voice-call-substatus{
+  font-size:12px;
+  font-weight:700;
+  color:#10b981;
+}
+
+.pip-wrap{position:absolute;top:calc(58px + env(safe-area-inset-top, 24px));right:12px;width:104px;aspect-ratio:3/4;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,0.4);background:#090d10;z-index:30;transition:transform .3s,opacity .3s;box-shadow:0 4px 16px rgba(0,0,0,0.6)}
 .pip-wrap video{width:100%;height:100%;object-fit:cover}
 .pip-wrap.mirror video{transform:scaleX(-1)}
 .pip-wrap.pip-hidden{transform:translateX(140%);opacity:0;pointer-events:none}
-.pip-restore-btn{position:absolute;top:calc(14px + env(safe-area-inset-top, 24px));right:0;background:rgba(255,255,255,0.2);border:1px solid #fff;border-right:0;color:#fff;border-radius:16px 0 0 16px;padding:8px 10px;font-size:12px;font-weight:800;z-index:32}
+.pip-restore-btn{position:absolute;top:calc(60px + env(safe-area-inset-top, 24px));right:0;background:rgba(255,255,255,0.2);border:1px solid #fff;border-right:0;color:#fff;border-radius:16px 0 0 16px;padding:8px 10px;font-size:12px;font-weight:800;z-index:32}
 
-.top-pill{position:absolute;top:calc(12px + env(safe-area-inset-top, 24px));left:12px;z-index:25;display:flex;align-items:center;transition:opacity .25s}
-.timer-pill,.network-pill{background:rgba(15,23,42,0.8);backdrop-filter:blur(8px);padding:6px 12px;border-radius:18px;border:1px solid var(--line-strong);font-size:11px;font-weight:800}
+/* नया टॉप कंट्रोल बार (Top Bar: टाइमर + '+' + 'मोड स्विच') */
+.call-top-bar{
+  position:absolute;
+  top:calc(10px + env(safe-area-inset-top, 24px));
+  left:12px;
+  right:12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  z-index:35;
+  pointer-events:none;
+  transition:opacity .25s, transform .25s;
+}
+.call-top-bar.fade-out{
+  opacity:0 !important;
+  pointer-events:none !important;
+  transform:translateY(-10px);
+}
+.top-pill{
+  display:flex;
+  align-items:center;
+  pointer-events:auto;
+}
+.timer-pill,.network-pill{
+  background:rgba(15,23,42,0.85);
+  backdrop-filter:blur(8px);
+  padding:6px 12px;
+  border-radius:18px;
+  border:1px solid var(--line-strong);
+  font-size:11px;
+  font-weight:800;
+}
 .timer-pill{color:var(--c-user);font-family:monospace}
 .network-pill{margin-left:6px;display:inline-flex;align-items:center;gap:5px}
 .network-dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
 .network-pill.medium{color:#f59e0b}
 .network-pill.high{color:var(--success)}
 
-/* Controls Bar */
-.controls{position:absolute;bottom:calc(15px + env(safe-area-inset-bottom, 0px));left:0;right:0;display:flex;justify-content:center;z-index:35;padding:0 12px;transition:opacity .25s}
-.controls-grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;width:100%;max-width:380px}
+.top-call-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  pointer-events:auto;
+}
+.top-action-btn{
+  background:rgba(18,24,32,0.85);
+  backdrop-filter:blur(10px);
+  border:1px solid var(--line-strong);
+  color:#fff;
+  width:38px;
+  height:38px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  transition:transform 0.15s, background 0.2s;
+}
+.top-action-btn:active{transform:scale(0.9)}
+.top-action-btn svg{width:18px;height:18px;fill:currentColor}
+.top-action-btn.off{background:rgba(244,63,94,0.3);border-color:var(--danger);color:#fda4af}
+
+/* Controls Bar (Clean Bottom Grid) */
+.controls{
+  position:absolute;
+  bottom:calc(15px + env(safe-area-inset-bottom, 0px));
+  left:0;
+  right:0;
+  display:flex;
+  justify-content:center;
+  z-index:35;
+  padding:0 12px;
+  transition:opacity .25s, transform .25s;
+}
+.controls-grid{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:8px;
+  width:100%;
+  max-width:380px;
+}
 .ctl-box{
   display:flex;
   flex-direction:column;
@@ -502,15 +619,21 @@ button{font-family:inherit;cursor:pointer;outline:none}
 }
 .ctl-box:active{transform:scale(0.94)}
 .ctl-box.off{background:rgba(244,63,94,0.3);border-color:var(--danger);color:#fda4af}
-.ctl-box.hang{background:var(--danger);border-color:#fb7185}
+.ctl-box.hang{
+  background:var(--danger);
+  border-color:#fb7185;
+}
+.ctl-box.hang svg{fill:#fff}
 .ctl-box svg{width:22px;height:22px;fill:currentColor}
 .ctl-ic{font-size:20px;display:flex;align-items:center;justify-content:center}
 .ctl-txt{font-size:10px;font-weight:700}
-.fade-out{opacity:0 !important;pointer-events:none !important;transform:translateY(12px)}
+.controls.fade-out{
+  opacity:0 !important;
+  pointer-events:none !important;
+  transform:translateY(12px);
+}
 
-/* ===================================================
-   🎯 KIDS MODULE: QUIZ FLOATING BOX STYLING
-   =================================================== */
+/* 🎯 KIDS MODULE: QUIZ FLOATING BOX STYLING */
 .quiz-floating-box{
   position:absolute;
   top:calc(55px + env(safe-area-inset-top, 24px));
@@ -518,7 +641,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   transform:translateX(-50%);
   width:calc(100% - 24px);
   max-width:380px;
-  background:rgba(18,24,33,0.95);
+  background:rgba(18,24,33,0.96);
   backdrop-filter:blur(14px);
   border:1px solid rgba(56,189,248,0.35);
   border-radius:18px;
@@ -562,10 +685,10 @@ button{font-family:inherit;cursor:pointer;outline:none}
   font-weight:800;
   outline:none;
 }
-.quiz-action-icon, .quiz-close-btn{
+.quiz-close-btn{
   background:rgba(255,255,255,0.08);
-  border:1px solid var(--line);
-  color:#fff;
+  border:1px solid rgba(244,63,94,0.3);
+  color:var(--danger);
   width:28px;
   height:28px;
   border-radius:50%;
@@ -574,8 +697,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   font-size:12px;
   transition:transform 0.15s;
 }
-.quiz-action-icon:active, .quiz-close-btn:active{transform:scale(0.9)}
-.quiz-close-btn{color:var(--danger);border-color:rgba(244,63,94,0.3)}
+.quiz-close-btn:active{transform:scale(0.9)}
 
 .quiz-question{
   font-size:14.5px;
@@ -608,9 +730,23 @@ button{font-family:inherit;cursor:pointer;outline:none}
 .quiz-opt-btn:active{transform:scale(0.96);background:rgba(255,255,255,0.12)}
 .quiz-opt-btn:disabled{opacity:0.95;cursor:default}
 
-/* ===================================================
-   🎨 KIDS MODULE: LIVE WHITEBOARD OVERLAY STYLING
-   =================================================== */
+/* बड़ा चौड़ा टच-फ्रेंडली क्विज़ रिफ्रेश बटन */
+.quiz-next-big-btn{
+  width:100%;
+  background:linear-gradient(135deg, #10b981, #059669);
+  color:#fff;
+  border:0;
+  padding:11px 14px;
+  border-radius:12px;
+  font-size:13px;
+  font-weight:900;
+  box-shadow:0 4px 14px rgba(16,185,129,0.35);
+  margin-top:2px;
+  transition:transform 0.15s;
+}
+.quiz-next-big-btn:active{transform:scale(0.97)}
+
+/* 🎨 KIDS MODULE: LIVE WHITEBOARD OVERLAY STYLING */
 .whiteboard-overlay{
   position:absolute;
   inset:0;
@@ -629,25 +765,28 @@ button{font-family:inherit;cursor:pointer;outline:none}
   justify-content:space-between;
   flex-shrink:0;
   gap:8px;
+  overflow-x:auto;
 }
 .whiteboard-title{
-  font-size:14px;
+  font-size:13px;
   font-weight:900;
   color:var(--c-user);
+  white-space:nowrap;
 }
 .whiteboard-tools{
   display:flex;
   align-items:center;
-  gap:10px;
+  gap:6px;
+  flex-wrap:nowrap;
 }
 .color-palette{
   display:flex;
   align-items:center;
-  gap:6px;
+  gap:5px;
 }
 .color-dot{
-  width:22px;
-  height:22px;
+  width:20px;
+  height:20px;
   border-radius:50%;
   border:2px solid transparent;
   padding:0;
@@ -658,12 +797,30 @@ button{font-family:inherit;cursor:pointer;outline:none}
   transform:scale(1.2);
   box-shadow:0 0 8px rgba(255,255,255,0.5);
 }
-.wb-btn{
-  border:0;
-  padding:6px 12px;
-  border-radius:10px;
+.wb-tool-btn{
+  background:rgba(255,255,255,0.08);
+  border:1px solid var(--line-strong);
+  color:#fff;
+  padding:5px 8px;
+  border-radius:8px;
   font-size:11px;
   font-weight:800;
+  white-space:nowrap;
+  transition:all 0.15s;
+}
+.wb-tool-btn.active{
+  background:#10b981;
+  border-color:#10b981;
+}
+.wb-tool-btn:active{transform:scale(0.92)}
+
+.wb-btn{
+  border:0;
+  padding:5px 10px;
+  border-radius:8px;
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
   transition:transform 0.15s;
 }
 .wb-btn:active{transform:scale(0.92)}
@@ -676,9 +833,10 @@ button{font-family:inherit;cursor:pointer;outline:none}
   background:rgba(255,255,255,0.08);
   border:1px solid var(--line-strong);
   color:#fff;
-  font-size:13px;
-  padding:6px 10px;
+  font-size:12px;
+  padding:5px 9px;
 }
+
 .whiteboard-canvas-wrap{
   flex:1;
   position:relative;
@@ -686,6 +844,14 @@ button{font-family:inherit;cursor:pointer;outline:none}
   height:100%;
   touch-action:none;
   background:#05070a;
+}
+/* 4-लाइन / नोटबुक ग्रिड बैकग्राउंड */
+.whiteboard-canvas-wrap.grid-bg{
+  background-color:#070b10;
+  background-image:
+    linear-gradient(rgba(56,189,248,0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,0.06) 1px, transparent 1px);
+  background-size:100% 32px, 32px 100%;
 }
 #kidsWhiteboardCanvas{
   width:100%;
