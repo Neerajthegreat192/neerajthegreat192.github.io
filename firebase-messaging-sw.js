@@ -16,24 +16,28 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
   const data = payload.data || {};
+  const rawCallId = data.callId || '';
   const type = data.type || '';
   
-  // 1. चैट मैसेज हैंडलिंग
-  if (type === 'chat' || data.messageText || data.chatTargetId) {
-    const sender = data.title || data.chatTargetName || data.senderName || 'नया संदेश';
+  // 1. अगर कॉलर ने कॉल रद्द कर दी है (CANCEL_)
+  if (rawCallId.startsWith('CANCEL_')) {
+    const originalCallId = rawCallId.replace('CANCEL_', '');
+    return self.registration.getNotifications().then(notifications => {
+      notifications.forEach(n => {
+        if (n.tag === `call_${originalCallId}` || (n.data && n.data.callId === originalCallId)) {
+          n.close();
+        }
+      });
+    });
+  }
+
+  // 2. चैट मैसेज हैंडलिंग (CHAT_ प्रीफ़िक्स या सामान्य चैट)
+  if (type === 'chat' || data.messageText || data.chatTargetId || rawCallId.startsWith('CHAT_')) {
+    const senderId = data.chatTargetId || (rawCallId.startsWith('CHAT_') ? rawCallId.replace('CHAT_', '') : '');
+    const sender = data.title || data.chatTargetName || data.callerName || data.senderName || 'नया संदेश';
     const msgText = data.body || data.messageText || 'आपको एक संदेश प्राप्त हुआ है';
-    const senderId = data.chatTargetId || '';
 
-    // मैसेज को डिलीवर मार्क करना
-    if (data.roomId && data.msgId) {
-      fetch(`https://chess-e4910-default-rtdb.firebaseio.com/chats/${data.roomId}/messages/${data.msgId}.json`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delivered: true })
-      }).catch(() => {});
-    }
-
-    // एक्टिव टैब को रियल-टाइम अपडेट के लिए मैसेज भेजना
+    // सक्रिय टैब को रियल-टाइम अपडेट भेजना
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
       clients.forEach(client => {
         client.postMessage({ type: 'NEW_CHAT_MESSAGE', senderId, senderName: sender, text: msgText });
@@ -42,7 +46,7 @@ messaging.onBackgroundMessage((payload) => {
 
     const chatOptions = {
       body: msgText,
-      icon: 'icon.png', // ध्यान दें: चैट के लिए सामान्य आइकॉन
+      icon: 'icon.png',
       badge: 'icon.png',
       tag: `chat_${senderId}`,
       renotify: true,
@@ -52,11 +56,18 @@ messaging.onBackgroundMessage((payload) => {
     return self.registration.showNotification(`💬 ${sender}`, chatOptions);
   }
 
-  // 2. कॉल हैंडलिंग (ब्राउज़र के लिए)
-  const rawCallId = data.callId;
+  // 3. इनकमिंग कॉल हैंडलिंग
   if (rawCallId && rawCallId !== 'null' && rawCallId.trim() !== '') {
-    const caller = data.callerName || 'इनकमिंग कॉल';
-    const isAudio = data.audioOnly === 'true' || data.audioOnly === true;
+    let caller = data.callerName || data.title || 'इनकमिंग कॉल';
+    let isAudio = data.audioOnly === 'true' || data.audioOnly === true;
+    
+    if (caller.endsWith('|AUDIO')) {
+      isAudio = true;
+      caller = caller.replace('|AUDIO', '');
+    } else if (caller.endsWith('|VIDEO')) {
+      caller = caller.replace('|VIDEO', '');
+    }
+
     const callLabel = isAudio ? 'ऑडियो' : 'वीडियो';
     
     const callOptions = {
@@ -90,7 +101,6 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
-  // ऐप को फोकस करना या खोलना और डीप-लिंक भेजना
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
@@ -105,7 +115,6 @@ self.addEventListener('notificationclick', (event) => {
         }
       }
       
-      // अगर ऐप बंद है, तो URL में पैरामीटर लगाकर खोलें
       let targetUrl = self.location.origin + '/';
       if (data.type === 'chat_click') {
         targetUrl += `?chatTargetId=${data.targetId}&chatTargetName=${encodeURIComponent(data.senderName)}`;

@@ -259,7 +259,7 @@ function clearOngoingCallNotification() {
   }
 }
 
-// --- शेयर बटन लॉजिक (Native Share Fix) ---
+// शेयर बटन लॉजिक
 const Share = window.Capacitor?.Plugins?.Share;
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
@@ -659,6 +659,7 @@ $('tabCallsBtn').onclick = () => {
   renderCallLogs();
 };
 
+// आइडमपोटेंट कॉल लॉग - दोहरी प्रविष्टियों की रोकथाम
 async function recordCallLog(entry) {
   try {
     const logId = entry.callId || `call_${Date.now()}`;
@@ -683,15 +684,16 @@ async function recordCallLog(entry) {
       await set(ref(db, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
     }
 
+    // निश्चित logId का उपयोग करके साझा चैट में केवल एक ही सिस्टम-कॉल संदेश लिखा जाएगा
     if (entry.targetId) {
-      const roomPath = `chats/${getChatRoomId(myUserId, entry.targetId)}/messages`;
+      const roomPath = `chats/${getChatRoomId(myUserId, entry.targetId)}/messages/${logId}`;
       const isVoice = entry.callMode === 'audio';
       const label = isVoice ? (currentLang === 'hi' ? 'ऑडियो कॉल' : 'Audio Call') : (currentLang === 'hi' ? 'वीडियो कॉल' : 'Video Call');
       let callText = entry.type === 'missed' 
         ? `${isVoice ? '📞' : '📹'} ${currentLang === 'hi' ? 'मिस्ड' : 'Missed'} ${label}` 
         : `${isVoice ? '📞' : '📹'} ${label} (${entry.duration || '00:01'})`;
 
-      await push(ref(db, roomPath), {
+      await set(ref(db, roomPath), {
         senderId: myUserId, senderName: myUserName, type: 'system-call',
         text: callText, time: Date.now(), delivered: true, read: false
       }).catch(()=>{});
@@ -878,11 +880,13 @@ setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).lengt
 let chatUnsub = null;
 let activePlayingAudio = null;
 let activePlayingBtn = null;
+let isInitialChatOpen = true;
 
 function openChat(tId, tName, isOnline) {
   currentChatTargetId = tId; currentChatTargetName = tName;
   unreadCounts[tId] = 0; renderContacts();
   $('chatTargetName').textContent = tName;
+  isInitialChatOpen = true;
 
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
   targetStatusUnsub = onValue(ref(db, `users/${tId}`), (snap) => {
@@ -913,104 +917,144 @@ $('chatBackBtn').onclick = closeChat;
 $('chatCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, false); };
 $('chatVoiceCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, true); };
 
+function attachVoiceBubbleEvents(container) {
+  const btn = container.querySelector('.voice-play-circle');
+  const bg = container.querySelector('.voice-progress-bg');
+  const spdBtn = container.querySelector('.voice-spd-btn');
+
+  if (btn) {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const url = btn.dataset.url, totalDurSec = Number(btn.dataset.dur) || 5;
+      const bubble = btn.closest('.voice-note-bubble');
+      const pBar = bubble.querySelector('.voice-progress-bar'), tLabel = bubble.querySelector('.voice-time-label');
+
+      if (activePlayingAudio && activePlayingAudio.src === url) {
+        if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = '▶'; }
+        else { activePlayingAudio.play(); btn.textContent = '⏸'; }
+        return;
+      }
+      if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = '▶'; }
+
+      const audio = new Audio(url);
+      activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '⏸';
+      audio.ontimeupdate = () => {
+        const curTime = audio.currentTime;
+        pBar.style.width = Math.min((curTime / totalDurSec) * 100, 100) + '%';
+        tLabel.textContent = `${Math.floor(curTime / 60)}:${String(Math.floor(curTime % 60)).padStart(2,'0')}`;
+      };
+      audio.onended = () => {
+        btn.textContent = '▶'; pBar.style.width = '0%';
+        tLabel.textContent = `${Math.floor(totalDurSec / 60)}:${String(Math.floor(totalDurSec % 60)).padStart(2,'0')}`;
+        activePlayingAudio = null; activePlayingBtn = null;
+      };
+      audio.play().catch(()=>{ btn.textContent = '▶'; });
+    };
+  }
+
+  if (bg) {
+    bg.onclick = (e) => {
+      e.stopPropagation();
+      if (activePlayingAudio) {
+        const rect = bg.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        activePlayingAudio.currentTime = pct * (Number(bg.dataset.dur) || 5);
+      }
+    };
+  }
+
+  if (spdBtn) {
+    spdBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (activePlayingAudio) {
+        let spd = activePlayingAudio.playbackRate;
+        spd = spd === 1 ? 1.5 : (spd === 1.5 ? 2 : 1);
+        activePlayingAudio.playbackRate = spd; spdBtn.textContent = spd + 'x';
+      }
+    };
+  }
+}
+
+// स्मूथ चैट रेंडरर - चालू ऑडियो प्लेयर नष्ट नहीं होगा
 function loadChatMessages() {
-  const body = $('chatBody'); body.innerHTML = '';
+  const body = $('chatBody');
   if (chatUnsub) chatUnsub();
   const roomPath = `chats/${getChatRoomId(myUserId, currentChatTargetId)}/messages`;
 
   chatUnsub = onValue(ref(db, roomPath), snap => {
-    body.innerHTML = '';
     const msgs = snap.val() || {};
     const sortedKeys = Object.keys(msgs).sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
 
+    const currentMsgEls = body.querySelectorAll('[data-msg-id]');
+    const newKeySet = new Set(sortedKeys);
+    currentMsgEls.forEach(el => {
+      if (!newKeySet.has(el.dataset.msgId)) el.remove();
+    });
+
+    let shouldScroll = false;
+    const isNearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
+
     sortedKeys.forEach(msgId => {
       const m = msgs[msgId];
-      if (m.senderId !== myUserId && !m.read) update(ref(db, `${roomPath}/${msgId}`), { read: true, delivered: true, readAt: Date.now() }).catch(()=>{});
-
-      const b = document.createElement('div');
-      if (m.type === 'system-call') {
-        b.className = 'chat-bubble system-call';
-        b.textContent = `${m.text} • ${formatClockTime(m.time)}`;
-        body.appendChild(b); return;
+      if (m.senderId !== myUserId && !m.read) {
+        update(ref(db, `${roomPath}/${msgId}`), { read: true, delivered: true, readAt: Date.now() }).catch(()=>{});
       }
-      b.className = `chat-bubble ${m.senderId === myUserId ? 'me' : 'them'}`;
-      let tick = '';
+
+      let el = document.getElementById(`msg_${msgId}`);
+      let tickHtml = '';
       if (m.senderId === myUserId) {
-        if (m.read) tick = '<span class="tick-mark tick-read">✓✓</span>';
-        else if (m.delivered) tick = '<span class="tick-mark tick-delivered">✓✓</span>';
-        else tick = '<span class="tick-mark tick-sent">✓</span>';
+        if (m.read) tickHtml = '<span class="tick-mark tick-read">✓✓</span>';
+        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered">✓✓</span>';
+        else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
       }
 
-      let contentHtml = '';
-      if (m.type === 'image') contentHtml = `<img src="${m.data}" class="chat-img-thumb" onclick="window.open('${m.data}')">`;
-      else if (m.type === 'audio') {
-        contentHtml = `
-          <div class="voice-note-bubble" id="vn_${msgId}">
-            <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}">▶</button>
-            <div class="voice-meta-area">
-              <div class="voice-progress-bg" data-dur="${m.durationSec || 5}"><div class="voice-progress-bar"></div></div>
-              <div class="voice-meta-row"><span class="voice-time-label">${m.duration || '0:05'}</span><button class="voice-spd-btn">1x</button></div>
-            </div>
-          </div>
-        `;
-      } else contentHtml = `<div>${safeName(m.text)}</div>`;
+      if (el) {
+        const metaEl = el.querySelector('.chat-meta');
+        if (metaEl && m.senderId === myUserId) {
+          metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
+        }
+      } else {
+        el = document.createElement('div');
+        el.id = `msg_${msgId}`;
+        el.dataset.msgId = msgId;
 
-      b.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span>${tick}</div>`;
-      body.appendChild(b);
-    });
-
-    body.querySelectorAll('.voice-play-circle').forEach(btn => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const url = btn.dataset.url, totalDurSec = Number(btn.dataset.dur) || 5;
-        const bubble = btn.closest('.voice-note-bubble');
-        const pBar = bubble.querySelector('.voice-progress-bar'), tLabel = bubble.querySelector('.voice-time-label');
-
-        if (activePlayingAudio && activePlayingAudio.src === url) {
-          if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = '▶'; }
-          else { activePlayingAudio.play(); btn.textContent = '⏸'; }
+        if (m.type === 'system-call') {
+          el.className = 'chat-bubble system-call';
+          el.textContent = `${m.text} • ${formatClockTime(m.time)}`;
+          body.appendChild(el);
+          shouldScroll = true;
           return;
         }
-        if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = '▶'; }
 
-        const audio = new Audio(url);
-        activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '⏸';
-        audio.ontimeupdate = () => {
-          const curTime = audio.currentTime;
-          pBar.style.width = Math.min((curTime / totalDurSec) * 100, 100) + '%';
-          tLabel.textContent = `${Math.floor(curTime / 60)}:${String(Math.floor(curTime % 60)).padStart(2,'0')}`;
-        };
-        audio.onended = () => {
-          btn.textContent = '▶'; pBar.style.width = '0%';
-          tLabel.textContent = `${Math.floor(totalDurSec / 60)}:${String(Math.floor(totalDurSec % 60)).padStart(2,'0')}`;
-          activePlayingAudio = null; activePlayingBtn = null;
-        };
-        audio.play().catch(()=>{ btn.textContent = '▶'; });
-      };
-    });
-
-    body.querySelectorAll('.voice-progress-bg').forEach(bg => {
-      bg.onclick = (e) => {
-        e.stopPropagation();
-        if (activePlayingAudio) {
-          const rect = bg.getBoundingClientRect();
-          const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-          activePlayingAudio.currentTime = pct * (Number(bg.dataset.dur) || 5);
+        el.className = `chat-bubble ${m.senderId === myUserId ? 'me' : 'them'}`;
+        let contentHtml = '';
+        if (m.type === 'image') {
+          contentHtml = `<img src="${m.data}" class="chat-img-thumb" onclick="window.open('${m.data}')">`;
+        } else if (m.type === 'audio') {
+          contentHtml = `
+            <div class="voice-note-bubble" id="vn_${msgId}">
+              <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}">▶</button>
+              <div class="voice-meta-area">
+                <div class="voice-progress-bg" data-dur="${m.durationSec || 5}"><div class="voice-progress-bar"></div></div>
+                <div class="voice-meta-row"><span class="voice-time-label">${m.duration || '0:05'}</span><button class="voice-spd-btn">1x</button></div>
+              </div>
+            </div>
+          `;
+        } else {
+          contentHtml = `<div>${safeName(m.text)}</div>`;
         }
-      };
+
+        el.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}</div>`;
+        if (m.type === 'audio') attachVoiceBubbleEvents(el);
+        body.appendChild(el);
+        shouldScroll = true;
+      }
     });
 
-    body.querySelectorAll('.voice-spd-btn').forEach(btn => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        if (activePlayingAudio) {
-          let spd = activePlayingAudio.playbackRate;
-          spd = spd === 1 ? 1.5 : (spd === 1.5 ? 2 : 1);
-          activePlayingAudio.playbackRate = spd; btn.textContent = spd + 'x';
-        }
-      };
-    });
-    body.scrollTop = body.scrollHeight;
+    if (shouldScroll && (isNearBottom || isInitialChatOpen)) {
+      body.scrollTop = body.scrollHeight;
+      isInitialChatOpen = false;
+    }
   });
 }
 
@@ -1076,16 +1120,11 @@ async function sendChatMessage() {
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
 }
 
-// --- सेंड बटन दबाते समय कीबोर्ड खुला रखने का परफ़ेक्ट फ़िक्स ---
 actionBtn.addEventListener('pointerdown', (e) => {
-  if (chatInput.value.trim().length > 0) {
-    e.preventDefault();
-  }
+  if (chatInput.value.trim().length > 0) e.preventDefault();
 });
 actionBtn.addEventListener('mousedown', (e) => {
-  if (chatInput.value.trim().length > 0) {
-    e.preventDefault();
-  }
+  if (chatInput.value.trim().length > 0) e.preventDefault();
 });
 
 let isSendingMsg = false;
@@ -1311,6 +1350,7 @@ function listenForIncoming() {
         });
       }
       stopAllCallTones(); incomingDialog.hidden = true; hangup(true);
+      remove(incomingRef).catch(()=>{});
     }
   });
 }
@@ -1390,15 +1430,21 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
+// कॉलर द्वारा कॉल कैंसिल करने पर त्वरित इनबॉक्स क्लीनअप
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
   if (currentCallTargetId) {
     const roomId = getChatRoomId(myUserId, currentCallTargetId);
     const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
-    push(ref(db, `chats/${roomId}/messages`), { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false });
+    const logId = activeCallId || `call_${Date.now()}`;
+    set(ref(db, `chats/${roomId}/messages/${logId}`), { senderId: myUserId, senderName: myUserName, type: 'system-call', text: label, time: Date.now(), delivered: true, read: false }).catch(()=>{});
 
     update(ref(db, `user_inbox/${currentCallTargetId}`), { status: 'cancelled' }).catch(()=>{});
+    setTimeout(() => {
+      remove(ref(db, `user_inbox/${currentCallTargetId}`)).catch(()=>{});
+    }, 3000);
+
     get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
       const token = snap.val()?.fcmToken;
       if (token) {
@@ -1425,6 +1471,7 @@ $('btnReject').onclick = async () => {
   setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
 };
 
+// री-नेगोशिएशन सुरक्षित वीडियो टॉगल लॉजिक
 async function toggleVideoTrackMode(enableCam) {
   try {
     if (enableCam) {
@@ -1438,15 +1485,24 @@ async function toggleVideoTrackMode(enableCam) {
       } else vTrack.enabled = true;
 
       localVideo.srcObject = localStream; pipWrap.style.opacity = '1';
-      $('camBtn').classList.remove('off');$('audioModeBtn').classList.remove('off');
+      $('camBtn').classList.remove('off'); $('audioModeBtn').classList.remove('off');
       isAudioOnlyCall = false; camEnabled = true;
 
-      Object.values(peerConnections).forEach(pc => {
+      for (const pId of Object.keys(peerConnections)) {
+        const pc = peerConnections[pId];
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) sender.replaceTrack(vTrack);
-        else pc.addTrack(vTrack, localStream);
+        if (sender) {
+          await sender.replaceTrack(vTrack);
+        } else {
+          pc.addTrack(vTrack, localStream);
+          // नया ट्रैक जुड़ने पर री-नेगोशिएट ऑफर भेजें
+          const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${pId}`;
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(new RTCSessionDescription({ type: offer.type, sdp: applySDPBitrate(offer.sdp) }));
+          set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
+        }
         boostPeerBitrate(pc);
-      });
+      }
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: true }).catch(()=>{});
       toast(currentLang === 'hi' ? '📹 वीडियो चालू हो गया' : '📹 Video switched ON');
     } else {
@@ -1584,7 +1640,14 @@ async function joinCallSession() {
 function initiatePeerConnection(peerId, peerName) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
   peerConnections[peerId] = pc;
-  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  
+  if (localStream) {
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  }
+  // यदि ऑडियो कॉल है तो वीडियो m-line पहले से तैयार रखें ताकि री-नेगोशिएशन आसान रहे
+  if (isAudioOnlyCall && (!localStream || localStream.getVideoTracks().length === 0)) {
+    try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch(e){}
+  }
   boostPeerBitrate(pc);
 
   pc.ontrack = e => {
@@ -1613,14 +1676,19 @@ function initiatePeerConnection(peerId, peerName) {
   if (myUserId < peerId) {
     pc.createOffer().then(o => pc.setLocalDescription(new RTCSessionDescription({ type: o.type, sdp: applySDPBitrate(o.sdp) })))
       .then(() => set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type }));
+    
+    // री-नेगोशिएशन उत्तर को स्वीकार करने के लिए लचीला श्रोता
     onValue(ref(db, `${peerPath}/answer`), snap => {
       const a = snap.val();
-      if (a && !pc.currentRemoteDescription) pc.setRemoteDescription(new RTCSessionDescription(a)).then(async () => { await pc.flushIce(); boostPeerBitrate(pc); });
+      if (a && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== a.sdp)) {
+        pc.setRemoteDescription(new RTCSessionDescription(a)).then(async () => { await pc.flushIce(); boostPeerBitrate(pc); });
+      }
     });
   } else {
+    // आने वाले नए ऑफर्स को स्वीकार करने के लिए री-नेगोशिएशन फ्रेंडली श्रोता
     onValue(ref(db, `${peerPath}/offer`), async snap => {
       const o = snap.val();
-      if (o && !pc.currentRemoteDescription) {
+      if (o && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== o.sdp)) {
         await pc.setRemoteDescription(new RTCSessionDescription(o));
         await pc.flushIce();
         const a = await pc.createAnswer();
@@ -1915,7 +1983,7 @@ chatInput.addEventListener('blur', () => {
   }
 });
 
-// --- डायनामिक OTA (JS और CSS लाइव अपडेट) ---
+// डायनामिक OTA (बैकग्राउंड में साइलेंट कैशे, मैन्युअल पर रीस्टार्ट प्रॉम्प्ट)
 async function checkWebOtaUpdate(manual = false) {
   try {
     if (manual) toast(currentLang === 'hi' ? 'अपडेट की जांच हो रही है...' : 'Checking for update...');
@@ -1943,8 +2011,10 @@ async function checkWebOtaUpdate(manual = false) {
         localStorage.setItem('ota_cached_css', newCss);
         localStorage.setItem('ota_active_ver', String(info.version));
         
-        if (confirm(currentLang === 'hi' ? 'नया अपडेट मिल गया है! क्या आप अभी ऐप रीस्टार्ट करना चाहते हैं?' : 'New update applied! Restart app now?')) {
-          location.reload();
+        if (manual) {
+          if (confirm(currentLang === 'hi' ? 'नया अपडेट मिल गया है! क्या आप अभी ऐप रीस्टार्ट करना चाहते हैं?' : 'New update applied! Restart app now?')) {
+            location.reload();
+          }
         }
       } else {
         if (manual) toast('फ़ाइलें डाउनलोड करने में त्रुटि');
@@ -1957,7 +2027,6 @@ async function checkWebOtaUpdate(manual = false) {
   }
 }
 
-// सेटिंग्स बटन के क्लिक पर OTA चेक को जोड़ना
 $('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
