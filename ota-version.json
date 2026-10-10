@@ -1,5 +1,4 @@
 {
-  "version": "170",
-  "appVersion": "1.20.0",
-  "buildNumber": 170
+  "version": "1.20.1",
+  "notes": "Bug fixes and performance update"
 }
