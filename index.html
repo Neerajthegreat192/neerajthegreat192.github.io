@@ -8,13 +8,13 @@
 <meta name="theme-color" content="#090d10">
 <link rel="manifest" href="manifest.json">
 
-<!-- डायनामिक OTA स्टाइल -->
+<!-- डायनामिक OTA स्टाइल (मेमोरी से लाइव CSS लोड करेगा) -->
 <link rel="stylesheet" href="style.css" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
   try {
     const cachedCss = localStorage.getItem('ota_cached_css');
-    if (cachedCss) {
+    if (cachedCss && cachedCss.trim() !== "") {
       document.getElementById('otaCustomStyle').textContent = cachedCss;
     }
   } catch(e) {}
@@ -62,7 +62,7 @@
     <button id="recheckPermsBtn" class="btn-sec-outline">🛡️ अनुमतियाँ पुनः जांचें</button>
     <button id="clearChatHistoryBtn" class="btn-sec-outline">🗑️ सभी चैट साफ़ करें</button>
     <button id="resetProfileBtn" class="btn-danger-outline">आईडी हटाएं / रीसेट करें</button>
-    <button id="checkUpdateBtn" class="btn-gold" style="margin-top:14px">🔄 नया अपडेट जांचें (APK)</button>
+    <button id="checkUpdateBtn" class="btn-gold" style="margin-top:14px">🔄 नया अपडेट जांचें (OTA)</button>
     <button id="directApkDlBtn" class="btn-sec-outline">📥 सीधे APK डाउनलोड करें</button>
     <button id="closeProfileBtn" class="btn-cancel-box" style="margin-top:8px">✕ रद्द करें</button>
   </div>
@@ -237,28 +237,40 @@
 </div>
 <div id="toast"></div>
 
-<!-- डायनामिक स्क्रिप्ट लोडर: अगर मेमोरी में नया कोड है तो उसे चलाएगा, वरना डिफ़ॉल्ट चलाएगा -->
+<!-- डायनामिक स्क्रिप्ट लोडर: अगर मेमोरी में नया OTA कोड है तो उसे चलाएगा, क्रैश होने पर सेफ़्टी रीसेट करेगा -->
 <script>
-  try {
-    const otaCode = localStorage.getItem('ota_cached_js');
-    if (otaCode && otaCode.trim() !== "") {
-      const script = document.createElement('script');
-      script.type = 'module';
-      script.textContent = otaCode;
-      document.body.appendChild(script);
-      console.log('Running Dynamic OTA App.js');
-    } else {
+  (function() {
+    window.addEventListener('error', function(e) {
+      if (localStorage.getItem('ota_cached_js')) {
+        console.warn('OTA Code Error, resetting to base app.js:', e);
+        localStorage.removeItem('ota_cached_js');
+        localStorage.removeItem('ota_cached_css');
+        localStorage.removeItem('ota_active_ver');
+        location.reload();
+      }
+    }, { once: true });
+
+    try {
+      const otaCode = localStorage.getItem('ota_cached_js');
+      if (otaCode && otaCode.trim() !== "") {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.textContent = otaCode;
+        document.body.appendChild(script);
+        console.log('Running Dynamic OTA App.js');
+      } else {
+        const defaultScript = document.createElement('script');
+        defaultScript.type = 'module';
+        defaultScript.src = 'app.js';
+        document.body.appendChild(defaultScript);
+      }
+    } catch(e) {
       const defaultScript = document.createElement('script');
       defaultScript.type = 'module';
       defaultScript.src = 'app.js';
       document.body.appendChild(defaultScript);
     }
-  } catch(e) {
-    const defaultScript = document.createElement('script');
-    defaultScript.type = 'module';
-    defaultScript.src = 'app.js';
-    document.body.appendChild(defaultScript);
-  }
+  })();
 </script>
 
 </body>
