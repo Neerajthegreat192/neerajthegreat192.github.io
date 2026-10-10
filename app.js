@@ -659,7 +659,6 @@ $('tabCallsBtn').onclick = () => {
   renderCallLogs();
 };
 
-// आइडमपोटेंट कॉल लॉग - दोहरी प्रविष्टियों की रोकथाम
 async function recordCallLog(entry) {
   try {
     const logId = entry.callId || `call_${Date.now()}`;
@@ -684,7 +683,6 @@ async function recordCallLog(entry) {
       await set(ref(db, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
     }
 
-    // निश्चित logId का उपयोग करके साझा चैट में केवल एक ही सिस्टम-कॉल संदेश लिखा जाएगा
     if (entry.targetId) {
       const roomPath = `chats/${getChatRoomId(myUserId, entry.targetId)}/messages/${logId}`;
       const isVoice = entry.callMode === 'audio';
@@ -975,7 +973,6 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
-// स्मूथ चैट रेंडरर - चालू ऑडियो प्लेयर नष्ट नहीं होगा
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -1430,7 +1427,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   unsubs.push(unsubAns);
 }
 
-// कॉलर द्वारा कॉल कैंसिल करने पर त्वरित इनबॉक्स क्लीनअप
 $('btnCancelCall').onclick = () => {
   stopAllCallTones();
   outgoingDialog.hidden = true;
@@ -1471,7 +1467,6 @@ $('btnReject').onclick = async () => {
   setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
 };
 
-// री-नेगोशिएशन सुरक्षित वीडियो टॉगल लॉजिक
 async function toggleVideoTrackMode(enableCam) {
   try {
     if (enableCam) {
@@ -1495,7 +1490,6 @@ async function toggleVideoTrackMode(enableCam) {
           await sender.replaceTrack(vTrack);
         } else {
           pc.addTrack(vTrack, localStream);
-          // नया ट्रैक जुड़ने पर री-नेगोशिएट ऑफर भेजें
           const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${pId}`;
           const offer = await pc.createOffer();
           await pc.setLocalDescription(new RTCSessionDescription({ type: offer.type, sdp: applySDPBitrate(offer.sdp) }));
@@ -1597,6 +1591,304 @@ function stopNetworkQualityMonitor() {
   qualityLevel = 'high';
 }
 
+// ==========================================
+// 🎯 KIDS MODULE: QUIZ & LIVE CANVAS LOGIC
+// ==========================================
+let allQuizQuestions = null;
+let quizSessionUnsub = null;
+let canvasSessionUnsub = null;
+
+async function fetchQuizQuestions() {
+  if (allQuizQuestions) return allQuizQuestions;
+  try {
+    const res = await fetch('questions.json?t=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      allQuizQuestions = await res.json();
+      return allQuizQuestions;
+    }
+  } catch(e) {
+    console.warn("Quiz questions load error:", e);
+  }
+  return null;
+}
+
+async function sendQuizQuestion(category = 'lkg_ukg') {
+  if (!activeCallId) {
+    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही क्विज़ चलाएँ' : 'Start quiz during active call');
+    return;
+  }
+
+  const data = await fetchQuizQuestions();
+  if (!data || !data[category] || data[category].length === 0) {
+    toast(currentLang === 'hi' ? 'सवाल लोड नहीं हो सके!' : 'Failed to load questions');
+    return;
+  }
+
+  const list = data[category];
+  const randomQ = list[Math.floor(Math.random() * list.length)];
+
+  const quizRef = ref(db, `call_sessions/${activeCallId}/quiz_state`);
+  await set(quizRef, {
+    category,
+    question: randomQ.q,
+    options: randomQ.opts,
+    answer: randomQ.ans,
+    selectedAnswer: null,
+    isCorrect: null,
+    updatedAt: Date.now()
+  });
+}
+
+function initKidsQuizListener() {
+  if (!activeCallId) return;
+  if (quizSessionUnsub) quizSessionUnsub();
+
+  const quizRef = ref(db, `call_sessions/${activeCallId}/quiz_state`);
+  quizSessionUnsub = onValue(quizRef, snap => {
+    const qState = snap.val();
+    const box = $('kidsQuizBox');
+    if (!box) return;
+
+    if (!qState || !qState.question) {
+      box.hidden = true;
+      return;
+    }
+
+    box.hidden = false;
+    const qText = $('quizQuestionText');
+    if (qText) qText.textContent = qState.question;
+    const catSelect = $('quizCategorySelect');
+    if (catSelect && qState.category) catSelect.value = qState.category;
+
+    const optsArea = $('quizOptionsArea');
+    if (!optsArea) return;
+    optsArea.innerHTML = '';
+
+    (qState.options || []).forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'quiz-opt-btn';
+      btn.textContent = opt;
+
+      if (qState.selectedAnswer) {
+        if (opt === qState.answer) {
+          btn.style.background = '#10b981';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#10b981';
+        } else if (opt === qState.selectedAnswer && !qState.isCorrect) {
+          btn.style.background = '#ef4444';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#ef4444';
+        }
+        btn.disabled = true;
+      }
+
+      btn.onclick = () => {
+        const isRight = (opt === qState.answer);
+        if (isRight) playMessageTickSound();
+        else playMessageBeep();
+
+        update(quizRef, {
+          selectedAnswer: opt,
+          isCorrect: isRight
+        }).catch(()=>{});
+      };
+      optsArea.appendChild(btn);
+    });
+  });
+}
+
+async function closeKidsQuiz() {
+  if (activeCallId) {
+    await remove(ref(db, `call_sessions/${activeCallId}/quiz_state`)).catch(()=>{});
+  }
+  const box = $('kidsQuizBox');
+  if (box) box.hidden = true;
+}
+
+$('nextQuizBtn').onclick = (e) => {
+  e.stopPropagation();
+  const cat = $('quizCategorySelect').value || 'lkg_ukg';
+  sendQuizQuestion(cat);
+};
+$('quizCategorySelect').onchange = (e) => {
+  e.stopPropagation();
+  sendQuizQuestion(e.target.value);
+};
+$('closeQuizBtn').onclick = (e) => {
+  e.stopPropagation();
+  closeKidsQuiz();
+};
+$('btnKidsQuiz').onclick = (e) => {
+  e.stopPropagation();
+  if (!isCallConnected) {
+    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही क्विज़ शुरू करें' : 'Start quiz when call is connected');
+    return;
+  }
+  const box = $('kidsQuizBox');
+  if (box.hidden) {
+    const cat = $('quizCategorySelect').value || 'lkg_ukg';
+    sendQuizQuestion(cat);
+  } else {
+    closeKidsQuiz();
+  }
+  scheduleAutoHide();
+};
+
+let isDrawing = false;
+let currentColor = '#10b981';
+let currentLineWidth = 4;
+let canvasEl = null;
+let ctx = null;
+let canvasEventsAttached = false;
+
+function initLiveCanvas() {
+  canvasEl = $('kidsWhiteboardCanvas');
+  if (!canvasEl) return;
+  ctx = canvasEl.getContext('2d');
+
+  function resizeCanvas() {
+    if (!canvasEl) return;
+    canvasEl.width = canvasEl.offsetWidth || window.innerWidth;
+    canvasEl.height = canvasEl.offsetHeight || (window.innerHeight - 80);
+  }
+  setTimeout(resizeCanvas, 60);
+
+  if (!canvasEventsAttached) {
+    const startDraw = (e) => {
+      isDrawing = true;
+      const pt = getCanvasPoint(e);
+      broadcastDrawPoint(pt.x, pt.y, 'start');
+    };
+
+    const moveDraw = (e) => {
+      if (!isDrawing) return;
+      const pt = getCanvasPoint(e);
+      broadcastDrawPoint(pt.x, pt.y, 'draw');
+    };
+
+    const stopDraw = () => {
+      if (!isDrawing) return;
+      isDrawing = false;
+      broadcastDrawPoint(0, 0, 'stop');
+    };
+
+    canvasEl.addEventListener('pointerdown', startDraw);
+    canvasEl.addEventListener('pointermove', moveDraw);
+    canvasEl.addEventListener('pointerup', stopDraw);
+    canvasEl.addEventListener('pointercancel', stopDraw);
+    canvasEventsAttached = true;
+  }
+
+  listenRemoteCanvas();
+}
+
+function getCanvasPoint(e) {
+  if (!canvasEl) return { x: 0, y: 0 };
+  const rect = canvasEl.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) / rect.width,
+    y: (e.clientY - rect.top) / rect.height
+  };
+}
+
+function broadcastDrawPoint(x, y, action) {
+  if (!activeCallId) return;
+  const drawRef = ref(db, `call_sessions/${activeCallId}/canvas_draw`);
+  set(drawRef, {
+    x, y,
+    action,
+    color: currentColor,
+    size: currentLineWidth,
+    sender: myUserId,
+    ts: Date.now()
+  }).catch(()=>{});
+}
+
+function listenRemoteCanvas() {
+  if (!activeCallId) return;
+  if (canvasSessionUnsub) canvasSessionUnsub();
+
+  const drawRef = ref(db, `call_sessions/${activeCallId}/canvas_draw`);
+  canvasSessionUnsub = onValue(drawRef, snap => {
+    const pt = snap.val();
+    if (!pt || !ctx || !canvasEl) return;
+
+    const absX = pt.x * canvasEl.width;
+    const absY = pt.y * canvasEl.height;
+
+    ctx.strokeStyle = pt.color || '#10b981';
+    ctx.lineWidth = pt.size || 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (pt.action === 'start') {
+      ctx.beginPath();
+      ctx.moveTo(absX, absY);
+    } else if (pt.action === 'draw') {
+      ctx.lineTo(absX, absY);
+      ctx.stroke();
+    } else if (pt.action === 'stop') {
+      ctx.closePath();
+    } else if (pt.action === 'clear') {
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    }
+  });
+}
+
+function clearLiveCanvas() {
+  if (ctx && canvasEl) {
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  }
+  if (activeCallId) {
+    set(ref(db, `call_sessions/${activeCallId}/canvas_draw`), {
+      action: 'clear',
+      ts: Date.now()
+    }).catch(()=>{});
+  }
+}
+
+document.querySelectorAll('.color-dot').forEach(btn => {
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+    btn.classList.add('active');
+    currentColor = btn.dataset.color || '#10b981';
+  };
+});
+$('clearCanvasBtn').onclick = (e) => {
+  e.stopPropagation();
+  clearLiveCanvas();
+};
+$('closeWhiteboardBtn').onclick = (e) => {
+  e.stopPropagation();
+  $('kidsWhiteboardModal').hidden = true;
+};
+$('btnWhiteboard').onclick = (e) => {
+  e.stopPropagation();
+  if (!isCallConnected) {
+    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही बोर्ड खोलें' : 'Open whiteboard during active call');
+    return;
+  }
+  const wb = $('kidsWhiteboardModal');
+  wb.hidden = !wb.hidden;
+  if (!wb.hidden) {
+    initLiveCanvas();
+  }
+  scheduleAutoHide();
+};
+
+function cleanupKidsModules() {
+  if (quizSessionUnsub) { quizSessionUnsub(); quizSessionUnsub = null; }
+  if (canvasSessionUnsub) { canvasSessionUnsub(); canvasSessionUnsub = null; }
+  const box = $('kidsQuizBox');
+  if (box) box.hidden = true;
+  const wb = $('kidsWhiteboardModal');
+  if (wb) wb.hidden = true;
+  if (ctx && canvasEl) {
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  }
+}
+
 async function joinCallSession() {
   clearTimeout(callTimeoutTimer); callTimeoutTimer = null;
   lobbyScreen.hidden = true; chatScreen.hidden = true; callScreen.hidden = false;
@@ -1610,6 +1902,10 @@ async function joinCallSession() {
     $('audioModeBtn').classList.add('off');
   }
   startTimer(); scheduleAutoHide();
+
+  // किड्स क्विज़ एवं कैनवस लिसनर्स सक्रिय करें
+  initKidsQuizListener();
+  listenRemoteCanvas();
 
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
   onDisconnect(sessionRef).update({ status: 'ended' });
@@ -1644,7 +1940,6 @@ function initiatePeerConnection(peerId, peerName) {
   if (localStream) {
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
   }
-  // यदि ऑडियो कॉल है तो वीडियो m-line पहले से तैयार रखें ताकि री-नेगोशिएशन आसान रहे
   if (isAudioOnlyCall && (!localStream || localStream.getVideoTracks().length === 0)) {
     try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch(e){}
   }
@@ -1677,7 +1972,6 @@ function initiatePeerConnection(peerId, peerName) {
     pc.createOffer().then(o => pc.setLocalDescription(new RTCSessionDescription({ type: o.type, sdp: applySDPBitrate(o.sdp) })))
       .then(() => set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type }));
     
-    // री-नेगोशिएशन उत्तर को स्वीकार करने के लिए लचीला श्रोता
     onValue(ref(db, `${peerPath}/answer`), snap => {
       const a = snap.val();
       if (a && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== a.sdp)) {
@@ -1685,7 +1979,6 @@ function initiatePeerConnection(peerId, peerName) {
       }
     });
   } else {
-    // आने वाले नए ऑफर्स को स्वीकार करने के लिए री-नेगोशिएशन फ्रेंडली श्रोता
     onValue(ref(db, `${peerPath}/offer`), async snap => {
       const o = snap.val();
       if (o && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== o.sdp)) {
@@ -1775,14 +2068,14 @@ pipRestoreBtn.onclick = e => { e.stopPropagation(); pipWrap.classList.remove('pi
 function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
-    if (isCallConnected) {
+    if (isCallConnected && $('kidsQuizBox').hidden &&$('kidsWhiteboardModal').hidden) {
       controlsBar.classList.add('fade-out'); topPill.classList.add('fade-out');
     }
   }, 3500);
 }
 
 callScreen.addEventListener('click', e => {
-  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn')) return;
+  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal')) return;
   const isH = controlsBar.classList.contains('fade-out');
   controlsBar.classList.toggle('fade-out', !isH);
   topPill.classList.toggle('fade-out', !isH);
@@ -1859,6 +2152,9 @@ async function hangup(silent = false) {
     callTimeoutTimer = null;
     stopNetworkQualityMonitor();
 
+    // किड्स मॉड्यूल्स क्लीनअप
+    cleanupKidsModules();
+
     if (isCallConnected && currentCallTargetId) {
       recordCallLog({
         callId: activeCallId || `call_${Date.now()}`,
@@ -1926,6 +2222,8 @@ function setupHardwareBackButton() {
         return;
       }
     }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!voiceDock.hidden) { discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!chatScreen.hidden) { closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
@@ -1939,6 +2237,8 @@ function setupHardwareBackButton() {
   App.addListener('backButton', () => {
     const openModals = [$('adminPanelModal'),$('adminPinModal'),$('profileModal'),$('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true; return; }
+    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
     if (!voiceDock.hidden) { discardRecording(); return; }
     if (!chatScreen.hidden) { closeChat(); return; }
     if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); return; }
@@ -1983,7 +2283,6 @@ chatInput.addEventListener('blur', () => {
   }
 });
 
-// डायनामिक OTA (बैकग्राउंड में साइलेंट कैशे, मैन्युअल पर रीस्टार्ट प्रॉम्प्ट)
 async function checkWebOtaUpdate(manual = false) {
   try {
     if (manual) toast(currentLang === 'hi' ? 'अपडेट की जांच हो रही है...' : 'Checking for update...');
