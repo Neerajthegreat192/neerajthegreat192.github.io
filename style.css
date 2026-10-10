@@ -35,7 +35,7 @@ html,body{
   flex-direction:column;
   overflow:hidden;
 }
-[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden], #kidsTictactoeBox[hidden]{
+[hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden], #kidsTictactoeBox[hidden], #liveAnnotationOverlay[hidden], #voiceChangerBox[hidden]{
   display:none !important;
 }
 button{font-family:inherit;cursor:pointer;outline:none}
@@ -975,7 +975,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
 }
 
 /* ===================================================
-   [यहाँ से शुरू: ❌⭕ मॉड्यूल TIC-TAC-TOE 2-PLAYER ENGINE STYLING]
+   [❌⭕ मॉड्यूल TIC-TAC-TOE 2-PLAYER ENGINE STYLING]
    =================================================== */
 .ttt-floating-box{
   position:absolute;
@@ -1108,8 +1108,174 @@ button{font-family:inherit;cursor:pointer;outline:none}
   transition:transform 0.15s;
 }
 .ttt-reset-btn:active{transform:scale(0.97)}
+
 /* ===================================================
-   [यहाँ पर समाप्त: ❌⭕ मॉड्यूल TIC-TAC-TOE 2-PLAYER ENGINE STYLING]
+   [यहाँ से शुरू: ✨ मॉड्यूल LIVE VIDEO DRAWING (ANNOTATION) STYLING]
+   =================================================== */
+.annotation-overlay{
+  position:absolute;
+  inset:0;
+  z-index:25;
+  pointer-events:none;
+}
+#annotationCanvas{
+  width:100%;
+  height:100%;
+  display:block;
+  pointer-events:auto;
+  touch-action:none;
+}
+.annotation-toolbar{
+  position:absolute;
+  top:calc(56px + env(safe-area-inset-top, 24px));
+  left:50%;
+  transform:translateX(-50%);
+  background:rgba(18,24,33,0.92);
+  backdrop-filter:blur(14px);
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:22px;
+  padding:6px 12px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  pointer-events:auto;
+  box-shadow:0 6px 20px rgba(0,0,0,0.6);
+  z-index:28;
+}
+.annot-color-dot{
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  border:2px solid transparent;
+  transition:transform .15s, border-color .15s;
+}
+.annot-color-dot.active{
+  border-color:#fff;
+  transform:scale(1.2);
+  box-shadow:0 0 8px rgba(255,255,255,0.6);
+}
+.annot-btn{
+  background:rgba(255,255,255,0.08);
+  border:1px solid var(--line-strong);
+  color:#fff;
+  padding:5px 9px;
+  border-radius:10px;
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+  transition:transform .15s;
+}
+.annot-btn:active{transform:scale(0.92)}
+.annot-btn-clear{background:rgba(244,63,94,0.2);border-color:var(--danger);color:var(--danger)}
+.annot-btn-close{background:rgba(255,255,255,0.1);color:#cbd5e1;padding:5px 8px;border-radius:50%}
+/* ===================================================
+   [यहाँ पर समाप्त: ✨ मॉड्यूल LIVE VIDEO DRAWING (ANNOTATION) STYLING]
+   =================================================== */
+
+/* ===================================================
+   [यहाँ से शुरू: 🎙️ मॉड्यूल LIVE VOICE CHANGER (6 PRESETS) STYLING]
+   =================================================== */
+.voice-changer-box{
+  position:absolute;
+  top:calc(55px + env(safe-area-inset-top, 24px));
+  left:50%;
+  transform:translateX(-50%);
+  width:calc(100% - 24px);
+  max-width:360px;
+  background:rgba(18,24,33,0.96);
+  backdrop-filter:blur(18px);
+  border:1px solid rgba(245,158,11,0.4);
+  border-radius:20px;
+  padding:14px;
+  z-index:46;
+  box-shadow:0 12px 36px rgba(0,0,0,0.85);
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  animation:voicePop .25s ease-out;
+}
+@keyframes voicePop{
+  from{opacity:0;transform:translate(-50%, -10px) scale(0.96)}
+  to{opacity:1;transform:translate(-50%, 0) scale(1)}
+}
+.vc-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--line);
+  padding-bottom:8px;
+}
+.vc-title{
+  font-size:14px;
+  font-weight:900;
+  color:#fbbf24;
+  letter-spacing:0.3px;
+}
+.vc-close-btn{
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(244,63,94,0.3);
+  color:var(--danger);
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  font-size:12px;
+  transition:transform 0.15s;
+}
+.vc-close-btn:active{transform:scale(0.9)}
+
+.vc-grid{
+  display:grid;
+  grid-template-columns:repeat(2, 1fr);
+  gap:10px;
+}
+.vc-preset-btn{
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--line-strong);
+  border-radius:14px;
+  padding:10px 8px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:#fff;
+  text-align:left;
+  transition:all 0.15s;
+}
+.vc-preset-btn:active{
+  transform:scale(0.95);
+}
+.vc-preset-btn.active{
+  background:linear-gradient(135deg, rgba(245,158,11,0.25), rgba(234,88,12,0.25));
+  border-color:#f59e0b;
+  box-shadow:0 0 14px rgba(245,158,11,0.4);
+}
+.vc-icon{
+  font-size:22px;
+  line-height:1;
+}
+.vc-label-group{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.vc-label{
+  font-size:12px;
+  font-weight:900;
+  color:#fff;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.vc-sublabel{
+  font-size:9.5px;
+  color:var(--text-muted);
+}
+.vc-preset-btn.active .vc-label{
+  color:#fbbf24;
+}
+/* ===================================================
+   [यहाँ पर समाप्त: 🎙️ मॉड्यूल LIVE VOICE CHANGER (6 PRESETS) STYLING]
    =================================================== */
 
 /* Modals */

@@ -1484,7 +1484,6 @@ $('btnReject').onclick = async () => {
   setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
 };
 
-// ऑडियो/वीडियो मोड के अनुसार स्क्रीन लेआउट और कैमरा टॉगल
 function updateCallModeVisuals(isVoiceMode) {
   const voiceArea = $('voiceCallArea');
   const remoteGridEl = $('remoteGrid');
@@ -1676,7 +1675,6 @@ let canvasSessionUnsub = null;
 let whiteboardSyncUnsub = null;
 let quizTimerInterval = null;
 
-// सवाल लोड करने का पूर्ण GitHub Pages URL
 async function fetchQuizQuestions() {
   if (allQuizQuestions) return allQuizQuestions;
   try {
@@ -2290,17 +2288,375 @@ $('trayBtnTictactoe').onclick = (e) => {
 // [यहाँ पर समाप्त: ❌⭕ मॉड्यूल TIC-TAC-TOE 2-PLAYER ENGINE]
 // ===================================================
 
+// ===================================================
+// [यहाँ से शुरू: ✨ मॉड्यूल LIVE VIDEO DRAWING (ANNOTATION)]
+// ===================================================
+let annotCanvasEl = null;
+let annotCtx = null;
+let isAnnotDrawing = false;
+let annotColor = '#f59e0b';
+let annotSessionUnsub = null;
+let annotEventsAttached = false;
+let annotDisappearTimer = null;
+
+function ensureAnnotationDOM() {
+  if ($('liveAnnotationOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'liveAnnotationOverlay';
+  overlay.className = 'annotation-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = `
+    <canvas id="annotationCanvas"></canvas>
+    <div class="annotation-toolbar" id="annotToolbar">
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="annot-color-dot active" data-color="#f59e0b" style="background:#f59e0b"></button>
+        <button class="annot-color-dot" data-color="#ef4444" style="background:#ef4444"></button>
+        <button class="annot-color-dot" data-color="#38bdf8" style="background:#38bdf8"></button>
+        <button class="annot-color-dot" data-color="#22c55e" style="background:#22c55e"></button>
+      </div>
+      <button id="annotClearBtn" class="annot-btn annot-btn-clear">🗑️ साफ़</button>
+      <button id="annotCloseBtn" class="annot-btn annot-btn-close">✕</button>
+    </div>
+  `;
+  callScreen.appendChild(overlay);
+
+  overlay.querySelectorAll('.annot-color-dot').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      overlay.querySelectorAll('.annot-color-dot').forEach(d => d.classList.remove('active'));
+      btn.classList.add('active');
+      annotColor = btn.dataset.color || '#f59e0b';
+    };
+  });
+
+  overlay.querySelector('#annotClearBtn').onclick = (e) => {
+    e.stopPropagation();
+    clearLiveAnnotation();
+  };
+
+  overlay.querySelector('#annotCloseBtn').onclick = (e) => {
+    e.stopPropagation();
+    closeLiveAnnotation();
+  };
+}
+
+function initLiveAnnotation() {
+  ensureAnnotationDOM();
+  annotCanvasEl = $('annotationCanvas');
+  if (!annotCanvasEl) return;
+  annotCtx = annotCanvasEl.getContext('2d');
+
+  function resizeAnnotCanvas() {
+    if (!annotCanvasEl) return;
+    annotCanvasEl.width = annotCanvasEl.offsetWidth || window.innerWidth;
+    annotCanvasEl.height = annotCanvasEl.offsetHeight || window.innerHeight;
+  }
+  setTimeout(resizeAnnotCanvas, 50);
+
+  if (!annotEventsAttached) {
+    const getPoint = (e) => {
+      const rect = annotCanvasEl.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top) / rect.height
+      };
+    };
+
+    annotCanvasEl.addEventListener('pointerdown', (e) => {
+      isAnnotDrawing = true;
+      const pt = getPoint(e);
+      broadcastAnnotPoint(pt.x, pt.y, 'start');
+    });
+
+    annotCanvasEl.addEventListener('pointermove', (e) => {
+      if (!isAnnotDrawing) return;
+      const pt = getPoint(e);
+      broadcastAnnotPoint(pt.x, pt.y, 'draw');
+    });
+
+    const stopAnnot = () => {
+      if (!isAnnotDrawing) return;
+      isAnnotDrawing = false;
+      broadcastAnnotPoint(0, 0, 'stop');
+    };
+
+    annotCanvasEl.addEventListener('pointerup', stopAnnot);
+    annotCanvasEl.addEventListener('pointercancel', stopAnnot);
+    annotEventsAttached = true;
+  }
+
+  listenRemoteAnnotation();
+}
+
+function broadcastAnnotPoint(x, y, action) {
+  if (!activeCallId) return;
+  set(ref(db, `call_sessions/${activeCallId}/annotation_draw`), {
+    x, y, action, color: annotColor, sender: myUserId, ts: Date.now()
+  }).catch(()=>{});
+}
+
+function listenRemoteAnnotation() {
+  if (!activeCallId) return;
+  if (annotSessionUnsub) annotSessionUnsub();
+
+  annotSessionUnsub = onValue(ref(db, `call_sessions/${activeCallId}/annotation_draw`), snap => {
+    const pt = snap.val();
+    if (!pt || !annotCtx || !annotCanvasEl) return;
+
+    const absX = pt.x * annotCanvasEl.width;
+    const absY = pt.y * annotCanvasEl.height;
+
+    annotCtx.strokeStyle = pt.color || '#f59e0b';
+    annotCtx.lineWidth = 5;
+    annotCtx.lineCap = 'round';
+    annotCtx.lineJoin = 'round';
+
+    if (pt.action === 'start') {
+      annotCtx.beginPath();
+      annotCtx.moveTo(absX, absY);
+    } else if (pt.action === 'draw') {
+      annotCtx.lineTo(absX, absY);
+      annotCtx.stroke();
+    } else if (pt.action === 'stop') {
+      annotCtx.closePath();
+      // 3.5 सेकंड बाद स्ट्रोक अपने-आप धीरे से गायब करने का टाइमर
+      clearTimeout(annotDisappearTimer);
+      annotDisappearTimer = setTimeout(() => {
+        if (annotCtx && annotCanvasEl) {
+          annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
+        }
+      }, 3500);
+    } else if (pt.action === 'clear') {
+      annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
+    }
+  });
+
+  onValue(ref(db, `call_sessions/${activeCallId}/annotation_active`), snap => {
+    const isActive = !!snap.val();
+    const overlay = $('liveAnnotationOverlay');
+    if (!overlay) return;
+    if (isActive) {
+      if (overlay.hidden) {
+        overlay.hidden = false;
+        initLiveAnnotation();
+        controlsBar.classList.add('fade-out');
+      }
+    } else {
+      overlay.hidden = true;
+    }
+  });
+}
+
+function clearLiveAnnotation() {
+  if (annotCtx && annotCanvasEl) annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
+  if (activeCallId) {
+    set(ref(db, `call_sessions/${activeCallId}/annotation_draw`), { action: 'clear', ts: Date.now() }).catch(()=>{});
+  }
+}
+
+function closeLiveAnnotation() {
+  if (activeCallId) {
+    update(ref(db, `call_sessions/${activeCallId}`), { annotation_active: false }).catch(()=>{});
+  }
+  const overlay = $('liveAnnotationOverlay');
+  if (overlay) overlay.hidden = true;
+}
+
+$('trayBtnAnnotation').onclick = (e) => {
+  e.stopPropagation();
+  $('funModeTray').hidden = true;
+  if (!activeCallId || !isCallConnected) {
+    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही ड्रॉइंग चालू करें' : 'Connect call to draw');
+    return;
+  }
+  ensureAnnotationDOM();
+  const overlay = $('liveAnnotationOverlay');
+  const willOpen = overlay.hidden;
+  update(ref(db, `call_sessions/${activeCallId}`), { annotation_active: willOpen }).catch(()=>{});
+};
+// ===================================================
+// [यहाँ पर समाप्त: ✨ मॉड्यूल LIVE VIDEO DRAWING (ANNOTATION)]
+// ===================================================
+
+// ===================================================
+// [यहाँ से शुरू: 🎙️ मॉड्यूल LIVE VOICE CHANGER (6 PRESETS)]
+// ===================================================
+let voiceAudioCtx = null;
+let voiceSourceNode = null;
+let voiceDestinationNode = null;
+let voiceOscillatorNode = null;
+let activeVoicePreset = 'normal';
+let isVoiceEngineInit = false;
+
+const VOICE_PRESETS = [
+  { id: 'normal', name: 'सामान्य', sub: 'Original Voice', icon: '👤' },
+  { id: 'cartoon', name: 'कार्टून / चिपमंक', sub: 'High Pitch Cute', icon: '🐿️' },
+  { id: 'robot', name: 'रोबोट', sub: 'Metallic Ring Mod', icon: '🤖' },
+  { id: 'monster', name: 'मॉन्स्टर / शेर', sub: 'Heavy Bass Roar', icon: '👹' },
+  { id: 'girl', name: 'लड़की', sub: 'Bright Sweet Tone', icon: '👧' },
+  { id: 'man', name: 'एडल्ट पुरुष', sub: 'Deep Chest Voice', icon: '👨' }
+];
+
+function ensureVoiceChangerDOM() {
+  if ($('voiceChangerBox')) return;
+  const box = document.createElement('div');
+  box.id = 'voiceChangerBox';
+  box.className = 'voice-changer-box';
+  box.hidden = true;
+  box.innerHTML = `
+    <div class="vc-header">
+      <div class="vc-title">🎙️ वॉइस चेंजर (6 साउंड प्रेसेट्स)</div>
+      <button id="closeVcBtn" class="vc-close-btn" title="बंद करें">✕</button>
+    </div>
+    <div class="vc-grid" id="vcGrid"></div>
+  `;
+  callScreen.appendChild(box);
+
+  const grid = box.querySelector('#vcGrid');
+  VOICE_PRESETS.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = `vc-preset-btn ${p.id === activeVoicePreset ? 'active' : ''}`;
+    btn.dataset.preset = p.id;
+    btn.innerHTML = `
+      <span class="vc-icon">${p.icon}</span>
+      <div class="vc-label-group">
+        <span class="vc-label">${p.name}</span>
+        <span class="vc-sublabel">${p.sub}</span>
+      </div>
+    `;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      box.querySelectorAll('.vc-preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyVoicePreset(p.id);
+    };
+    grid.appendChild(btn);
+  });
+
+  box.querySelector('#closeVcBtn').onclick = (e) => {
+    e.stopPropagation();
+    box.hidden = true;
+  };
+}
+
+async function applyVoicePreset(presetId) {
+  activeVoicePreset = presetId;
+  if (!localStream) return;
+  const origAudioTrack = localStream.getAudioTracks()[0];
+  if (!origAudioTrack) return;
+
+  try {
+    if (presetId === 'normal') {
+      // ओरिजिनल ट्रैक पर वापस जाएँ
+      for (const pId of Object.keys(peerConnections)) {
+        const pc = peerConnections[pId];
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+        if (sender) await sender.replaceTrack(origAudioTrack);
+      }
+      toast('👤 सामान्य आवाज़ चालू');
+      return;
+    }
+
+    if (!voiceAudioCtx) {
+      voiceAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (voiceAudioCtx.state === 'suspended') await voiceAudioCtx.resume();
+
+    // पुराने ग्राफ नोड्स को साफ़ करें
+    if (voiceOscillatorNode) {
+      try { voiceOscillatorNode.stop(); voiceOscillatorNode.disconnect(); } catch(e){}
+      voiceOscillatorNode = null;
+    }
+    if (voiceSourceNode) {
+      try { voiceSourceNode.disconnect(); } catch(e){}
+    }
+
+    const audioStream = new MediaStream([origAudioTrack]);
+    voiceSourceNode = voiceAudioCtx.createMediaStreamSource(audioStream);
+    voiceDestinationNode = voiceAudioCtx.createMediaStreamDestination();
+
+    let lastNode = voiceSourceNode;
+
+    if (presetId === 'cartoon') {
+      // चिपमंक / कार्टून: हाई-पास + 3.2kHz ट्रेबल पीक
+      const hp = voiceAudioCtx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 450;
+      const peak = voiceAudioCtx.createBiquadFilter();
+      peak.type = 'peaking'; peak.frequency.value = 3200; peak.gain.value = 14; peak.Q.value = 2.0;
+      lastNode.connect(hp); hp.connect(peak); lastNode = peak;
+    } 
+    else if (presetId === 'robot') {
+      // रोबोट: 60Hz रिंग-मॉड्यूलेशन
+      const ringGain = voiceAudioCtx.createGain(); ringGain.gain.value = 0.5;
+      const osc = voiceAudioCtx.createOscillator();
+      const oscGain = voiceAudioCtx.createGain();
+      osc.type = 'sawtooth'; osc.frequency.value = 75;
+      oscGain.gain.value = 0.7;
+      osc.connect(oscGain); oscGain.connect(ringGain.gain);
+      osc.start(); voiceOscillatorNode = osc;
+      lastNode.connect(ringGain); lastNode = ringGain;
+    } 
+    else if (presetId === 'monster') {
+      // मॉन्स्टर / भारी शेर: 100Hz डीप बास बूस्ट + लो-पास 1000Hz
+      const lp = voiceAudioCtx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 950;
+      const bass = voiceAudioCtx.createBiquadFilter();
+      bass.type = 'peaking'; bass.frequency.value = 110; bass.gain.value = 16; bass.Q.value = 1.2;
+      lastNode.connect(lp); lp.connect(bass); lastNode = bass;
+    } 
+    else if (presetId === 'girl') {
+      // लड़की की आवाज़: ब्राइट टोन, 3kHz प्रेजेंस बूस्ट, लो कट
+      const lowCut = voiceAudioCtx.createBiquadFilter();
+      lowCut.type = 'highpass'; lowCut.frequency.value = 300;
+      const highPeak = voiceAudioCtx.createBiquadFilter();
+      highPeak.type = 'peaking'; highPeak.frequency.value = 2800; highPeak.gain.value = 10; highPeak.Q.value = 1.5;
+      const shelf = voiceAudioCtx.createBiquadFilter();
+      shelf.type = 'highshelf'; shelf.frequency.value = 5000; shelf.gain.value = 8;
+      lastNode.connect(lowCut); lowCut.connect(highPeak); highPeak.connect(shelf); lastNode = shelf;
+    } 
+    else if (presetId === 'man') {
+      // एडल्ट पुरुष: चेस्ट रेजोनेंस 140Hz बूस्ट + 4kHz से ऊपर कट
+      const chest = voiceAudioCtx.createBiquadFilter();
+      chest.type = 'peaking'; chest.frequency.value = 140; chest.gain.value = 12; chest.Q.value = 1.0;
+      const warm = voiceAudioCtx.createBiquadFilter();
+      warm.type = 'peaking'; warm.frequency.value = 450; warm.gain.value = 5; warm.Q.value = 1.5;
+      const tameHigh = voiceAudioCtx.createBiquadFilter();
+      tameHigh.type = 'lowpass'; tameHigh.frequency.value = 3500;
+      lastNode.connect(chest); chest.connect(warm); warm.connect(tameHigh); lastNode = tameHigh;
+    }
+
+    lastNode.connect(voiceDestinationNode);
+    const modTrack = voiceDestinationNode.stream.getAudioTracks()[0];
+
+    // सभी पीयर्स को नया मॉड्युलेटेड ऑडियो ट्रैक भेजें
+    for (const pId of Object.keys(peerConnections)) {
+      const pc = peerConnections[pId];
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+      if (sender) await sender.replaceTrack(modTrack);
+    }
+    toast(`🎙️ आवाज़ बदली: ${VOICE_PRESETS.find(x => x.id === presetId)?.name}`);
+  } catch(e) {
+    console.warn("Voice modulator error:", e);
+  }
+}
+
+$('trayBtnVoiceChanger').onclick = (e) => {
+  e.stopPropagation();
+  $('funModeTray').hidden = true;
+  if (!activeCallId || !isCallConnected) {
+    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही वॉइस चेंजर खोलें' : 'Connect call to change voice');
+    return;
+  }
+  ensureVoiceChangerDOM();
+  $('voiceChangerBox').hidden = !$('voiceChangerBox').hidden;
+};
+// ===================================================
+// [यहाँ पर समाप्त: 🎙️ मॉड्यूल LIVE VOICE CHANGER (6 PRESETS)]
+// ===================================================
+
 $('trayBtnColoring').onclick = (e) => {
   e.stopPropagation();
   toast(currentLang === 'hi' ? '🖍️ कलरिंग बुक अगले अपडेट में आएगी!' : '🖍️ Coloring book coming soon!');
-};
-$('trayBtnAnnotation').onclick = (e) => {
-  e.stopPropagation();
-  toast(currentLang === 'hi' ? '✨ लाइव वीडियो ड्रॉइंग अगले अपडेट में!' : '✨ Live drawing coming soon!');
-};
-$('trayBtnVoiceChanger').onclick = (e) => {
-  e.stopPropagation();
-  toast(currentLang === 'hi' ? '🎙️ वॉइस चेंजर अगले अपडेट में!' : '🎙️ Voice changer coming soon!');
 };
 $('trayBtnReactions').onclick = (e) => {
   e.stopPropagation();
@@ -2349,16 +2705,29 @@ function cleanupKidsModules() {
   if (canvasSessionUnsub) { canvasSessionUnsub(); canvasSessionUnsub = null; }
   if (whiteboardSyncUnsub) { whiteboardSyncUnsub(); whiteboardSyncUnsub = null; }
   if (tttSessionUnsub) { tttSessionUnsub(); tttSessionUnsub = null; }
+  if (annotSessionUnsub) { annotSessionUnsub(); annotSessionUnsub = null; }
+
+  // वॉइस चेंजर रीसेट
+  if (voiceOscillatorNode) {
+    try { voiceOscillatorNode.stop(); voiceOscillatorNode.disconnect(); } catch(e){}
+    voiceOscillatorNode = null;
+  }
+  activeVoicePreset = 'normal';
+
   const box = $('kidsQuizBox');
   if (box) box.hidden = true;
   const wb = $('kidsWhiteboardModal');
   if (wb) wb.hidden = true;
   const ttt = $('kidsTictactoeBox');
   if (ttt) ttt.hidden = true;
+  const annot = $('liveAnnotationOverlay');
+  if (annot) annot.hidden = true;
+  const vc = $('voiceChangerBox');
+  if (vc) vc.hidden = true;
   if ($('funModeTray')) $('funModeTray').hidden = true;
-  if (ctx && canvasEl) {
-    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-  }
+
+  if (ctx && canvasEl) ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  if (annotCtx && annotCanvasEl) annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
   isScreenSharing = false;
 }
 
@@ -2380,6 +2749,7 @@ async function joinCallSession() {
   listenRemoteCanvas();
   listenWhiteboardAutoSync();
   listenTictactoeSession();
+  listenRemoteAnnotation();
 
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
   onDisconnect(sessionRef).update({ status: 'ended' });
@@ -2544,7 +2914,10 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen) {
+    const isAnnotOpen = $('liveAnnotationOverlay') && !$('liveAnnotationOverlay').hidden;
+    const isVcOpen = $('voiceChangerBox') && !$('voiceChangerBox').hidden;
+
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen && !isAnnotOpen && !isVcOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -2552,7 +2925,7 @@ function scheduleAutoHide() {
 }
 
 callScreen.addEventListener('click', e => {
-  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox')) return;
+  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox') || e.target.closest('#voiceChangerBox') || e.target.closest('.annotation-toolbar')) return;
   const isH = controlsBar.classList.contains('fade-out');
   controlsBar.classList.toggle('fade-out', !isH);
   $('callTopBar').classList.toggle('fade-out', !isH);
@@ -2709,12 +3082,9 @@ function setupHardwareBackButton() {
         return;
       }
     }
-    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) {
-      closeTictactoeGame();
-      history.pushState(null, '', window.location.href);
-      e.preventDefault();
-      return;
-    }
+    if ($('voiceChangerBox') && !$('voiceChangerBox').hidden) {$('voiceChangerBox').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('liveAnnotationOverlay') && !$('liveAnnotationOverlay').hidden) { closeLiveAnnotation(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
@@ -2735,6 +3105,8 @@ function setupHardwareBackButton() {
     if (Date.now() < ignoreBackUntil) return;
     const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
+    if ($('voiceChangerBox') && !$('voiceChangerBox').hidden) {$('voiceChangerBox').hidden = true; return; }
+    if ($('liveAnnotationOverlay') && !$('liveAnnotationOverlay').hidden) { closeLiveAnnotation(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
