@@ -1691,7 +1691,6 @@ async function fetchQuizQuestions() {
   return null;
 }
 
-// 15-सेकंड उल्टी गिनती टाइमर बार
 function startQuizTimerBar(durationSec = 15) {
   stopQuizTimerBar();
   const bar = $('quizTimerBar');
@@ -1715,7 +1714,6 @@ function startQuizTimerBar(durationSec = 15) {
       quizTimerInterval = null;
       playOopsSound();
       toast(currentLang === 'hi' ? '⏱ समय समाप्त हो गया!' : '⏱ Time up!');
-      // समय समाप्त होने पर ऑप्शन्स डिसेबल
       document.querySelectorAll('.quiz-opt-btn').forEach(b => { b.disabled = true; });
     }
   }, 1000);
@@ -1786,7 +1784,6 @@ function initKidsQuizListener() {
     if (!optsArea) return;
     optsArea.innerHTML = '';
 
-    // यदि उत्तर नहीं दिया गया तो 15s टाइमर शुरू करें, अन्यथा रोकें
     if (!qState.selectedAnswer) {
       startQuizTimerBar(15);
     } else {
@@ -1973,7 +1970,6 @@ function listenRemoteCanvas() {
   });
 }
 
-// 2-वे ऑटो सिंक: दोनों फ़ोनों पर वाइटबोर्ड एक साथ खुलेगा और बंद होगा
 function listenWhiteboardAutoSync() {
   if (!activeCallId) return;
   if (whiteboardSyncUnsub) whiteboardSyncUnsub();
@@ -2020,14 +2016,12 @@ document.querySelectorAll('.color-dot').forEach(btn => {
   };
 });
 
-// इरेज़र टूल
 $('eraserBtn').onclick = (e) => {
   e.stopPropagation();
   isEraserActive = !isEraserActive;
   $('eraserBtn').classList.toggle('active', isEraserActive);
 };
 
-// ब्रश साइज़ टॉगल (2px -> 4px -> 8px -> 16px)
 const brushSizes = [2, 4, 8, 16];
 let brushIdx = 1;
 $('brushSizeBtn').onclick = (e) => {
@@ -2037,7 +2031,6 @@ $('brushSizeBtn').onclick = (e) => {
   $('brushSizeBtn').textContent = `✏️ ${currentLineWidth}px`;
 };
 
-// 4-लाइन नोटबुक ग्रिड बैकग्राउंड टॉगल
 $('gridBgBtn').onclick = (e) => {
   e.stopPropagation();
   const wrap = $('whiteboardCanvasWrap');
@@ -2073,14 +2066,233 @@ $('btnWhiteboard').onclick = (e) => {
   scheduleAutoHide();
 };
 
-// फन मोड के आगामी टूल्स के प्लेसहोल्डर
+// ===================================================
+// [यहाँ से शुरू: ❌⭕ मॉड्यूल TIC-TAC-TOE 2-PLAYER ENGINE]
+// ===================================================
+let tttSessionUnsub = null;
+let lastAnnouncedTttWinId = null;
+
+const TTT_WIN_LINES = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
+];
+
+function checkTttWinner(board) {
+  for (let line of TTT_WIN_LINES) {
+    const [a, b, c] = line;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return { winner: board[a], pattern: line };
+    }
+  }
+  if (board.every(cell => cell !== "")) {
+    return { winner: 'draw', pattern: [] };
+  }
+  return null;
+}
+
+function ensureTictactoeDOM() {
+  if ($('kidsTictactoeBox')) return;
+  const box = document.createElement('div');
+  box.id = 'kidsTictactoeBox';
+  box.className = 'ttt-floating-box';
+  box.hidden = true;
+  box.innerHTML = `
+    <div class="ttt-header">
+      <div class="ttt-title">❌⭕ टिक-टैक-टो (Zero-Kaata)</div>
+      <button id="closeTttBtn" class="ttt-close-btn" title="बंद करें">✕</button>
+    </div>
+    <div id="tttStatusBar" class="ttt-status-bar">खेल शुरू हो रहा है...</div>
+    <div id="tttGrid" class="ttt-grid"></div>
+    <button id="tttResetBtn" class="ttt-reset-btn">🔄 नया खेल (New Game)</button>
+  `;
+  callScreen.appendChild(box);
+
+  const grid = box.querySelector('#tttGrid');
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('button');
+    cell.className = 'ttt-cell';
+    cell.dataset.index = i;
+    cell.onclick = (e) => { e.stopPropagation(); handleTttCellClick(i); };
+    grid.appendChild(cell);
+  }
+
+  box.querySelector('#closeTttBtn').onclick = (e) => {
+    e.stopPropagation();
+    closeTictactoeGame();
+  };
+
+  box.querySelector('#tttResetBtn').onclick = (e) => {
+    e.stopPropagation();
+    resetTictactoeGame();
+  };
+}
+
+async function startOrToggleTictactoe() {
+  if (!activeCallId || !isCallConnected) {
+    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही खेल शुरू करें' : 'Connect call to play');
+    return;
+  }
+  ensureTictactoeDOM();
+  const tttRef = ref(db, `call_sessions/${activeCallId}/tictactoe_state`);
+  const snap = await get(tttRef);
+  const cur = snap.val();
+
+  if (!cur || !cur.active) {
+    const remoteId = Object.keys(peerConnections)[0] || currentCallTargetId || 'remote_user';
+    await set(tttRef, {
+      active: true,
+      board: Array(9).fill(""),
+      currentTurn: "X",
+      playerX: myUserId,
+      playerO: remoteId,
+      winner: null,
+      winPattern: [],
+      updatedAt: Date.now()
+    });
+  } else {
+    $('kidsTictactoeBox').hidden = !$('kidsTictactoeBox').hidden;
+  }
+}
+
+function listenTictactoeSession() {
+  if (!activeCallId) return;
+  if (tttSessionUnsub) tttSessionUnsub();
+  ensureTictactoeDOM();
+
+  const tttRef = ref(db, `call_sessions/${activeCallId}/tictactoe_state`);
+  tttSessionUnsub = onValue(tttRef, snap => {
+    const state = snap.val();
+    const box = $('kidsTictactoeBox');
+    if (!box) return;
+
+    if (!state || !state.active) {
+      box.hidden = true;
+      return;
+    }
+
+    box.hidden = false;
+    $('funModeTray').hidden = true;
+    controlsBar.classList.add('fade-out');
+
+    const board = state.board || Array(9).fill("");
+    const winPattern = state.winPattern || [];
+    const mySymbol = (myUserId === state.playerX) ? 'X' : 'O';
+    const isMyTurn = (state.currentTurn === mySymbol) && !state.winner;
+
+    const cells = box.querySelectorAll('.ttt-cell');
+    cells.forEach((cell, idx) => {
+      const val = board[idx] || "";
+      cell.textContent = val;
+      cell.className = 'ttt-cell';
+      if (val === 'X') cell.classList.add('val-x');
+      else if (val === 'O') cell.classList.add('val-o');
+      if (winPattern.includes(idx)) cell.classList.add('win-highlight');
+      cell.disabled = (val !== "" || !isMyTurn || !!state.winner);
+    });
+
+    const statusEl = $('tttStatusBar');
+    if (statusEl) {
+      statusEl.className = 'ttt-status-bar';
+      if (state.winner) {
+        statusEl.classList.add('win');
+        if (state.winner === 'draw') {
+          statusEl.textContent = '🤝 खेल बराबरी (Draw) पर समाप्त हुआ!';
+        } else if (state.winner === mySymbol) {
+          statusEl.textContent = `🎉 बधाई हो! आप (${mySymbol}) जीत गए!`;
+          if (lastAnnouncedTttWinId !== state.updatedAt) {
+            playCheerSound();
+            lastAnnouncedTttWinId = state.updatedAt;
+          }
+        } else {
+          statusEl.textContent = `सामने वाला (${state.winner}) जीत गया!`;
+          if (lastAnnouncedTttWinId !== state.updatedAt) {
+            playOopsSound();
+            lastAnnouncedTttWinId = state.updatedAt;
+          }
+        }
+      } else {
+        if (isMyTurn) {
+          statusEl.classList.add('my-turn');
+          statusEl.textContent = `आपकी चाल है (${mySymbol}) - डिब्बा चुनें!`;
+        } else {
+          statusEl.classList.add('their-turn');
+          const oppSymbol = mySymbol === 'X' ? 'O' : 'X';
+          statusEl.textContent = `सामने वाले (${oppSymbol}) की चाल का इंतज़ार...`;
+        }
+      }
+    }
+  });
+}
+
+async function handleTttCellClick(index) {
+  if (!activeCallId) return;
+  const tttRef = ref(db, `call_sessions/${activeCallId}/tictactoe_state`);
+  const snap = await get(tttRef);
+  const state = snap.val();
+  if (!state || !state.active || state.winner) return;
+
+  const board = state.board || Array(9).fill("");
+  const mySymbol = (myUserId === state.playerX) ? 'X' : 'O';
+
+  if (state.currentTurn !== mySymbol) {
+    toast(currentLang === 'hi' ? 'अभी आपकी बारी नहीं है!' : 'Not your turn!');
+    return;
+  }
+  if (board[index] !== "") return;
+
+  board[index] = mySymbol;
+  playMessageTickSound();
+
+  const outcome = checkTttWinner(board);
+  const nextTurn = mySymbol === 'X' ? 'O' : 'X';
+
+  await update(tttRef, {
+    board,
+    currentTurn: nextTurn,
+    winner: outcome ? outcome.winner : null,
+    winPattern: outcome ? outcome.pattern : [],
+    updatedAt: Date.now()
+  });
+}
+
+async function resetTictactoeGame() {
+  if (!activeCallId) return;
+  const tttRef = ref(db, `call_sessions/${activeCallId}/tictactoe_state`);
+  const snap = await get(tttRef);
+  const cur = snap.val();
+  if (!cur) return;
+
+  await update(tttRef, {
+    board: Array(9).fill(""),
+    currentTurn: "X",
+    winner: null,
+    winPattern: [],
+    updatedAt: Date.now()
+  });
+  toast(currentLang === 'hi' ? 'नया खेल शुरू हुआ!' : 'New game started!');
+}
+
+async function closeTictactoeGame() {
+  if (activeCallId) {
+    await update(ref(db, `call_sessions/${activeCallId}/tictactoe_state`), { active: false }).catch(()=>{});
+  }
+  const box = $('kidsTictactoeBox');
+  if (box) box.hidden = true;
+}
+
+$('trayBtnTictactoe').onclick = (e) => {
+  e.stopPropagation();
+  $('funModeTray').hidden = true;
+  startOrToggleTictactoe();
+};
+// ===================================================
+// [यहाँ पर समाप्त: ❌⭕ मॉड्यूल TIC-TAC-TOE 2-PLAYER ENGINE]
+// ===================================================
+
 $('trayBtnColoring').onclick = (e) => {
   e.stopPropagation();
   toast(currentLang === 'hi' ? '🖍️ कलरिंग बुक अगले अपडेट में आएगी!' : '🖍️ Coloring book coming soon!');
-};
-$('trayBtnTictactoe').onclick = (e) => {
-  e.stopPropagation();
-  toast(currentLang === 'hi' ? '❌⭕ टिक-टैक-टो अगले अपडेट में आएगा!' : '❌⭕ Tic-Tac-Toe coming soon!');
 };
 $('trayBtnAnnotation').onclick = (e) => {
   e.stopPropagation();
@@ -2095,7 +2307,6 @@ $('trayBtnReactions').onclick = (e) => {
   toast(currentLang === 'hi' ? '🎉 लाइव रिएक्शन अगले अपडेट में!' : '🎉 Live reactions coming soon!');
 };
 
-// स्क्रीन शेयरिंग हैंडलर
 $('trayBtnScreenShare').onclick = async (e) => {
   e.stopPropagation();
   $('funModeTray').hidden = true;
@@ -2137,10 +2348,13 @@ function cleanupKidsModules() {
   if (quizSessionUnsub) { quizSessionUnsub(); quizSessionUnsub = null; }
   if (canvasSessionUnsub) { canvasSessionUnsub(); canvasSessionUnsub = null; }
   if (whiteboardSyncUnsub) { whiteboardSyncUnsub(); whiteboardSyncUnsub = null; }
+  if (tttSessionUnsub) { tttSessionUnsub(); tttSessionUnsub = null; }
   const box = $('kidsQuizBox');
   if (box) box.hidden = true;
   const wb = $('kidsWhiteboardModal');
   if (wb) wb.hidden = true;
+  const ttt = $('kidsTictactoeBox');
+  if (ttt) ttt.hidden = true;
   if ($('funModeTray')) $('funModeTray').hidden = true;
   if (ctx && canvasEl) {
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
@@ -2165,6 +2379,7 @@ async function joinCallSession() {
   initKidsQuizListener();
   listenRemoteCanvas();
   listenWhiteboardAutoSync();
+  listenTictactoeSession();
 
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
   onDisconnect(sessionRef).update({ status: 'ended' });
@@ -2328,7 +2543,8 @@ pipRestoreBtn.onclick = e => { e.stopPropagation(); pipWrap.classList.remove('pi
 function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden) {
+    const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -2336,7 +2552,7 @@ function scheduleAutoHide() {
 }
 
 callScreen.addEventListener('click', e => {
-  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray')) return;
+  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox')) return;
   const isH = controlsBar.classList.contains('fade-out');
   controlsBar.classList.toggle('fade-out', !isH);
   $('callTopBar').classList.toggle('fade-out', !isH);
@@ -2358,7 +2574,6 @@ $('camBtn').onclick = async (e) => {
   scheduleAutoHide();
 };
 
-// लाउडस्पीकर एवं हियरिंग स्पीकर स्विचिंग
 $('speakerBtn').onclick = (e) => {
   e.stopPropagation(); speakerEnabled = !speakerEnabled;
   remoteGrid.querySelectorAll('video').forEach(v => { v.muted = !speakerEnabled; });
@@ -2494,6 +2709,12 @@ function setupHardwareBackButton() {
         return;
       }
     }
+    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) {
+      closeTictactoeGame();
+      history.pushState(null, '', window.location.href);
+      e.preventDefault();
+      return;
+    }
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
@@ -2514,6 +2735,7 @@ function setupHardwareBackButton() {
     if (Date.now() < ignoreBackUntil) return;
     const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
+    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
