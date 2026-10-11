@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#090d10">
 <link rel="manifest" href="manifest.json">
 
-<!-- डायनामिक OTA स्टाइल (मेमोरी से लाइव CSS लोड करेगा) -->
+<!-- डायनामिक OTA स्टाइल -->
 <link rel="stylesheet" href="style.css" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
@@ -214,7 +214,7 @@
   <div class="pip-wrap mirror" id="pipWrap"><video id="localVideo" autoplay playsinline muted></video></div>
   <button id="pipRestoreBtn" class="pip-restore-btn" hidden>‹ 📹</button>
 
-  <!-- टॉप कंट्रोल बार -->
+  <!-- टॉप कंट्रोल बार: सदस्य जोड़ें, कैमरा पलटें और ऑडियो/वीडियो मोड बटन -->
   <div class="call-top-bar" id="callTopBar">
     <div class="top-pill" id="topPill">
       <div class="timer-pill" id="callTimer">00:00</div>
@@ -224,6 +224,9 @@
       <button class="top-action-btn" id="btnAddPerson" title="सदस्य जोड़ें">
         <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       </button>
+      <button class="top-action-btn" id="flipBtn" title="कैमरा पलटें">
+        <svg viewBox="0 0 24 24"><path d="M9 12c0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3-3 1.34-3 3zm11-4h-3.17L15 6H9L7.17 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm-8 10c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+      </button>
       <button class="top-action-btn" id="audioModeBtn" title="मोड बदलें">
         <span id="audioModeIco">
           <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
@@ -232,7 +235,7 @@
     </div>
   </div>
 
-  <!-- 🪄 फन मोड बॉटम स्लाइड-अप ट्रे -->
+  <!-- 🪄 फन मोड बॉटम स्लाइड-अप ट्रे: केवल 3 टूल्स -->
   <div id="funModeTray" class="fun-tray-modal" hidden>
     <div class="fun-tray-content">
       <div class="fun-tray-header">
@@ -248,33 +251,9 @@
           <span class="tray-icon">🎨</span>
           <span class="tray-label">वाइटबोर्ड</span>
         </button>
-        <button class="tray-item" id="trayBtnColoring">
-          <span class="tray-icon">🖍️</span>
-          <span class="tray-label">कलरिंग बुक</span>
-        </button>
         <button class="tray-item" id="trayBtnTictactoe">
           <span class="tray-icon">❌⭕</span>
           <span class="tray-label">टिक-टैक-टो</span>
-        </button>
-        <button class="tray-item" id="trayBtnAnnotation">
-          <span class="tray-icon">✨</span>
-          <span class="tray-label">लाइव ड्रॉइंग</span>
-        </button>
-        <button class="tray-item" id="trayBtnVoiceChanger">
-          <span class="tray-icon">🎙️</span>
-          <span class="tray-label">वॉइस चेंजर</span>
-        </button>
-        <button class="tray-item" id="trayBtnReactions">
-          <span class="tray-icon">🎉</span>
-          <span class="tray-label">रिएक्शन</span>
-        </button>
-        <button class="tray-item" id="trayBtnScreenShare">
-          <span class="tray-icon">🖥️</span>
-          <span class="tray-label">स्क्रीन शेयर</span>
-        </button>
-        <button class="tray-item" id="flipBtn">
-          <span class="tray-icon">🔄</span>
-          <span class="tray-label">कैमरा पलटें</span>
         </button>
       </div>
     </div>

@@ -135,7 +135,6 @@ const MAX_CALL_MEMBERS = 4;
 let qualityLevel = 'high', qualityTimer = null, wakeLock = null, vibrationInterval = null;
 let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
-let isScreenSharing = false;
 
 // ===================================================
 // हार्डवेयर ऑडियो कंट्रोल (Loudspeaker / Earpiece Bridge)
@@ -1437,7 +1436,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
   
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
-  onDisconnect(sessionRef).update({ status: 'ended' });
 
   await set(sessionRef, {
     callId: activeCallId, callerId: myUserId, callerName: myUserName, targetId: remoteId, audioOnly: !!audioOnly, status: 'calling', createdAt: serverTimestamp()
@@ -2322,426 +2320,12 @@ $('trayBtnTictactoe').onclick = (e) => {
 // [यहाँ पर समाप्त: ❌⭕ मॉड्यूल 3 - टिक-टैक-टो 2-प्लेयर इंजन]
 // ===================================================
 
-// ===================================================
-// [यहाँ से शुरू: ✨ मॉड्यूल 4 - लाइव वीडियो ड्रॉइंग (Annotation)]
-// ===================================================
-let annotCanvasEl = null;
-let annotCtx = null;
-let isAnnotDrawing = false;
-let annotColor = '#f59e0b';
-let annotSessionUnsub = null;
-let annotEventsAttached = false;
-let annotDisappearTimer = null;
-
-function ensureAnnotationDOM() {
-  if ($('liveAnnotationOverlay')) return;
-  const overlay = document.createElement('div');
-  overlay.id = 'liveAnnotationOverlay';
-  overlay.className = 'annotation-overlay';
-  overlay.hidden = true;
-  overlay.innerHTML = `
-    <canvas id="annotationCanvas"></canvas>
-    <div class="annotation-toolbar" id="annotToolbar">
-      <div style="display:flex;align-items:center;gap:6px">
-        <button class="annot-color-dot active" data-color="#f59e0b" style="background:#f59e0b"></button>
-        <button class="annot-color-dot" data-color="#ef4444" style="background:#ef4444"></button>
-        <button class="annot-color-dot" data-color="#38bdf8" style="background:#38bdf8"></button>
-        <button class="annot-color-dot" data-color="#22c55e" style="background:#22c55e"></button>
-      </div>
-      <button id="annotClearBtn" class="annot-btn annot-btn-clear">🗑️ साफ़</button>
-      <button id="annotCloseBtn" class="annot-btn annot-btn-close">✕</button>
-    </div>
-  `;
-  callScreen.appendChild(overlay);
-
-  overlay.querySelectorAll('.annot-color-dot').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      overlay.querySelectorAll('.annot-color-dot').forEach(d => d.classList.remove('active'));
-      btn.classList.add('active');
-      annotColor = btn.dataset.color || '#f59e0b';
-    };
-  });
-
-  overlay.querySelector('#annotClearBtn').onclick = (e) => {
-    e.stopPropagation();
-    clearLiveAnnotation();
-  };
-
-  overlay.querySelector('#annotCloseBtn').onclick = (e) => {
-    e.stopPropagation();
-    closeLiveAnnotation();
-  };
-}
-
-function initLiveAnnotation() {
-  ensureAnnotationDOM();
-  annotCanvasEl = $('annotationCanvas');
-  if (!annotCanvasEl) return;
-  annotCtx = annotCanvasEl.getContext('2d');
-
-  function resizeAnnotCanvas() {
-    if (!annotCanvasEl) return;
-    annotCanvasEl.width = annotCanvasEl.offsetWidth || window.innerWidth;
-    annotCanvasEl.height = annotCanvasEl.offsetHeight || window.innerHeight;
-  }
-  setTimeout(resizeAnnotCanvas, 50);
-
-  if (!annotEventsAttached) {
-    const getPoint = (e) => {
-      const rect = annotCanvasEl.getBoundingClientRect();
-      return {
-        x: (e.clientX - rect.left) / rect.width,
-        y: (e.clientY - rect.top) / rect.height
-      };
-    };
-
-    annotCanvasEl.addEventListener('pointerdown', (e) => {
-      isAnnotDrawing = true;
-      const pt = getPoint(e);
-      broadcastAnnotPoint(pt.x, pt.y, 'start');
-    });
-
-    annotCanvasEl.addEventListener('pointermove', (e) => {
-      if (!isAnnotDrawing) return;
-      const pt = getPoint(e);
-      broadcastAnnotPoint(pt.x, pt.y, 'draw');
-    });
-
-    const stopAnnot = () => {
-      if (!isAnnotDrawing) return;
-      isAnnotDrawing = false;
-      broadcastAnnotPoint(0, 0, 'stop');
-    };
-
-    annotCanvasEl.addEventListener('pointerup', stopAnnot);
-    annotCanvasEl.addEventListener('pointercancel', stopAnnot);
-    annotEventsAttached = true;
-  }
-
-  listenRemoteAnnotation();
-}
-
-function broadcastAnnotPoint(x, y, action) {
-  if (!activeCallId) return;
-  set(ref(db, `call_sessions/${activeCallId}/annotation_draw`), {
-    x, y, action, color: annotColor, sender: myUserId, ts: Date.now()
-  }).catch(()=>{});
-}
-
-function listenRemoteAnnotation() {
-  if (!activeCallId) return;
-  if (annotSessionUnsub) annotSessionUnsub();
-
-  annotSessionUnsub = onValue(ref(db, `call_sessions/${activeCallId}/annotation_draw`), snap => {
-    const pt = snap.val();
-    if (!pt || !annotCtx || !annotCanvasEl) return;
-
-    const absX = pt.x * annotCanvasEl.width;
-    const absY = pt.y * annotCanvasEl.height;
-
-    annotCtx.strokeStyle = pt.color || '#f59e0b';
-    annotCtx.lineWidth = 5;
-    annotCtx.lineCap = 'round';
-    annotCtx.lineJoin = 'round';
-
-    if (pt.action === 'start') {
-      annotCtx.beginPath();
-      annotCtx.moveTo(absX, absY);
-    } else if (pt.action === 'draw') {
-      annotCtx.lineTo(absX, absY);
-      annotCtx.stroke();
-    } else if (pt.action === 'stop') {
-      annotCtx.closePath();
-      clearTimeout(annotDisappearTimer);
-      annotDisappearTimer = setTimeout(() => {
-        if (annotCtx && annotCanvasEl) {
-          annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
-        }
-      }, 3500);
-    } else if (pt.action === 'clear') {
-      annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
-    }
-  });
-
-  onValue(ref(db, `call_sessions/${activeCallId}/annotation_active`), snap => {
-    const isActive = !!snap.val();
-    const overlay = $('liveAnnotationOverlay');
-    if (!overlay) return;
-    if (isActive) {
-      if (overlay.hidden) {
-        overlay.hidden = false;
-        initLiveAnnotation();
-        controlsBar.classList.add('fade-out');
-      }
-    } else {
-      overlay.hidden = true;
-    }
-  });
-}
-
-function clearLiveAnnotation() {
-  if (annotCtx && annotCanvasEl) annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
-  if (activeCallId) {
-    set(ref(db, `call_sessions/${activeCallId}/annotation_draw`), { action: 'clear', ts: Date.now() }).catch(()=>{});
-  }
-}
-
-function closeLiveAnnotation() {
-  if (activeCallId) {
-    update(ref(db, `call_sessions/${activeCallId}`), { annotation_active: false }).catch(()=>{});
-  }
-  const overlay = $('liveAnnotationOverlay');
-  if (overlay) overlay.hidden = true;
-}
-
-$('trayBtnAnnotation').onclick = (e) => {
-  e.stopPropagation();
-  $('funModeTray').hidden = true;
-  if (!activeCallId || !isCallConnected) {
-    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही ड्रॉइंग चालू करें' : 'Connect call to draw');
-    return;
-  }
-  ensureAnnotationDOM();
-  const overlay = $('liveAnnotationOverlay');
-  const willOpen = overlay.hidden;
-  update(ref(db, `call_sessions/${activeCallId}`), { annotation_active: willOpen }).catch(()=>{});
-};
-// ===================================================
-// [यहाँ पर समाप्त: ✨ मॉड्यूल 4 - लाइव वीडियो ड्रॉइंग (Annotation)]
-// ===================================================
-
-// ===================================================
-// [यहाँ से शुरू: 🎙️ मॉड्यूल 5 - लाइव वॉइस चेंजर (6 प्रेसेट्स)]
-// ===================================================
-let voiceAudioCtx = null;
-let voiceSourceNode = null;
-let voiceDestinationNode = null;
-let voiceOscillatorNode = null;
-let activeVoicePreset = 'normal';
-
-const VOICE_PRESETS = [
-  { id: 'normal', name: 'सामान्य', sub: 'Original Voice', icon: '👤' },
-  { id: 'cartoon', name: 'कार्टून / चिपमंक', sub: 'High Pitch Cute', icon: '🐿️' },
-  { id: 'robot', name: 'रोबोट', sub: 'Metallic Ring Mod', icon: '🤖' },
-  { id: 'monster', name: 'मॉन्स्टर / शेर', sub: 'Heavy Bass Roar', icon: '👹' },
-  { id: 'girl', name: 'लड़की', sub: 'Bright Sweet Tone', icon: '👧' },
-  { id: 'man', name: 'एडल्ट पुरुष', sub: 'Deep Chest Voice', icon: '👨' }
-];
-
-function ensureVoiceChangerDOM() {
-  if ($('voiceChangerBox')) return;
-  const box = document.createElement('div');
-  box.id = 'voiceChangerBox';
-  box.className = 'voice-changer-box';
-  box.hidden = true;
-  box.innerHTML = `
-    <div class="vc-header">
-      <div class="vc-title">🎙️ वॉइस चेंजर (6 साउंड प्रेसेट्स)</div>
-      <button id="closeVcBtn" class="vc-close-btn" title="बंद करें">✕</button>
-    </div>
-    <div class="vc-grid" id="vcGrid"></div>
-  `;
-  callScreen.appendChild(box);
-
-  const grid = box.querySelector('#vcGrid');
-  VOICE_PRESETS.forEach(p => {
-    const btn = document.createElement('button');
-    btn.className = `vc-preset-btn ${p.id === activeVoicePreset ? 'active' : ''}`;
-    btn.dataset.preset = p.id;
-    btn.innerHTML = `
-      <span class="vc-icon">${p.icon}</span>
-      <div class="vc-label-group">
-        <span class="vc-label">${p.name}</span>
-        <span class="vc-sublabel">${p.sub}</span>
-      </div>
-    `;
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      box.querySelectorAll('.vc-preset-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      applyVoicePreset(p.id);
-    };
-    grid.appendChild(btn);
-  });
-
-  box.querySelector('#closeVcBtn').onclick = (e) => {
-    e.stopPropagation();
-    box.hidden = true;
-  };
-}
-
-async function applyVoicePreset(presetId) {
-  activeVoicePreset = presetId;
-  if (!localStream) return;
-  const origAudioTrack = localStream.getAudioTracks()[0];
-  if (!origAudioTrack) return;
-
-  try {
-    if (presetId === 'normal') {
-      for (const pId of Object.keys(peerConnections)) {
-        const pc = peerConnections[pId];
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
-        if (sender) await sender.replaceTrack(origAudioTrack);
-      }
-      toast('👤 सामान्य आवाज़ चालू');
-      return;
-    }
-
-    // WebRTC Opus के लिए 48kHz ऑडियो कॉन्टेक्स्ट
-    if (!voiceAudioCtx) {
-      voiceAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-    }
-    if (voiceAudioCtx.state === 'suspended') await voiceAudioCtx.resume();
-
-    if (voiceOscillatorNode) {
-      try { voiceOscillatorNode.stop(); voiceOscillatorNode.disconnect(); } catch(e){}
-      voiceOscillatorNode = null;
-    }
-    if (voiceSourceNode) {
-      try { voiceSourceNode.disconnect(); } catch(e){}
-    }
-
-    const audioStream = new MediaStream([origAudioTrack]);
-    voiceSourceNode = voiceAudioCtx.createMediaStreamSource(audioStream);
-    voiceDestinationNode = voiceAudioCtx.createMediaStreamDestination();
-
-    let lastNode = voiceSourceNode;
-
-    if (presetId === 'cartoon') {
-      const hp = voiceAudioCtx.createBiquadFilter();
-      hp.type = 'highpass'; hp.frequency.value = 500;
-      const peak = voiceAudioCtx.createBiquadFilter();
-      peak.type = 'peaking'; peak.frequency.value = 3000; peak.gain.value = 12; peak.Q.value = 1.5;
-      lastNode.connect(hp); hp.connect(peak); lastNode = peak;
-    } 
-    else if (presetId === 'robot') {
-      const ringGain = voiceAudioCtx.createGain(); ringGain.gain.value = 0.6;
-      const osc = voiceAudioCtx.createOscillator();
-      osc.type = 'sawtooth'; osc.frequency.value = 70;
-      osc.connect(ringGain.gain);
-      osc.start(); voiceOscillatorNode = osc;
-      lastNode.connect(ringGain); lastNode = ringGain;
-    } 
-    else if (presetId === 'monster') {
-      const lp = voiceAudioCtx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 900;
-      const bass = voiceAudioCtx.createBiquadFilter();
-      bass.type = 'peaking'; bass.frequency.value = 100; bass.gain.value = 14; bass.Q.value = 1.2;
-      lastNode.connect(lp); lp.connect(bass); lastNode = bass;
-    } 
-    else if (presetId === 'girl') {
-      const lowCut = voiceAudioCtx.createBiquadFilter();
-      lowCut.type = 'highpass'; lowCut.frequency.value = 320;
-      const highPeak = voiceAudioCtx.createBiquadFilter();
-      highPeak.type = 'peaking'; highPeak.frequency.value = 2600; highPeak.gain.value = 9; highPeak.Q.value = 1.6;
-      lastNode.connect(lowCut); lowCut.connect(highPeak); lastNode = highPeak;
-    } 
-    else if (presetId === 'man') {
-      const chest = voiceAudioCtx.createBiquadFilter();
-      chest.type = 'peaking'; chest.frequency.value = 130; chest.gain.value = 12; chest.Q.value = 1.0;
-      const tameHigh = voiceAudioCtx.createBiquadFilter();
-      tameHigh.type = 'lowpass'; tameHigh.frequency.value = 3000;
-      lastNode.connect(chest); chest.connect(tameHigh); lastNode = tameHigh;
-    }
-
-    // घरघराहट रोकने के लिए डायनामिक कम्प्रेसर
-    const compressor = voiceAudioCtx.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-20, voiceAudioCtx.currentTime);
-    compressor.knee.setValueAtTime(25, voiceAudioCtx.currentTime);
-    compressor.ratio.setValueAtTime(10, voiceAudioCtx.currentTime);
-    compressor.attack.setValueAtTime(0.003, voiceAudioCtx.currentTime);
-    compressor.release.setValueAtTime(0.25, voiceAudioCtx.currentTime);
-
-    lastNode.connect(compressor);
-    compressor.connect(voiceDestinationNode);
-
-    const modTrack = voiceDestinationNode.stream.getAudioTracks()[0];
-    modTrack.enabled = true;
-
-    for (const pId of Object.keys(peerConnections)) {
-      const pc = peerConnections[pId];
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
-      if (sender) await sender.replaceTrack(modTrack);
-    }
-    toast(`🎙️ आवाज़: ${VOICE_PRESETS.find(x => x.id === presetId)?.name}`);
-  } catch(e) {
-    console.warn("Voice modulator error:", e);
-  }
-}
-
-$('trayBtnVoiceChanger').onclick = (e) => {
-  e.stopPropagation();
-  $('funModeTray').hidden = true;
-  if (!activeCallId || !isCallConnected) {
-    toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही वॉइस चेंजर खोलें' : 'Connect call to change voice');
-    return;
-  }
-  ensureVoiceChangerDOM();
-  $('voiceChangerBox').hidden = !$('voiceChangerBox').hidden;
-};
-// ===================================================
-// [यहाँ पर समाप्त: 🎙️ मॉड्यूल 5 - लाइव वॉइस चेंजर (6 प्रेसेट्स)]
-// ===================================================
-
-$('trayBtnColoring').onclick = (e) => {
-  e.stopPropagation();
-  toast(currentLang === 'hi' ? '🖍️ कलरिंग बुक अगले अपडेट में आएगी!' : '🖍️ Coloring book coming soon!');
-};
-$('trayBtnReactions').onclick = (e) => {
-  e.stopPropagation();
-  toast(currentLang === 'hi' ? '🎉 लाइव रिएक्शन अगले अपडेट में!' : '🎉 Live reactions coming soon!');
-};
-
-$('trayBtnScreenShare').onclick = async (e) => {
-  e.stopPropagation();
-  $('funModeTray').hidden = true;
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    toast(currentLang === 'hi' ? 'इस डिवाइस पर स्क्रीन शेयरिंग उपलब्ध नहीं है' : 'Screen sharing not supported');
-    return;
-  }
-  try {
-    if (!isScreenSharing) {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0];
-      
-      for (const pId of Object.keys(peerConnections)) {
-        const pc = peerConnections[pId];
-        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-        if (sender) await sender.replaceTrack(screenTrack);
-      }
-      localVideo.srcObject = screenStream;
-      isScreenSharing = true;
-      toast(currentLang === 'hi' ? '🖥️ स्क्रीन शेयरिंग चालू हो गई' : '🖥️ Screen sharing started');
-
-      screenTrack.onended = () => {
-        toggleVideoTrackMode(true);
-        isScreenSharing = false;
-        toast(currentLang === 'hi' ? 'स्क्रीन शेयरिंग बंद हुई' : 'Screen share ended');
-      };
-    } else {
-      toggleVideoTrackMode(true);
-      isScreenSharing = false;
-      toast(currentLang === 'hi' ? 'स्क्रीन शेयरिंग बंद हुई' : 'Screen share ended');
-    }
-  } catch(err) {
-    console.warn("Screen share error:", err);
-  }
-};
-
 function cleanupKidsModules() {
   stopQuizTimerBar();
   if (quizSessionUnsub) { quizSessionUnsub(); quizSessionUnsub = null; }
   if (canvasSessionUnsub) { canvasSessionUnsub(); canvasSessionUnsub = null; }
   if (whiteboardSyncUnsub) { whiteboardSyncUnsub(); whiteboardSyncUnsub = null; }
   if (tttSessionUnsub) { tttSessionUnsub(); tttSessionUnsub = null; }
-  if (annotSessionUnsub) { annotSessionUnsub(); annotSessionUnsub = null; }
-
-  if (voiceOscillatorNode) {
-    try { voiceOscillatorNode.stop(); voiceOscillatorNode.disconnect(); } catch(e){}
-    voiceOscillatorNode = null;
-  }
-  activeVoicePreset = 'normal';
 
   const box = $('kidsQuizBox');
   if (box) box.hidden = true;
@@ -2749,15 +2333,9 @@ function cleanupKidsModules() {
   if (wb) wb.hidden = true;
   const ttt = $('kidsTictactoeBox');
   if (ttt) ttt.hidden = true;
-  const annot = $('liveAnnotationOverlay');
-  if (annot) annot.hidden = true;
-  const vc = $('voiceChangerBox');
-  if (vc) vc.hidden = true;
   if ($('funModeTray')) $('funModeTray').hidden = true;
 
   if (ctx && canvasEl) ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-  if (annotCtx && annotCanvasEl) annotCtx.clearRect(0, 0, annotCanvasEl.width, annotCanvasEl.height);
-  isScreenSharing = false;
 }
 
 async function joinCallSession() {
@@ -2785,18 +2363,21 @@ async function joinCallSession() {
   listenRemoteCanvas();
   listenWhiteboardAutoSync();
   listenTictactoeSession();
-  listenRemoteAnnotation();
 
-  const sessionRef = ref(db, `call_sessions/${activeCallId}`);
-  onDisconnect(sessionRef).update({ status: 'ended' });
+  // 2 सेकंड में कॉल कटने से रोकने के लिए: onDisconnect केवल यूज़र के अपने सदस्य डेटा पर सेट किया गया है
+  const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
+  onDisconnect(myMemberRef).remove().catch(()=>{});
 
-  await set(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), {
+  await set(myMemberRef, {
     name: myUserName, camEnabled: !isAudioOnlyCall, micEnabled, audioOnly: isAudioOnlyCall, joinedAt: Date.now()
   });
 
   if (callSessionUnsub) callSessionUnsub();
   callSessionUnsub = onValue(ref(db, `call_sessions/${activeCallId}/status`), snap => {
-    if (snap.val() === 'ended') { toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); hangup(true); }
+    if (snap.val() === 'ended') { 
+      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); 
+      hangup(true); 
+    }
   });
 
   onValue(ref(db, `call_sessions/${activeCallId}/members`), snap => {
@@ -2957,14 +2538,12 @@ pipWrap.addEventListener('touchend', e => {
   const dx = e.changedTouches[0].clientX - pipTouchStartX;
   const dy = e.changedTouches[0].clientY - pipTouchStartY;
 
-  // दाएँ स्वाइप करने पर PiP विंडो साइड में छिप जाएगी
   if (dx > 45 && Math.abs(dx) > Math.abs(dy)) {
     e.stopPropagation();
     pipWrap.classList.add('pip-hidden');
     pipRestoreBtn.hidden = false;
     scheduleAutoHide();
   } else if (!pipMoved) {
-    // बिना हिले सिर्फ़ टैप करने पर अपनी और सामने वाले की वीडियो स्वैप होगी
     e.stopPropagation();
     callScreen.classList.toggle('video-swapped');
     toast(callScreen.classList.contains('video-swapped') 
@@ -2994,10 +2573,8 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    const isAnnotOpen = $('liveAnnotationOverlay') && !$('liveAnnotationOverlay').hidden;
-    const isVcOpen = $('voiceChangerBox') && !$('voiceChangerBox').hidden;
 
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen && !isAnnotOpen && !isVcOpen) {
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -3005,7 +2582,7 @@ function scheduleAutoHide() {
 }
 
 callScreen.addEventListener('click', e => {
-  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox') || e.target.closest('#voiceChangerBox') || e.target.closest('.annotation-toolbar')) return;
+  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox')) return;
   const isH = controlsBar.classList.contains('fade-out');
   controlsBar.classList.toggle('fade-out', !isH);
   $('callTopBar').classList.toggle('fade-out', !isH);
@@ -3037,6 +2614,7 @@ $('speakerBtn').onclick = (e) => {
   scheduleAutoHide();
 };
 
+// टॉप बार में कैमरा फ्लिप बटन
 $('flipBtn').onclick = async (e) => {
   e.stopPropagation();
   $('funModeTray').hidden = true;
@@ -3166,8 +2744,6 @@ function setupHardwareBackButton() {
         return;
       }
     }
-    if ($('voiceChangerBox') && !$('voiceChangerBox').hidden) {$('voiceChangerBox').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('liveAnnotationOverlay') && !$('liveAnnotationOverlay').hidden) { closeLiveAnnotation(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
@@ -3189,8 +2765,6 @@ function setupHardwareBackButton() {
     if (Date.now() < ignoreBackUntil) return;
     const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
-    if ($('voiceChangerBox') && !$('voiceChangerBox').hidden) {$('voiceChangerBox').hidden = true; return; }
-    if ($('liveAnnotationOverlay') && !$('liveAnnotationOverlay').hidden) { closeLiveAnnotation(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
@@ -3323,49 +2897,20 @@ function handleDeepLinks() {
     const urlParams = new URLSearchParams(window.location.search);
     const openChatId = urlParams.get('chatTargetId');
     const openChatName = urlParams.get('chatTargetName');
-    const acceptCallId = urlParams.get('acceptCallId');
-    const isAudioUrl = urlParams.get('isAudio') === 'true';
 
     if (openChatId) {
       window.history.replaceState({}, document.title, window.location.pathname);
       setTimeout(() => openChat(openChatId, openChatName || 'उपयोगकर्ता', true), 800);
-    } else if (acceptCallId) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setTimeout(async () => {
-        if (!isCallConnected) {
-          const sSnap = await get(ref(db, `call_sessions/${acceptCallId}`));
-          const sData = sSnap.val();
-          if (sData && sData.status !== 'ended') {
-            activeCallId = acceptCallId;
-            isAudioOnlyCall = isAudioUrl;
-            if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
-          } else {
-            toast(currentLang === 'hi' ? 'कॉल समाप्त हो चुकी है' : 'Call already ended');
-          }
-        }
-      }, 800);
     }
 
     if (isNative && App) {
       App.addListener('appUrlOpen', async (event) => {
         try {
           const url = new URL(event.url);
-          const accId = url.searchParams.get('acceptCallId');
-          const isAud = url.searchParams.get('isAudio') === 'true';
           const chatTgtId = url.searchParams.get('chatTargetId');
           const chatTgtName = url.searchParams.get('chatTargetName');
 
-          if (accId && !isCallConnected) {
-            const sSnap = await get(ref(db, `call_sessions/${accId}`));
-            const sData = sSnap.val();
-            if (sData && sData.status !== 'ended') {
-              activeCallId = accId;
-              isAudioOnlyCall = isAud;
-              if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
-            } else {
-              toast(currentLang === 'hi' ? 'कॉल समाप्त हो चुकी है' : 'Call already ended');
-            }
-          } else if (chatTgtId) {
+          if (chatTgtId) {
             openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता', true);
           }
         } catch(e) {}
