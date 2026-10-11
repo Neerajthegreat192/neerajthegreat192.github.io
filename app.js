@@ -137,6 +137,32 @@ let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
 let isScreenSharing = false;
 
+// ===================================================
+// हार्डवेयर ऑडियो कंट्रोल (Loudspeaker / Earpiece Bridge)
+// ===================================================
+function setHardwareSpeaker(enableSpeaker) {
+  speakerEnabled = enableSpeaker;
+  if (window.AndroidAudio && typeof window.AndroidAudio.setSpeakerphone === 'function') {
+    try {
+      window.AndroidAudio.setSpeakerphone(enableSpeaker);
+    } catch(e) {
+      console.warn("AndroidAudio setSpeakerphone error:", e);
+    }
+  }
+  remoteGrid.querySelectorAll('video').forEach(v => { v.muted = false; });
+  $('speakerBtn').classList.toggle('off', !speakerEnabled);
+}
+
+function resetHardwareAudio() {
+  if (window.AndroidAudio && typeof window.AndroidAudio.resetAudioMode === 'function') {
+    try {
+      window.AndroidAudio.resetAudioMode();
+    } catch(e) {
+      console.warn("AndroidAudio resetAudioMode error:", e);
+    }
+  }
+}
+
 const ringtoneAudio = new Audio('ringtone.mp3');
 ringtoneAudio.loop = true;
 let audioCtx = null, outgoingRingTimer = null, incomingRingRetryTimer = null;
@@ -1546,13 +1572,15 @@ async function toggleVideoTrackMode(enableCam) {
         boostPeerBitrate(pc);
       }
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: true, audioOnly: false }).catch(()=>{});
+      setHardwareSpeaker(true);
       toast(currentLang === 'hi' ? '📹 वीडियो मोड चालू' : '📹 Video mode active');
     } else {
       if (localStream) localStream.getVideoTracks().forEach(t => { t.enabled = false; });
       camEnabled = false; isAudioOnlyCall = true;
       updateCallModeVisuals(true);
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false, audioOnly: true }).catch(()=>{});
-      toast(currentLang === 'hi' ? '📞 ऑडियो मोड चालू' : '📞 Voice mode active');
+      setHardwareSpeaker(false);
+      toast(currentLang === 'hi' ? '📞 ऑडियो मोड चालू (इयरपीस)' : '📞 Voice mode active (Earpiece)');
     }
   } catch(e) { toast('कैमरा स्विच नहीं हो सका'); }
 }
@@ -1666,13 +1694,11 @@ $('funModeTray').onclick = (e) => {
   }
 };
 
-// ==========================================
-// 🎯 KIDS MODULE: QUIZ & 15S TIMER LOGIC
-// ==========================================
+// ===================================================
+// [यहाँ से शुरू: 🎯 मॉड्यूल KIDS QUIZ & 15S TIMER LOGIC]
+// ===================================================
 let allQuizQuestions = null;
 let quizSessionUnsub = null;
-let canvasSessionUnsub = null;
-let whiteboardSyncUnsub = null;
 let quizTimerInterval = null;
 
 async function fetchQuizQuestions() {
@@ -1862,10 +1888,13 @@ $('btnKidsQuiz').onclick = (e) => {
   }
   scheduleAutoHide();
 };
+// ===================================================
+// [यहाँ पर समाप्त: 🎯 मॉड्यूल KIDS QUIZ & 15S TIMER LOGIC]
+// ===================================================
 
-// ==========================================
-// 🎨 LIVE COLLABORATIVE WHITEBOARD
-// ==========================================
+// ===================================================
+// [यहाँ से शुरू: 🎨 मॉड्यूल LIVE COLLABORATIVE WHITEBOARD]
+// ===================================================
 let isDrawing = false;
 let currentColor = '#10b981';
 let currentLineWidth = 4;
@@ -1873,6 +1902,8 @@ let isEraserActive = false;
 let canvasEl = null;
 let ctx = null;
 let canvasEventsAttached = false;
+let canvasSessionUnsub = null;
+let whiteboardSyncUnsub = null;
 
 function initLiveCanvas() {
   canvasEl = $('kidsWhiteboardCanvas');
@@ -2063,6 +2094,9 @@ $('btnWhiteboard').onclick = (e) => {
   }
   scheduleAutoHide();
 };
+// ===================================================
+// [यहाँ पर समाप्त: 🎨 मॉड्यूल LIVE COLLABORATIVE WHITEBOARD]
+// ===================================================
 
 // ===================================================
 // [यहाँ से शुरू: ❌⭕ मॉड्यूल TIC-TAC-TOE 2-PLAYER ENGINE]
@@ -2419,7 +2453,6 @@ function listenRemoteAnnotation() {
       annotCtx.stroke();
     } else if (pt.action === 'stop') {
       annotCtx.closePath();
-      // 3.5 सेकंड बाद स्ट्रोक अपने-आप धीरे से गायब करने का टाइमर
       clearTimeout(annotDisappearTimer);
       annotDisappearTimer = setTimeout(() => {
         if (annotCtx && annotCanvasEl) {
@@ -2486,7 +2519,6 @@ let voiceSourceNode = null;
 let voiceDestinationNode = null;
 let voiceOscillatorNode = null;
 let activeVoicePreset = 'normal';
-let isVoiceEngineInit = false;
 
 const VOICE_PRESETS = [
   { id: 'normal', name: 'सामान्य', sub: 'Original Voice', icon: '👤' },
@@ -2547,7 +2579,6 @@ async function applyVoicePreset(presetId) {
 
   try {
     if (presetId === 'normal') {
-      // ओरिजिनल ट्रैक पर वापस जाएँ
       for (const pId of Object.keys(peerConnections)) {
         const pc = peerConnections[pId];
         const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
@@ -2562,7 +2593,6 @@ async function applyVoicePreset(presetId) {
     }
     if (voiceAudioCtx.state === 'suspended') await voiceAudioCtx.resume();
 
-    // पुराने ग्राफ नोड्स को साफ़ करें
     if (voiceOscillatorNode) {
       try { voiceOscillatorNode.stop(); voiceOscillatorNode.disconnect(); } catch(e){}
       voiceOscillatorNode = null;
@@ -2578,63 +2608,67 @@ async function applyVoicePreset(presetId) {
     let lastNode = voiceSourceNode;
 
     if (presetId === 'cartoon') {
-      // चिपमंक / कार्टून: हाई-पास + 3.2kHz ट्रेबल पीक
       const hp = voiceAudioCtx.createBiquadFilter();
-      hp.type = 'highpass'; hp.frequency.value = 450;
+      hp.type = 'highpass'; hp.frequency.value = 400;
       const peak = voiceAudioCtx.createBiquadFilter();
-      peak.type = 'peaking'; peak.frequency.value = 3200; peak.gain.value = 14; peak.Q.value = 2.0;
+      peak.type = 'peaking'; peak.frequency.value = 2800; peak.gain.value = 8; peak.Q.value = 1.8;
       lastNode.connect(hp); hp.connect(peak); lastNode = peak;
     } 
     else if (presetId === 'robot') {
-      // रोबोट: 60Hz रिंग-मॉड्यूलेशन
       const ringGain = voiceAudioCtx.createGain(); ringGain.gain.value = 0.5;
       const osc = voiceAudioCtx.createOscillator();
       const oscGain = voiceAudioCtx.createGain();
-      osc.type = 'sawtooth'; osc.frequency.value = 75;
-      oscGain.gain.value = 0.7;
+      osc.type = 'sawtooth'; osc.frequency.value = 65;
+      oscGain.gain.value = 0.5;
       osc.connect(oscGain); oscGain.connect(ringGain.gain);
       osc.start(); voiceOscillatorNode = osc;
       lastNode.connect(ringGain); lastNode = ringGain;
     } 
     else if (presetId === 'monster') {
-      // मॉन्स्टर / भारी शेर: 100Hz डीप बास बूस्ट + लो-पास 1000Hz
       const lp = voiceAudioCtx.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 950;
+      lp.type = 'lowpass'; lp.frequency.value = 1000;
       const bass = voiceAudioCtx.createBiquadFilter();
-      bass.type = 'peaking'; bass.frequency.value = 110; bass.gain.value = 16; bass.Q.value = 1.2;
+      bass.type = 'peaking'; bass.frequency.value = 120; bass.gain.value = 10; bass.Q.value = 1.0;
       lastNode.connect(lp); lp.connect(bass); lastNode = bass;
     } 
     else if (presetId === 'girl') {
-      // लड़की की आवाज़: ब्राइट टोन, 3kHz प्रेजेंस बूस्ट, लो कट
       const lowCut = voiceAudioCtx.createBiquadFilter();
-      lowCut.type = 'highpass'; lowCut.frequency.value = 300;
+      lowCut.type = 'highpass'; lowCut.frequency.value = 260;
       const highPeak = voiceAudioCtx.createBiquadFilter();
-      highPeak.type = 'peaking'; highPeak.frequency.value = 2800; highPeak.gain.value = 10; highPeak.Q.value = 1.5;
+      highPeak.type = 'peaking'; highPeak.frequency.value = 2400; highPeak.gain.value = 7; highPeak.Q.value = 1.4;
       const shelf = voiceAudioCtx.createBiquadFilter();
-      shelf.type = 'highshelf'; shelf.frequency.value = 5000; shelf.gain.value = 8;
+      shelf.type = 'highshelf'; shelf.frequency.value = 4500; shelf.gain.value = 6;
       lastNode.connect(lowCut); lowCut.connect(highPeak); highPeak.connect(shelf); lastNode = shelf;
     } 
     else if (presetId === 'man') {
-      // एडल्ट पुरुष: चेस्ट रेजोनेंस 140Hz बूस्ट + 4kHz से ऊपर कट
       const chest = voiceAudioCtx.createBiquadFilter();
-      chest.type = 'peaking'; chest.frequency.value = 140; chest.gain.value = 12; chest.Q.value = 1.0;
+      chest.type = 'peaking'; chest.frequency.value = 150; chest.gain.value = 9; chest.Q.value = 1.1;
       const warm = voiceAudioCtx.createBiquadFilter();
-      warm.type = 'peaking'; warm.frequency.value = 450; warm.gain.value = 5; warm.Q.value = 1.5;
+      warm.type = 'peaking'; warm.frequency.value = 400; warm.gain.value = 4; warm.Q.value = 1.2;
       const tameHigh = voiceAudioCtx.createBiquadFilter();
-      tameHigh.type = 'lowpass'; tameHigh.frequency.value = 3500;
+      tameHigh.type = 'lowpass'; tameHigh.frequency.value = 3200;
       lastNode.connect(chest); chest.connect(warm); warm.connect(tameHigh); lastNode = tameHigh;
     }
 
-    lastNode.connect(voiceDestinationNode);
+    // आवाज को फटने (Distortion/Clipping) से बचाने के लिए डायनामिक कम्प्रेसर
+    const compressor = voiceAudioCtx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-20, voiceAudioCtx.currentTime);
+    compressor.knee.setValueAtTime(25, voiceAudioCtx.currentTime);
+    compressor.ratio.setValueAtTime(10, voiceAudioCtx.currentTime);
+    compressor.attack.setValueAtTime(0.003, voiceAudioCtx.currentTime);
+    compressor.release.setValueAtTime(0.25, voiceAudioCtx.currentTime);
+
+    lastNode.connect(compressor);
+    compressor.connect(voiceDestinationNode);
+
     const modTrack = voiceDestinationNode.stream.getAudioTracks()[0];
 
-    // सभी पीयर्स को नया मॉड्युलेटेड ऑडियो ट्रैक भेजें
     for (const pId of Object.keys(peerConnections)) {
       const pc = peerConnections[pId];
       const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
       if (sender) await sender.replaceTrack(modTrack);
     }
-    toast(`🎙️ आवाज़ बदली: ${VOICE_PRESETS.find(x => x.id === presetId)?.name}`);
+    toast(`🎙️ आवाज़: ${VOICE_PRESETS.find(x => x.id === presetId)?.name}`);
   } catch(e) {
     console.warn("Voice modulator error:", e);
   }
@@ -2707,7 +2741,6 @@ function cleanupKidsModules() {
   if (tttSessionUnsub) { tttSessionUnsub(); tttSessionUnsub = null; }
   if (annotSessionUnsub) { annotSessionUnsub(); annotSessionUnsub = null; }
 
-  // वॉइस चेंजर रीसेट
   if (voiceOscillatorNode) {
     try { voiceOscillatorNode.stop(); voiceOscillatorNode.disconnect(); } catch(e){}
     voiceOscillatorNode = null;
@@ -2742,6 +2775,13 @@ async function joinCallSession() {
   localVideo.srcObject = localStream; localVideo.play().catch(()=>{});
 
   updateCallModeVisuals(isAudioOnlyCall);
+
+  // वॉइस कॉल डिफ़ॉल्ट रूप से इयरपीस (कान वाले स्पीकर) पर, वीडियो कॉल लाउडस्पीकर पर
+  if (isAudioOnlyCall) {
+    setHardwareSpeaker(false);
+  } else {
+    setHardwareSpeaker(true);
+  }
 
   startTimer(); scheduleAutoHide();
 
@@ -2854,7 +2894,7 @@ function addRemoteVideoCell(id, stream, peerName) {
     remoteGrid.appendChild(cell);
   }
   const v = cell.querySelector('video');
-  v.srcObject = stream; v.muted = !speakerEnabled; v.play().catch(()=>{});
+  v.srcObject = stream; v.muted = false; v.play().catch(()=>{});
 }
 
 function updateRemotePeerUI(peerId, data) {
@@ -2900,15 +2940,49 @@ $('btnAddPerson').onclick = (e) => {
 };
 $('closeAddModalBtn').onclick = () => {$('addParticipantModal').hidden = true; };
 
-let pipStartX = 0, pipStartY = 0;
-pipWrap.addEventListener('touchstart', e => { pipStartX = e.changedTouches[0].clientX; pipStartY = e.changedTouches[0].clientY; }, {passive:true});
+// ===================================================
+// PiP विंडो टैप (Swap Fullscreen) एवं स्वाइप हैंडलर
+// ===================================================
+let pipTouchStartX = 0, pipTouchStartY = 0;
+pipWrap.addEventListener('touchstart', e => {
+  pipTouchStartX = e.changedTouches[0].clientX;
+  pipTouchStartY = e.changedTouches[0].clientY;
+}, {passive:true});
+
 pipWrap.addEventListener('touchend', e => {
   e.stopPropagation();
-  const dx = e.changedTouches[0].clientX - pipStartX, dy = e.changedTouches[0].clientY - pipStartY;
-  if (dx > 30 && Math.abs(dx) > Math.abs(dy)) { pipWrap.classList.add('pip-hidden'); pipRestoreBtn.hidden = false; }
+  const dx = e.changedTouches[0].clientX - pipTouchStartX;
+  const dy = e.changedTouches[0].clientY - pipTouchStartY;
+
+  // दाएँ स्वाइप करने पर PiP छिप जाएगा
+  if (dx > 35 && Math.abs(dx) > Math.abs(dy)) {
+    pipWrap.classList.add('pip-hidden');
+    pipRestoreBtn.hidden = false;
+  } else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+    // टैप करने पर अपनी और सामने वाले की वीडियो स्वैप होगी
+    callScreen.classList.toggle('video-swapped');
+    toast(callScreen.classList.contains('video-swapped') 
+      ? (currentLang === 'hi' ? '🔄 आपकी वीडियो बड़ी स्क्रीन पर' : '🔄 Your video Fullscreen') 
+      : (currentLang === 'hi' ? '🔄 सामान्य व्यू' : '🔄 Normal View'));
+  }
   scheduleAutoHide();
 });
-pipRestoreBtn.onclick = e => { e.stopPropagation(); pipWrap.classList.remove('pip-hidden'); pipRestoreBtn.hidden = true; scheduleAutoHide(); };
+
+// स्वैप होने के बाद जब यूज़र कोने वाले रिमोट ग्रिड पर टैप करे तो वापस सामान्य व्यू हो जाए
+remoteGrid.addEventListener('click', (e) => {
+  if (callScreen.classList.contains('video-swapped')) {
+    e.stopPropagation();
+    callScreen.classList.remove('video-swapped');
+    scheduleAutoHide();
+  }
+});
+
+pipRestoreBtn.onclick = e => {
+  e.stopPropagation();
+  pipWrap.classList.remove('pip-hidden');
+  pipRestoreBtn.hidden = true;
+  scheduleAutoHide();
+};
 
 function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
@@ -2947,11 +3021,13 @@ $('camBtn').onclick = async (e) => {
   scheduleAutoHide();
 };
 
+// लाउडस्पीकर / इयरपीस टॉगल बटन
 $('speakerBtn').onclick = (e) => {
-  e.stopPropagation(); speakerEnabled = !speakerEnabled;
-  remoteGrid.querySelectorAll('video').forEach(v => { v.muted = !speakerEnabled; });
-  $('speakerBtn').classList.toggle('off', !speakerEnabled);
-  toast(speakerEnabled ? (currentLang === 'hi' ? '🔊 लाउडस्पीकर चालू' : '🔊 Speaker ON') : (currentLang === 'hi' ? '👂 हियरिंग स्पीकर (कान पर लगाएँ)' : '👂 Earpiece mode'));
+  e.stopPropagation();
+  setHardwareSpeaker(!speakerEnabled);
+  toast(speakerEnabled 
+    ? (currentLang === 'hi' ? '🔊 लाउडस्पीकर चालू' : '🔊 Speaker ON') 
+    : (currentLang === 'hi' ? '👂 इयरपीस मोड चालू (कान पर लगाएँ)' : '👂 Earpiece mode (Put to ear)'));
   scheduleAutoHide();
 };
 
@@ -3005,6 +3081,7 @@ async function hangup(silent = false) {
     stopNetworkQualityMonitor();
 
     cleanupKidsModules();
+    resetHardwareAudio();
 
     if (isCallConnected && currentCallTargetId) {
       recordCallLog({
@@ -3035,13 +3112,14 @@ async function hangup(silent = false) {
     remoteGrid.innerHTML = ''; activeCallId = null; isCallConnected = false; isAudioOnlyCall = false;
     callStartTime = 0;
 
+    callScreen.classList.remove('video-swapped');
     controlsBar.classList.remove('fade-out');
     $('callTopBar').classList.remove('fade-out');
     pipWrap.classList.remove('pip-hidden'); pipRestoreBtn.hidden = true;
     pipWrap.style.opacity = '1';
     $('camBtn').classList.remove('off');
     $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
+    if ($('voiceCallArea')) $('voiceCallArea').hidden = true;
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
     
