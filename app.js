@@ -468,7 +468,12 @@ function setupNativePushListeners() {
     const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined' && String(rawCallId).trim() !== '';
 
     if (isRealCall) {
-      handleIncomingCallNotification(data);
+      // यदि नोटिफिकेशन में 'Accept' दबाया गया है, तो डायरेक्ट कॉल एक्सेप्ट करें
+      if (action.actionId === 'ACTION_ACCEPT' || action.actionId === 'accept') {
+        handleDirectAcceptCall(rawCallId);
+      } else {
+        handleIncomingCallNotification(data);
+      }
     } else if (data && data.chatTargetId) {
       openChat(data.chatTargetId, data.chatTargetName || 'उपयोगकर्ता', false);
     }
@@ -486,12 +491,41 @@ function handleIncomingCallNotification(data) {
   
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
+  // लॉक स्क्रीन पर कॉन्टैक्ट्स की झलक छिपाने के लिए लॉबी को छुपाएँ
   lobbyScreen.hidden = true;
   chatScreen.hidden = true;
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
   incomingDialog.hidden = false;
   startIncomingRingtone();
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
+}
+
+// नोटिफिकेशन पैनल से सीधे 'Accept' दबाने पर बिना डायलॉग दिखाए कॉल उठाना
+async function handleDirectAcceptCall(callId) {
+  try {
+    const sSnap = await get(ref(db, `call_sessions/${callId}`));
+    const sData = sSnap.val();
+    if (!sData || sData.status === 'ended') {
+      toast(currentLang === 'hi' ? 'कॉल समाप्त हो चुकी है' : 'Call already ended');
+      return;
+    }
+    stopAllCallTones();
+    activeCallId = callId;
+    currentCallType = 'incoming';
+    currentCallTargetId = sData.callerId || '';
+    currentCallTargetName = sData.callerName || 'उपयोगकर्ता';
+    isAudioOnlyCall = !!sData.audioOnly;
+
+    incomingDialog.hidden = true;
+    lobbyScreen.hidden = true;
+    chatScreen.hidden = true;
+
+    if (await acquireCallMedia(isAudioOnlyCall)) {
+      joinCallSession();
+    }
+  } catch(e) {
+    console.warn("Direct accept error:", e);
+  }
 }
 
 function updateHeaderTitle() {
@@ -2350,7 +2384,7 @@ async function joinCallSession() {
 
   updateCallModeVisuals(isAudioOnlyCall);
 
-  // वॉइस कॉल डिफ़ॉल्ट रूप से इयरपीस (कान वाले स्पीकर) पर, वीडियो कॉल लाउडस्पीकर पर
+  // वॉइस कॉल में शुरुआत कान वाले स्पीकर (इयरपीस) पर, वीडियो कॉल में लाउडस्पीकर पर
   if (isAudioOnlyCall) {
     setHardwareSpeaker(false);
   } else {
@@ -2409,6 +2443,12 @@ function initiatePeerConnection(peerId, peerName) {
   pc.ontrack = e => {
     addRemoteVideoCell(peerId, e.streams[0], peerName);
     updateRemoteGridClass();
+
+    // Android 15 & 16: रिमोट ऑडियो आते ही इयरपीस रूटिंग को री-अप्लाई करें ताकि आवाज़ कटने या स्पीकर पर जाने से बचे
+    if (isAudioOnlyCall && !speakerEnabled) {
+      setTimeout(() => { setHardwareSpeaker(false); }, 300);
+      setTimeout(() => { setHardwareSpeaker(false); }, 1000);
+    }
   };
 
   const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${peerId}`;
@@ -2709,6 +2749,11 @@ async function hangup(silent = false) {
     
     callScreen.hidden = true; incomingDialog.hidden = true; outgoingDialog.hidden = true; lobbyScreen.hidden = false;
     isHangingUp = false;
+
+    // यदि फ़ोन लॉक था, तो एक्टिविटी को बंद करें ताकि लॉक स्क्रीन पर कॉन्टैक्ट्स या चैट न छूटे
+    if (window.AndroidAudio && typeof window.AndroidAudio.closeIfLocked === 'function') {
+      window.AndroidAudio.closeIfLocked();
+    }
   }
 }
 
@@ -2863,6 +2908,18 @@ $('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
 
+// नोटिफिकेशन और नेटिव लॉन्च एक्शन्स चेक करें
+function checkNativeLaunchIntent() {
+  if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
+    const action = window.AndroidAudio.getLaunchCallAction();
+    const callId = window.AndroidAudio.getLaunchCallId();
+    if (action === "ACCEPT" && callId) {
+      window.AndroidAudio.clearLaunchCallAction();
+      handleDirectAcceptCall(callId);
+    }
+  }
+}
+
 function handleDeepLinks() {
   try {
     if ('serviceWorker' in navigator) {
@@ -2880,15 +2937,7 @@ function handleDeepLinks() {
           openChat(data.targetId, data.senderName || 'उपयोगकर्ता', true);
         } else if (data.type === 'ACCEPT_CALL' && data.callId) {
           if (!isCallConnected) {
-            const sSnap = await get(ref(db, `call_sessions/${data.callId}`));
-            const sData = sSnap.val();
-            if (sData && sData.status !== 'ended') {
-              activeCallId = data.callId;
-              isAudioOnlyCall = !!data.isAudio;
-              if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
-            } else {
-              toast(currentLang === 'hi' ? 'कॉल समाप्त हो चुकी है' : 'Call already ended');
-            }
+            handleDirectAcceptCall(data.callId);
           }
         }
       });
@@ -2909,8 +2958,11 @@ function handleDeepLinks() {
           const url = new URL(event.url);
           const chatTgtId = url.searchParams.get('chatTargetId');
           const chatTgtName = url.searchParams.get('chatTargetName');
+          const accCallId = url.searchParams.get('acceptCallId');
 
-          if (chatTgtId) {
+          if (accCallId) {
+            handleDirectAcceptCall(accCallId);
+          } else if (chatTgtId) {
             openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता', true);
           }
         } catch(e) {}
@@ -2929,6 +2981,7 @@ async function initApp() {
     checkUser();
     await triggerAutoPermissionGate();
     handleDeepLinks();
+    checkNativeLaunchIntent();
   } catch (err) {
     console.error('UI init error:', err);
   }
