@@ -136,32 +136,6 @@ let qualityLevel = 'high', qualityTimer = null, wakeLock = null, vibrationInterv
 let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
 
-// ===================================================
-// हार्डवेयर ऑडियो कंट्रोल (Loudspeaker / Earpiece Bridge)
-// ===================================================
-function setHardwareSpeaker(enableSpeaker) {
-  speakerEnabled = enableSpeaker;
-  if (window.AndroidAudio && typeof window.AndroidAudio.setSpeakerphone === 'function') {
-    try {
-      window.AndroidAudio.setSpeakerphone(enableSpeaker);
-    } catch(e) {
-      console.warn("AndroidAudio setSpeakerphone error:", e);
-    }
-  }
-  remoteGrid.querySelectorAll('video').forEach(v => { v.muted = false; });
-  $('speakerBtn').classList.toggle('off', !speakerEnabled);
-}
-
-function resetHardwareAudio() {
-  if (window.AndroidAudio && typeof window.AndroidAudio.resetAudioMode === 'function') {
-    try {
-      window.AndroidAudio.resetAudioMode();
-    } catch(e) {
-      console.warn("AndroidAudio resetAudioMode error:", e);
-    }
-  }
-}
-
 const ringtoneAudio = new Audio('ringtone.mp3');
 ringtoneAudio.loop = true;
 let audioCtx = null, outgoingRingTimer = null, incomingRingRetryTimer = null;
@@ -314,7 +288,7 @@ function clearOngoingCallNotification() {
   }
 }
 
-// डायरेक्ट WhatsApp शेयर
+// शेयर एवं डाउनलोड बटन
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
   shareBtn.onclick = () => {
@@ -342,12 +316,13 @@ if (apkDlBtn) {
   };
 }
 
+// क्लीन मीडिया एक्विजिशन (WebRTC Native Constraints)
 async function acquireCallMedia(audioOnly = false) {
   if (localStream) {
     if (!audioOnly && localStream.getVideoTracks().length === 0) {
       try {
         const vStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } }
+          video: { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } }
         });
         const vt = vStream.getVideoTracks()[0];
         localStream.addTrack(vt);
@@ -357,9 +332,11 @@ async function acquireCallMedia(audioOnly = false) {
     return localStream;
   }
   try {
-    const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } };
+    const constraints = { 
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+    };
     if (!audioOnly) {
-      constraints.video = { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } };
+      constraints.video = { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } };
     } else {
       constraints.video = false;
     }
@@ -468,12 +445,7 @@ function setupNativePushListeners() {
     const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined' && String(rawCallId).trim() !== '';
 
     if (isRealCall) {
-      // यदि नोटिफिकेशन में 'Accept' दबाया गया है, तो डायरेक्ट कॉल एक्सेप्ट करें
-      if (action.actionId === 'ACTION_ACCEPT' || action.actionId === 'accept') {
-        handleDirectAcceptCall(rawCallId);
-      } else {
-        handleIncomingCallNotification(data);
-      }
+      handleIncomingCallNotification(data);
     } else if (data && data.chatTargetId) {
       openChat(data.chatTargetId, data.chatTargetName || 'उपयोगकर्ता', false);
     }
@@ -491,41 +463,12 @@ function handleIncomingCallNotification(data) {
   
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
-  // लॉक स्क्रीन पर कॉन्टैक्ट्स की झलक छिपाने के लिए लॉबी को छुपाएँ
   lobbyScreen.hidden = true;
   chatScreen.hidden = true;
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
   incomingDialog.hidden = false;
   startIncomingRingtone();
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
-}
-
-// नोटिफिकेशन पैनल से सीधे 'Accept' दबाने पर बिना डायलॉग दिखाए कॉल उठाना
-async function handleDirectAcceptCall(callId) {
-  try {
-    const sSnap = await get(ref(db, `call_sessions/${callId}`));
-    const sData = sSnap.val();
-    if (!sData || sData.status === 'ended') {
-      toast(currentLang === 'hi' ? 'कॉल समाप्त हो चुकी है' : 'Call already ended');
-      return;
-    }
-    stopAllCallTones();
-    activeCallId = callId;
-    currentCallType = 'incoming';
-    currentCallTargetId = sData.callerId || '';
-    currentCallTargetName = sData.callerName || 'उपयोगकर्ता';
-    isAudioOnlyCall = !!sData.audioOnly;
-
-    incomingDialog.hidden = true;
-    lobbyScreen.hidden = true;
-    chatScreen.hidden = true;
-
-    if (await acquireCallMedia(isAudioOnlyCall)) {
-      joinCallSession();
-    }
-  } catch(e) {
-    console.warn("Direct accept error:", e);
-  }
 }
 
 function updateHeaderTitle() {
@@ -1579,7 +1522,7 @@ async function toggleVideoTrackMode(enableCam) {
       let vTrack = localStream ? localStream.getVideoTracks()[0] : null;
       if (!vTrack) {
         const vStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } }
+          video: { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } }
         });
         vTrack = vStream.getVideoTracks()[0];
         if (localStream) localStream.addTrack(vTrack);
@@ -1604,15 +1547,13 @@ async function toggleVideoTrackMode(enableCam) {
         boostPeerBitrate(pc);
       }
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: true, audioOnly: false }).catch(()=>{});
-      setHardwareSpeaker(true);
       toast(currentLang === 'hi' ? '📹 वीडियो मोड चालू' : '📹 Video mode active');
     } else {
       if (localStream) localStream.getVideoTracks().forEach(t => { t.enabled = false; });
       camEnabled = false; isAudioOnlyCall = true;
       updateCallModeVisuals(true);
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false, audioOnly: true }).catch(()=>{});
-      setHardwareSpeaker(false);
-      toast(currentLang === 'hi' ? '📞 ऑडियो मोड चालू (इयरपीस)' : '📞 Voice mode active (Earpiece)');
+      toast(currentLang === 'hi' ? '📞 ऑडियो मोड चालू' : '📞 Voice mode active');
     }
   } catch(e) { toast('कैमरा स्विच नहीं हो सका'); }
 }
@@ -1630,14 +1571,14 @@ async function boostPeerBitrate(pc) {
       if (sender.track && sender.track.kind === 'video') {
         const p = sender.getParameters();
         if (!p.encodings?.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = 5000000; p.encodings[0].networkPriority = 'high';
+        p.encodings[0].maxBitrate = 2500000;
         await sender.setParameters(p);
       }
     }
   } catch(e) {}
 }
 
-function applySDPBitrate(sdp, bitrateKbps = 5000) {
+function applySDPBitrate(sdp, bitrateKbps = 2500) {
   if (!sdp || !sdp.includes('a=mid:video')) return sdp;
   return sdp.replace(/a=mid:video(.*)/g, `a=mid:video$1\r\nb=AS:${bitrateKbps}\r\nb=TIAS:${bitrateKbps * 1000}`);
 }
@@ -1646,20 +1587,6 @@ async function applyCallQuality(level) {
   const next = level === 'medium' ? 'medium' : 'high';
   if (qualityLevel === next) return;
   qualityLevel = next;
-  try {
-    const vt = localStream?.getVideoTracks?.()[0];
-    if (vt) await vt.applyConstraints(next === 'high' ? { width:{ideal:1920,min:1280}, height:{ideal:1080,min:720}, frameRate:{ideal:30,min:24} } : { width:{ideal:1280,min:960}, height:{ideal:720,min:540}, frameRate:{ideal:30,min:24} });
-  } catch(e) {}
-  for (const pc of Object.values(peerConnections)) {
-    try {
-      for (const s of pc.getSenders()) {
-        if (s.track?.kind !== 'video') continue;
-        const p = s.getParameters(); if (!p.encodings?.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = next === 'high' ? 5000000 : 2500000;
-        await s.setParameters(p);
-      }
-    } catch(e) {}
-  }
   updateNetworkIndicator(next);
 }
 
@@ -1671,33 +1598,10 @@ function updateNetworkIndicator(level, detail='') {
   if (detail) pill.title = detail;
 }
 
-async function sampleNetworkQuality() {
-  if (!isCallConnected || !Object.keys(peerConnections).length) return;
-  let worstRtt = 0, lossPct = 0, lossSamples = 0;
-  for (const pc of Object.values(peerConnections)) {
-    try {
-      const stats = await pc.getStats();
-      stats.forEach(r => {
-        if (r.type === 'candidate-pair' && r.state === 'succeeded' && typeof r.currentRoundTripTime === 'number') worstRtt = Math.max(worstRtt, r.currentRoundTripTime * 1000);
-        if (r.type === 'inbound-rtp' && r.kind === 'video' && typeof r.packetsLost === 'number' && typeof r.packetsReceived === 'number') {
-          const tot = r.packetsLost + r.packetsReceived;
-          if (tot > 0) { lossPct = Math.max(lossPct, (r.packetsLost / tot) * 100); lossSamples++; }
-        }
-      });
-    } catch(e) {}
-  }
-  const isMed = worstRtt > 260 || lossPct > 5;
-  await applyCallQuality(isMed ? 'medium' : 'high');
-  updateNetworkIndicator(isMed ? 'medium' : 'high', `${Math.round(worstRtt)}ms / ${lossSamples ? lossPct.toFixed(1) : '0.0'}% loss`);
-}
-
 function startNetworkQualityMonitor() {
-  stopNetworkQualityMonitor(); qualityLevel = '';
-  updateNetworkIndicator('high'); applyCallQuality('high').catch(()=>{});
-  sampleNetworkQuality(); qualityTimer = setInterval(sampleNetworkQuality, 3000);
+  updateNetworkIndicator('high');
 }
 function stopNetworkQualityMonitor() {
-  if (qualityTimer) { clearInterval(qualityTimer); qualityTimer = null; }
   qualityLevel = 'high';
 }
 
@@ -2377,19 +2281,12 @@ async function joinCallSession() {
   lobbyScreen.hidden = true; chatScreen.hidden = true; callScreen.hidden = false;
   isCallConnected = true; isHangingUp = false;
   ignoreBackUntil = Date.now() + 2000;
-  await requestWakeLock();
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
   startNetworkQualityMonitor();
   pipWrap.classList.remove('pip-hidden'); pipRestoreBtn.hidden = true;
   localVideo.srcObject = localStream; localVideo.play().catch(()=>{});
 
   updateCallModeVisuals(isAudioOnlyCall);
-
-  // वॉइस कॉल में शुरुआत कान वाले स्पीकर (इयरपीस) पर, वीडियो कॉल में लाउडस्पीकर पर
-  if (isAudioOnlyCall) {
-    setHardwareSpeaker(false);
-  } else {
-    setHardwareSpeaker(true);
-  }
 
   startTimer(); scheduleAutoHide();
 
@@ -2398,7 +2295,7 @@ async function joinCallSession() {
   listenWhiteboardAutoSync();
   listenTictactoeSession();
 
-  // 2 सेकंड में कॉल कटने से रोकने के लिए: onDisconnect केवल यूज़र के अपने सदस्य डेटा पर सेट किया गया है
+  // सुरक्षित सेशन मैपिंग: onDisconnect केवल यूज़र के अपने सदस्य नोड पर रहता है
   const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
   onDisconnect(myMemberRef).remove().catch(()=>{});
 
@@ -2443,12 +2340,6 @@ function initiatePeerConnection(peerId, peerName) {
   pc.ontrack = e => {
     addRemoteVideoCell(peerId, e.streams[0], peerName);
     updateRemoteGridClass();
-
-    // Android 15 & 16: रिमोट ऑडियो आते ही इयरपीस रूटिंग को री-अप्लाई करें ताकि आवाज़ कटने या स्पीकर पर जाने से बचे
-    if (isAudioOnlyCall && !speakerEnabled) {
-      setTimeout(() => { setHardwareSpeaker(false); }, 300);
-      setTimeout(() => { setHardwareSpeaker(false); }, 1000);
-    }
   };
 
   const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${peerId}`;
@@ -2593,7 +2484,6 @@ pipWrap.addEventListener('touchend', e => {
   }
 });
 
-// जब वीडियो स्वैप हो और यूज़र कोने वाले छोटे रिमोट ग्रिड पर टैप करे तो वापस सामान्य व्यू हो जाए
 remoteGrid.addEventListener('click', (e) => {
   if (callScreen.classList.contains('video-swapped')) {
     e.stopPropagation();
@@ -2644,13 +2534,11 @@ $('camBtn').onclick = async (e) => {
   scheduleAutoHide();
 };
 
-// लाउडस्पीकर / इयरपीस टॉगल बटन
 $('speakerBtn').onclick = (e) => {
   e.stopPropagation();
-  setHardwareSpeaker(!speakerEnabled);
-  toast(speakerEnabled 
-    ? (currentLang === 'hi' ? '🔊 लाउडस्पीकर चालू' : '🔊 Speaker ON') 
-    : (currentLang === 'hi' ? '👂 इयरपीस मोड चालू (कान पर लगाएँ)' : '👂 Earpiece mode (Put to ear)'));
+  speakerEnabled = !speakerEnabled;
+  remoteGrid.querySelectorAll('video').forEach(v => { v.muted = !speakerEnabled; });
+  $('speakerBtn').classList.toggle('off', !speakerEnabled);
   scheduleAutoHide();
 };
 
@@ -2664,7 +2552,7 @@ $('flipBtn').onclick = async (e) => {
   try {
     if (localStream) localStream.getVideoTracks().forEach(t => t.stop());
     const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } }, audio: false
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } }, audio: false
     });
     const newTrack = newStream.getVideoTracks()[0], oldTrack = localStream.getVideoTracks()[0];
     if (oldTrack) localStream.removeTrack(oldTrack);
@@ -2698,14 +2586,13 @@ async function hangup(silent = false) {
     clearOngoingCallNotification();
     stopAllCallTones(); 
     stopTimer(); 
-    releaseWakeLock();
+    if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; }
     clearTimeout(autoHideTimer); 
     clearTimeout(callTimeoutTimer); 
     callTimeoutTimer = null;
     stopNetworkQualityMonitor();
 
     cleanupKidsModules();
-    resetHardwareAudio();
 
     if (isCallConnected && currentCallTargetId) {
       recordCallLog({
@@ -2749,11 +2636,6 @@ async function hangup(silent = false) {
     
     callScreen.hidden = true; incomingDialog.hidden = true; outgoingDialog.hidden = true; lobbyScreen.hidden = false;
     isHangingUp = false;
-
-    // यदि फ़ोन लॉक था, तो एक्टिविटी को बंद करें ताकि लॉक स्क्रीन पर कॉन्टैक्ट्स या चैट न छूटे
-    if (window.AndroidAudio && typeof window.AndroidAudio.closeIfLocked === 'function') {
-      window.AndroidAudio.closeIfLocked();
-    }
   }
 }
 
@@ -2766,11 +2648,6 @@ function startTimer() {
   }, 1000);
 }
 function stopTimer() { if (timerTimer) { clearInterval(timerTimer); timerTimer = null; } $('callTimer').textContent = '00:00'; }
-
-async function requestWakeLock() {
-  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
-}
-function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; } }
 
 let backPressedOnce = false;
 function setupHardwareBackButton() {
@@ -2908,18 +2785,6 @@ $('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
 
-// नोटिफिकेशन और नेटिव लॉन्च एक्शन्स चेक करें
-function checkNativeLaunchIntent() {
-  if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
-    const action = window.AndroidAudio.getLaunchCallAction();
-    const callId = window.AndroidAudio.getLaunchCallId();
-    if (action === "ACCEPT" && callId) {
-      window.AndroidAudio.clearLaunchCallAction();
-      handleDirectAcceptCall(callId);
-    }
-  }
-}
-
 function handleDeepLinks() {
   try {
     if ('serviceWorker' in navigator) {
@@ -2937,7 +2802,9 @@ function handleDeepLinks() {
           openChat(data.targetId, data.senderName || 'उपयोगकर्ता', true);
         } else if (data.type === 'ACCEPT_CALL' && data.callId) {
           if (!isCallConnected) {
-            handleDirectAcceptCall(data.callId);
+            activeCallId = data.callId;
+            isAudioOnlyCall = !!data.isAudio;
+            if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
           }
         }
       });
@@ -2958,11 +2825,8 @@ function handleDeepLinks() {
           const url = new URL(event.url);
           const chatTgtId = url.searchParams.get('chatTargetId');
           const chatTgtName = url.searchParams.get('chatTargetName');
-          const accCallId = url.searchParams.get('acceptCallId');
 
-          if (accCallId) {
-            handleDirectAcceptCall(accCallId);
-          } else if (chatTgtId) {
+          if (chatTgtId) {
             openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता', true);
           }
         } catch(e) {}
@@ -2981,7 +2845,6 @@ async function initApp() {
     checkUser();
     await triggerAutoPermissionGate();
     handleDeepLinks();
-    checkNativeLaunchIntent();
   } catch (err) {
     console.error('UI init error:', err);
   }
