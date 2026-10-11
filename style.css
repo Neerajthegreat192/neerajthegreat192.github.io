@@ -14,7 +14,20 @@
   --success:#22c55e;
   --accent:#f59e0b;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+
+*{
+  box-sizing:border-box;
+  -webkit-tap-highlight-color:transparent;
+  margin:0;
+  padding:0;
+}
+
+/* हिंदी टाइपिंग और IME इनपुट को अनलॉक करने के लिए */
+input, textarea {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
 html,body{
   height:100%;
   height:100dvh;
@@ -26,6 +39,7 @@ html,body{
   user-select:none;
   overscroll-behavior:none;
 }
+
 .screen{
   position:fixed;
   inset:0;
@@ -35,9 +49,11 @@ html,body{
   flex-direction:column;
   overflow:hidden;
 }
+
 [hidden], #chatScreen[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden], #kidsTictactoeBox[hidden], #liveAnnotationOverlay[hidden], #voiceChangerBox[hidden]{
   display:none !important;
 }
+
 button{font-family:inherit;cursor:pointer;outline:none}
 
 #networkBanner{
@@ -60,6 +76,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   padding:calc(14px + env(safe-area-inset-top, 24px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
   align-items:center;
 }
+
 .header{
   width:100%;
   max-width:480px;
@@ -69,6 +86,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   margin-bottom:14px;
   flex-shrink:0;
 }
+
 .user-title{
   font-size:22px;
   font-weight:900;
@@ -80,7 +98,9 @@ button{font-family:inherit;cursor:pointer;outline:none}
   text-overflow:ellipsis;
   text-shadow:0 0 16px rgba(56,189,248,0.3);
 }
+
 .header-actions{display:flex;align-items:center;gap:10px}
+
 .admin-badge{
   font-size:11px;
   color:#fff;
@@ -458,7 +478,14 @@ button{font-family:inherit;cursor:pointer;outline:none}
 
 /* Calling Screen */
 #call{background:#000;overflow:hidden}
-#remoteGrid{position:absolute;inset:0;display:grid;background:#000;z-index:1}
+#remoteGrid{
+  position:absolute;
+  inset:0;
+  display:grid;
+  background:#000;
+  z-index:1;
+  transition:all .3s ease-out;
+}
 #remoteGrid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}
 #remoteGrid.count-2{grid-template-columns:1fr;grid-template-rows:1fr 1fr;gap:4px}
 #remoteGrid.count-3,#remoteGrid.count-4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px}
@@ -518,20 +545,20 @@ button{font-family:inherit;cursor:pointer;outline:none}
 }
 
 /* ===================================================
-   [PiP विंडो एवं वीडियो स्वैप (Tap to Swap Fullscreen)]
+   PiP विंडो एवं वीडियो स्वैप (Tap to Swap Fullscreen)
    =================================================== */
 .pip-wrap{
   position:absolute;
   top:calc(58px + env(safe-area-inset-top, 24px));
   right:12px;
-  width:104px;
+  width:108px;
   aspect-ratio:3/4;
   border-radius:14px;
   overflow:hidden;
   border:2px solid rgba(255,255,255,0.4);
   background:#090d10;
   z-index:30;
-  transition:transform .3s, opacity .3s, width .3s, height .3s, top .3s, right .3s, border-radius .3s;
+  transition:all .3s ease-out;
   box-shadow:0 4px 16px rgba(0,0,0,0.6);
   cursor:pointer;
 }
@@ -560,7 +587,7 @@ button{font-family:inherit;cursor:pointer;outline:none}
   right:12px !important;
   left:auto !important;
   bottom:auto !important;
-  width:104px !important;
+  width:108px !important;
   height:auto !important;
   aspect-ratio:3/4 !important;
   border-radius:14px !important;
@@ -569,7 +596,6 @@ button{font-family:inherit;cursor:pointer;outline:none}
   overflow:hidden !important;
   box-shadow:0 4px 16px rgba(0,0,0,0.6) !important;
   cursor:pointer;
-  transition:transform .3s, opacity .3s;
 }
 #call.video-swapped #remoteGrid:active{transform:scale(0.95)}
 
