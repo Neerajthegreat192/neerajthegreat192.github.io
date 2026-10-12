@@ -136,6 +136,32 @@ let qualityLevel = 'high', qualityTimer = null, wakeLock = null, vibrationInterv
 let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
 
+// ===================================================
+// हार्डवेयर ऑडियो कंट्रोल (Loudspeaker / Earpiece Bridge)
+// ===================================================
+function setHardwareSpeaker(enableSpeaker) {
+  speakerEnabled = enableSpeaker;
+  if (window.AndroidAudio && typeof window.AndroidAudio.setSpeakerphone === 'function') {
+    try {
+      window.AndroidAudio.setSpeakerphone(enableSpeaker);
+    } catch(e) {
+      console.warn("AndroidAudio setSpeakerphone error:", e);
+    }
+  }
+  remoteGrid.querySelectorAll('video').forEach(v => { v.muted = false; });
+  $('speakerBtn').classList.toggle('off', !speakerEnabled);
+}
+
+function resetHardwareAudio() {
+  if (window.AndroidAudio && typeof window.AndroidAudio.resetAudioMode === 'function') {
+    try {
+      window.AndroidAudio.resetAudioMode();
+    } catch(e) {
+      console.warn("AndroidAudio resetAudioMode error:", e);
+    }
+  }
+}
+
 const ringtoneAudio = new Audio('ringtone.mp3');
 ringtoneAudio.loop = true;
 let audioCtx = null, outgoingRingTimer = null, incomingRingRetryTimer = null;
@@ -288,7 +314,7 @@ function clearOngoingCallNotification() {
   }
 }
 
-// शेयर एवं डाउनलोड बटन
+// डायरेक्ट WhatsApp शेयर
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
   shareBtn.onclick = () => {
@@ -316,7 +342,6 @@ if (apkDlBtn) {
   };
 }
 
-// क्लीन मीडिया एक्विजिशन (WebRTC Native Constraints)
 async function acquireCallMedia(audioOnly = false) {
   if (localStream) {
     if (!audioOnly && localStream.getVideoTracks().length === 0) {
@@ -445,7 +470,11 @@ function setupNativePushListeners() {
     const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined' && String(rawCallId).trim() !== '';
 
     if (isRealCall) {
-      handleIncomingCallNotification(data);
+      if (action.actionId === 'ACTION_ACCEPT' || action.actionId === 'accept') {
+        handleDirectAcceptCall(rawCallId);
+      } else {
+        handleIncomingCallNotification(data);
+      }
     } else if (data && data.chatTargetId) {
       openChat(data.chatTargetId, data.chatTargetName || 'उपयोगकर्ता', false);
     }
@@ -463,12 +492,44 @@ function handleIncomingCallNotification(data) {
   
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
+  // लॉक स्क्रीन पर कॉन्टैक्ट्स की झलक पूरी तरह छिपाएँ
   lobbyScreen.hidden = true;
   chatScreen.hidden = true;
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
   incomingDialog.hidden = false;
   startIncomingRingtone();
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
+}
+
+// नोटिफिकेशन पैनल के 'Accept' बटन से कॉल सीधे जोड़ना (Jitsi Meet Direct Link Pattern)
+async function handleDirectAcceptCall(callId) {
+  try {
+    const sSnap = await get(ref(db, `call_sessions/${callId}`));
+    const sData = sSnap.val();
+    if (!sData || sData.status === 'ended') {
+      toast(currentLang === 'hi' ? 'कॉल समाप्त हो चुकी है' : 'Call already ended');
+      return;
+    }
+    stopAllCallTones();
+    activeCallId = callId;
+    currentCallType = 'incoming';
+    currentCallTargetId = sData.callerId || '';
+    currentCallTargetName = sData.callerName || 'उपयोगकर्ता';
+    isAudioOnlyCall = !!sData.audioOnly;
+
+    incomingDialog.hidden = true;
+    lobbyScreen.hidden = true;
+    chatScreen.hidden = true;
+
+    // हार्डवेयर परमिशन रेस कंडीशन से बचने के लिए 300ms का सेफ़ डिले
+    setTimeout(async () => {
+      if (await acquireCallMedia(isAudioOnlyCall)) {
+        joinCallSession();
+      }
+    }, 300);
+  } catch(e) {
+    console.warn("Direct accept error:", e);
+  }
 }
 
 function updateHeaderTitle() {
@@ -1413,6 +1474,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
   
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
+  // Jitsi Pattern: पूरे कॉल सेशन पर onDisconnect:ended कभी नहीं लगाना है
 
   await set(sessionRef, {
     callId: activeCallId, callerId: myUserId, callerName: myUserName, targetId: remoteId, audioOnly: !!audioOnly, status: 'calling', createdAt: serverTimestamp()
@@ -1522,7 +1584,7 @@ async function toggleVideoTrackMode(enableCam) {
       let vTrack = localStream ? localStream.getVideoTracks()[0] : null;
       if (!vTrack) {
         const vStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } }
+          video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } }
         });
         vTrack = vStream.getVideoTracks()[0];
         if (localStream) localStream.addTrack(vTrack);
@@ -1547,13 +1609,15 @@ async function toggleVideoTrackMode(enableCam) {
         boostPeerBitrate(pc);
       }
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: true, audioOnly: false }).catch(()=>{});
+      setHardwareSpeaker(true);
       toast(currentLang === 'hi' ? '📹 वीडियो मोड चालू' : '📹 Video mode active');
     } else {
       if (localStream) localStream.getVideoTracks().forEach(t => { t.enabled = false; });
       camEnabled = false; isAudioOnlyCall = true;
       updateCallModeVisuals(true);
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false, audioOnly: true }).catch(()=>{});
-      toast(currentLang === 'hi' ? '📞 ऑडियो मोड चालू' : '📞 Voice mode active');
+      setHardwareSpeaker(false);
+      toast(currentLang === 'hi' ? '📞 ऑडियो मोड चालू (इयरपीस)' : '📞 Voice mode active (Earpiece)');
     }
   } catch(e) { toast('कैमरा स्विच नहीं हो सका'); }
 }
@@ -1571,14 +1635,14 @@ async function boostPeerBitrate(pc) {
       if (sender.track && sender.track.kind === 'video') {
         const p = sender.getParameters();
         if (!p.encodings?.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = 2500000;
+        p.encodings[0].maxBitrate = 5000000; p.encodings[0].networkPriority = 'high';
         await sender.setParameters(p);
       }
     }
   } catch(e) {}
 }
 
-function applySDPBitrate(sdp, bitrateKbps = 2500) {
+function applySDPBitrate(sdp, bitrateKbps = 5000) {
   if (!sdp || !sdp.includes('a=mid:video')) return sdp;
   return sdp.replace(/a=mid:video(.*)/g, `a=mid:video$1\r\nb=AS:${bitrateKbps}\r\nb=TIAS:${bitrateKbps * 1000}`);
 }
@@ -1587,6 +1651,20 @@ async function applyCallQuality(level) {
   const next = level === 'medium' ? 'medium' : 'high';
   if (qualityLevel === next) return;
   qualityLevel = next;
+  try {
+    const vt = localStream?.getVideoTracks?.()[0];
+    if (vt) await vt.applyConstraints(next === 'high' ? { width:{ideal:1920,min:1280}, height:{ideal:1080,min:720}, frameRate:{ideal:30,min:24} } : { width:{ideal:1280,min:960}, height:{ideal:720,min:540}, frameRate:{ideal:30,min:24} });
+  } catch(e) {}
+  for (const pc of Object.values(peerConnections)) {
+    try {
+      for (const s of pc.getSenders()) {
+        if (s.track?.kind !== 'video') continue;
+        const p = s.getParameters(); if (!p.encodings?.length) p.encodings = [{}];
+        p.encodings[0].maxBitrate = next === 'high' ? 5000000 : 2500000;
+        await s.setParameters(p);
+      }
+    } catch(e) {}
+  }
   updateNetworkIndicator(next);
 }
 
@@ -1598,10 +1676,33 @@ function updateNetworkIndicator(level, detail='') {
   if (detail) pill.title = detail;
 }
 
+async function sampleNetworkQuality() {
+  if (!isCallConnected || !Object.keys(peerConnections).length) return;
+  let worstRtt = 0, lossPct = 0, lossSamples = 0;
+  for (const pc of Object.values(peerConnections)) {
+    try {
+      const stats = await pc.getStats();
+      stats.forEach(r => {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && typeof r.currentRoundTripTime === 'number') worstRtt = Math.max(worstRtt, r.currentRoundTripTime * 1000);
+        if (r.type === 'inbound-rtp' && r.kind === 'video' && typeof r.packetsLost === 'number' && typeof r.packetsReceived === 'number') {
+          const tot = r.packetsLost + r.packetsReceived;
+          if (tot > 0) { lossPct = Math.max(lossPct, (r.packetsLost / tot) * 100); lossSamples++; }
+        }
+      });
+    } catch(e) {}
+  }
+  const isMed = worstRtt > 260 || lossPct > 5;
+  await applyCallQuality(isMed ? 'medium' : 'high');
+  updateNetworkIndicator(isMed ? 'medium' : 'high', `${Math.round(worstRtt)}ms / ${lossSamples ? lossPct.toFixed(1) : '0.0'}% loss`);
+}
+
 function startNetworkQualityMonitor() {
-  updateNetworkIndicator('high');
+  stopNetworkQualityMonitor(); qualityLevel = '';
+  updateNetworkIndicator('high'); applyCallQuality('high').catch(()=>{});
+  sampleNetworkQuality(); qualityTimer = setInterval(sampleNetworkQuality, 3000);
 }
 function stopNetworkQualityMonitor() {
+  if (qualityTimer) { clearInterval(qualityTimer); qualityTimer = null; }
   qualityLevel = 'high';
 }
 
@@ -2281,12 +2382,19 @@ async function joinCallSession() {
   lobbyScreen.hidden = true; chatScreen.hidden = true; callScreen.hidden = false;
   isCallConnected = true; isHangingUp = false;
   ignoreBackUntil = Date.now() + 2000;
-  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+  await requestWakeLock();
   startNetworkQualityMonitor();
   pipWrap.classList.remove('pip-hidden'); pipRestoreBtn.hidden = true;
   localVideo.srcObject = localStream; localVideo.play().catch(()=>{});
 
   updateCallModeVisuals(isAudioOnlyCall);
+
+  // वॉइस कॉल डिफ़ॉल्ट रूप से इयरपीस पर, वीडियो कॉल लाउडस्पीकर पर
+  if (isAudioOnlyCall) {
+    setHardwareSpeaker(false);
+  } else {
+    setHardwareSpeaker(true);
+  }
 
   startTimer(); scheduleAutoHide();
 
@@ -2295,7 +2403,7 @@ async function joinCallSession() {
   listenWhiteboardAutoSync();
   listenTictactoeSession();
 
-  // सुरक्षित सेशन मैपिंग: onDisconnect केवल यूज़र के अपने सदस्य नोड पर रहता है
+  // 2 सेकंड में कॉल कटने से रोकने के लिए: onDisconnect केवल यूज़र के अपने सदस्य डेटा पर सेट किया गया है
   const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
   onDisconnect(myMemberRef).remove().catch(()=>{});
 
@@ -2340,6 +2448,12 @@ function initiatePeerConnection(peerId, peerName) {
   pc.ontrack = e => {
     addRemoteVideoCell(peerId, e.streams[0], peerName);
     updateRemoteGridClass();
+
+    // Jitsi Audio Routing Fix: रिमोट ट्रैक बजते ही Android 15 & 16 के लिए इयरपीस को री-अप्लाई करें
+    if (isAudioOnlyCall && !speakerEnabled) {
+      setTimeout(() => { setHardwareSpeaker(false); }, 300);
+      setTimeout(() => { setHardwareSpeaker(false); }, 1000);
+    }
   };
 
   const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${peerId}`;
@@ -2534,11 +2648,13 @@ $('camBtn').onclick = async (e) => {
   scheduleAutoHide();
 };
 
+// लाउडस्पीकर / इयरपीस टॉगल बटन
 $('speakerBtn').onclick = (e) => {
   e.stopPropagation();
-  speakerEnabled = !speakerEnabled;
-  remoteGrid.querySelectorAll('video').forEach(v => { v.muted = !speakerEnabled; });
-  $('speakerBtn').classList.toggle('off', !speakerEnabled);
+  setHardwareSpeaker(!speakerEnabled);
+  toast(speakerEnabled 
+    ? (currentLang === 'hi' ? '🔊 लाउडस्पीकर चालू' : '🔊 Speaker ON') 
+    : (currentLang === 'hi' ? '👂 इयरपीस मोड चालू (कान पर लगाएँ)' : '👂 Earpiece mode (Put to ear)'));
   scheduleAutoHide();
 };
 
@@ -2552,7 +2668,7 @@ $('flipBtn').onclick = async (e) => {
   try {
     if (localStream) localStream.getVideoTracks().forEach(t => t.stop());
     const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } }, audio: false
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } }, audio: false
     });
     const newTrack = newStream.getVideoTracks()[0], oldTrack = localStream.getVideoTracks()[0];
     if (oldTrack) localStream.removeTrack(oldTrack);
@@ -2586,13 +2702,14 @@ async function hangup(silent = false) {
     clearOngoingCallNotification();
     stopAllCallTones(); 
     stopTimer(); 
-    if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; }
+    releaseWakeLock();
     clearTimeout(autoHideTimer); 
     clearTimeout(callTimeoutTimer); 
     callTimeoutTimer = null;
     stopNetworkQualityMonitor();
 
     cleanupKidsModules();
+    resetHardwareAudio();
 
     if (isCallConnected && currentCallTargetId) {
       recordCallLog({
@@ -2630,12 +2747,17 @@ async function hangup(silent = false) {
     pipWrap.style.opacity = '1';
     $('camBtn').classList.remove('off');
     $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
+    if ($('voiceCallArea')) $('voiceCallArea').hidden = true;
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
     
     callScreen.hidden = true; incomingDialog.hidden = true; outgoingDialog.hidden = true; lobbyScreen.hidden = false;
     isHangingUp = false;
+
+    // यदि फ़ोन लॉक था, तो एक्टिविटी को तुरंत बंद करें ताकि लॉक स्क्रीन सुरक्षित रहे
+    if (window.AndroidAudio && typeof window.AndroidAudio.closeIfLocked === 'function') {
+      window.AndroidAudio.closeIfLocked();
+    }
   }
 }
 
@@ -2649,6 +2771,11 @@ function startTimer() {
 }
 function stopTimer() { if (timerTimer) { clearInterval(timerTimer); timerTimer = null; } $('callTimer').textContent = '00:00'; }
 
+async function requestWakeLock() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+}
+function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; } }
+
 let backPressedOnce = false;
 function setupHardwareBackButton() {
   window.addEventListener('popstate', (e) => {
@@ -2657,7 +2784,7 @@ function setupHardwareBackButton() {
       e.preventDefault();
       return;
     }
-    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
     for (const m of openModals) {
       if (!m.hidden) {
         m.hidden = true;
@@ -2667,8 +2794,9 @@ function setupHardwareBackButton() {
       }
     }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsWhiteboardModal').hidden) { 
+      $('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       history.pushState(null, '', window.location.href); e.preventDefault(); return; 
     }
@@ -2685,11 +2813,12 @@ function setupHardwareBackButton() {
   if (!isNative || !App) return;
   App.addListener('backButton', () => {
     if (Date.now() < ignoreBackUntil) return;
-    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) { 
+      $('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       return; 
     }
@@ -2781,9 +2910,22 @@ async function checkWebOtaUpdate(manual = false) {
   }
 }
 
-$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
+$('checkUpdateBtn').onclick = () => {
+  $('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
+
+// नोटिफिकेशन और नेटिव लॉन्च एक्शन्स चेक करें
+function checkNativeLaunchIntent() {
+  if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
+    const action = window.AndroidAudio.getLaunchCallAction();
+    const callId = window.AndroidAudio.getLaunchCallId();
+    if (action === "ACCEPT" && callId) {
+      window.AndroidAudio.clearLaunchCallAction();
+      handleDirectAcceptCall(callId);
+    }
+  }
+}
 
 function handleDeepLinks() {
   try {
@@ -2802,9 +2944,7 @@ function handleDeepLinks() {
           openChat(data.targetId, data.senderName || 'उपयोगकर्ता', true);
         } else if (data.type === 'ACCEPT_CALL' && data.callId) {
           if (!isCallConnected) {
-            activeCallId = data.callId;
-            isAudioOnlyCall = !!data.isAudio;
-            if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
+            handleDirectAcceptCall(data.callId);
           }
         }
       });
@@ -2825,8 +2965,11 @@ function handleDeepLinks() {
           const url = new URL(event.url);
           const chatTgtId = url.searchParams.get('chatTargetId');
           const chatTgtName = url.searchParams.get('chatTargetName');
+          const accCallId = url.searchParams.get('acceptCallId');
 
-          if (chatTgtId) {
+          if (accCallId) {
+            handleDirectAcceptCall(accCallId);
+          } else if (chatTgtId) {
             openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता', true);
           }
         } catch(e) {}
@@ -2845,6 +2988,7 @@ async function initApp() {
     checkUser();
     await triggerAutoPermissionGate();
     handleDeepLinks();
+    checkNativeLaunchIntent();
   } catch (err) {
     console.error('UI init error:', err);
   }
