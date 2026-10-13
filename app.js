@@ -4655,8 +4655,9 @@ function setupHardwareBackButton() {
 
   history.pushState(null, '', window.location.href);
 
-  if (!isNative || !App) return;
-  App.addListener('backButton', () => {
+ const appPlugin = getAppPlugin();
+if (!isNativeApp() || !appPlugin) return;
+appPlugin.addListener('backButton', () => {
     if (Date.now() < ignoreBackUntil) return;
     const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
@@ -4678,7 +4679,7 @@ function setupHardwareBackButton() {
     if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
     if (!incomingDialog.hidden) { $('btnReject').click(); return; }
 
-    if (backPressedOnce) { App.exitApp(); }
+    if (backPressedOnce) { getAppPlugin().exitApp(); }
     else {
       backPressedOnce = true;
       toast(currentLang === 'hi' ? 'बाहर निकलने के लिए दोबारा बैक दबाएँ' : 'Press back again to exit');
@@ -4806,8 +4807,9 @@ function handleDeepLinks() {
       handleDirectAcceptCall(accCallId);
     }
 
-    if (isNative && App) {
-      App.addListener('appUrlOpen', async (event) => {
+    const appPlugin = getAppPlugin();
+if (isNativeApp() && appPlugin) {
+  appPlugin.addListener('appUrlOpen', async (event) => {
         try {
           const url = new URL(event.url);
           const chatTgtId = url.searchParams.get('chatTargetId');
@@ -4819,10 +4821,10 @@ function handleDeepLinks() {
         } catch(e) {}
       });
 
-      App.addListener('appStateChange', (state) => {
-        if (state.isActive) checkNativeLaunchIntent();
-      });
-    }
+       appPlugin.addListener('appStateChange', (state) => {
+    if (state.isActive) checkNativeLaunchIntent();
+  });
+}
   } catch (e) {
     console.warn('Deep link error:', e);
   }
