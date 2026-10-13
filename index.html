@@ -25,7 +25,49 @@
 <body>
 
 <div id="networkBanner" hidden>⚠️ इंटरनेट कनेक्शन टूट गया है... पुनः कनेक्ट कर रहे हैं</div>
+
+<!-- 🆕 Media Transfer: Hidden file inputs -->
 <input type="file" id="photoFileInput" accept="image/*" style="display:none">
+<input type="file" id="videoFileInput" accept="video/*" style="display:none">
+<input type="file" id="docFileInput" accept="*/*" style="display:none">
+<input type="file" id="anyFileInput" accept="*/*" style="display:none">
+<input type="file" id="cameraCaptureInput" accept="image/*" capture="environment" style="display:none">
+
+<!-- 🆕 Media Transfer Queue (floating widget) -->
+<div id="transferQueue"></div>
+
+<!-- 🆕 Media Viewer (fullscreen preview) -->
+<div id="mediaViewer" hidden>
+  <div class="media-viewer-top">
+    <button class="media-viewer-close" id="closeMediaViewerBtn">✕</button>
+    <button class="media-viewer-save" id="saveMediaBtn">⬇️ सेव करें</button>
+  </div>
+  <div class="media-viewer-content" id="mediaViewerContent"></div>
+</div>
+
+<!-- 🆕 Attach Menu (WhatsApp-style) -->
+<div id="attachMenu" hidden>
+  <button class="attach-menu-item" data-action="camera">
+    <span class="attach-menu-icon camera">📸</span>
+    <span>कैमरा</span>
+  </button>
+  <button class="attach-menu-item" data-action="image">
+    <span class="attach-menu-icon image">🖼️</span>
+    <span>फ़ोटो व वीडियो</span>
+  </button>
+  <button class="attach-menu-item" data-action="doc">
+    <span class="attach-menu-icon doc">📄</span>
+    <span>दस्तावेज़</span>
+  </button>
+  <button class="attach-menu-item" data-action="location">
+    <span class="attach-menu-icon location">📍</span>
+    <span>लोकेशन</span>
+  </button>
+  <button class="attach-menu-item" data-action="contact">
+    <span class="attach-menu-icon contact">👤</span>
+    <span>संपर्क</span>
+  </button>
+</div>
 
 <div id="permNoticeModal" class="modal-overlay" hidden>
   <div class="modal-box">
@@ -141,7 +183,7 @@
   </div>
   <div class="chat-body" id="chatBody"></div>
   <div class="chat-footer">
-    <button class="attach-btn" id="attachBtn" title="फ़ोटो भेजें">📎</button>
+    <button class="attach-btn" id="attachBtn" title="अटैच करें">📎</button>
     <div class="input-wrap">
       <textarea id="chatInput" class="chat-input" placeholder="संदेश लिखें..." rows="1"
                 autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"
@@ -202,7 +244,6 @@
 <div id="call" class="screen" hidden>
   <div id="remoteGrid"></div>
 
-  <!-- वॉइस कॉल सेंट्रल अवतार -->
   <div id="voiceCallArea" class="voice-central-area" hidden>
     <div class="voice-avatar-ring">
       <div class="voice-avatar">👤</div>
@@ -214,7 +255,6 @@
   <div class="pip-wrap mirror" id="pipWrap"><video id="localVideo" autoplay playsinline muted></video></div>
   <button id="pipRestoreBtn" class="pip-restore-btn" hidden>‹ 📹</button>
 
-  <!-- टॉप कंट्रोल बार: सदस्य जोड़ें, कैमरा पलटें और ऑडियो/वीडियो मोड बटन -->
   <div class="call-top-bar" id="callTopBar">
     <div class="top-pill" id="topPill">
       <div class="timer-pill" id="callTimer">00:00</div>
@@ -235,7 +275,6 @@
     </div>
   </div>
 
-  <!-- 🪄 फन मोड बॉटम स्लाइड-अप ट्रे: केवल 3 टूल्स -->
   <div id="funModeTray" class="fun-tray-modal" hidden>
     <div class="fun-tray-content">
       <div class="fun-tray-header">
@@ -259,7 +298,6 @@
     </div>
   </div>
 
-  <!-- किड्स क्विज़ फ़्लोटिंग कार्ड (15s टाइमर बार सहित) -->
   <div id="kidsQuizBox" class="quiz-floating-box" hidden>
     <div class="quiz-header">
       <div class="quiz-header-title">🎯 किड्स क्विज़</div>
@@ -279,7 +317,6 @@
     <button id="nextQuizBtn" class="quiz-next-big-btn">🔄 अगला सवाल (Next Question)</button>
   </div>
 
-  <!-- लाइव वाइटबोर्ड ओवरले -->
   <div id="kidsWhiteboardModal" class="whiteboard-overlay" hidden>
     <div class="whiteboard-top-bar">
       <span class="whiteboard-title">🎨 लाइव वाइटबोर्ड</span>
@@ -303,7 +340,6 @@
     </div>
   </div>
 
-  <!-- नीचे का 5-बटन बॉटम बार -->
   <div class="controls" id="controlsBar">
     <div class="controls-grid-5">
       <button class="ctl-box" id="micBtn">

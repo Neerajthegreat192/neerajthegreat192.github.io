@@ -1238,3 +1238,465 @@ button{font-family:inherit;cursor:pointer;outline:none}
 #chatTargetName {
   color: var(--c-user) !important;
 }
+/* ===================================================
+   🎬 MEDIA TRANSFER STYLES (WebRTC Data Channel)
+   =================================================== */
+
+/* Media bubble container */
+.media-bubble {
+  max-width: 280px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.2);
+  position: relative;
+  cursor: pointer;
+}
+
+.media-bubble img,
+.media-bubble video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  background: #0a0e13;
+}
+
+/* Download overlay (when not yet received) */
+.media-download-overlay {
+  position: relative;
+  width: 220px;
+  height: 160px;
+  background: linear-gradient(135deg, #1a232d, #0f151c);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #94a3b8;
+  transition: background 0.2s;
+}
+
+.media-download-overlay:active {
+  background: linear-gradient(135deg, #22303d, #141d26);
+}
+
+.media-download-icon {
+  font-size: 34px;
+  opacity: 0.7;
+}
+
+.media-file-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.media-file-size {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.media-download-btn {
+  background: rgba(16,185,129,0.2);
+  border: 1px solid rgba(16,185,129,0.5);
+  color: #10b981;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 14px;
+  border-radius: 14px;
+  margin-top: 4px;
+}
+
+.media-download-btn:active {
+  background: rgba(16,185,129,0.35);
+}
+
+/* Progress overlay for sending/receiving */
+.media-progress-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #fff;
+  z-index: 5;
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.media-progress-circle {
+  width: 54px;
+  height: 54px;
+  position: relative;
+}
+
+.media-progress-circle svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.media-progress-circle circle {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.media-progress-circle .track {
+  stroke: rgba(255,255,255,0.15);
+}
+
+.media-progress-circle .fill {
+  stroke: #10b981;
+  transition: stroke-dasharray 0.3s linear;
+}
+
+.media-progress-pct {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: #10b981;
+}
+
+.media-progress-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.media-progress-cancel {
+  background: rgba(244,63,94,0.2);
+  border: 1px solid rgba(244,63,94,0.5);
+  color: #fda4af;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+.media-progress-cancel:active {
+  background: rgba(244,63,94,0.35);
+}
+
+/* Video thumbnail */
+.media-video-thumb {
+  position: relative;
+  width: 220px;
+  height: 160px;
+  background: #0a0e13;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.media-video-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-play-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 52px;
+  height: 52px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: #fff;
+  pointer-events: none;
+}
+
+/* Document bubble */
+.media-doc-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 10px 12px;
+  min-width: 200px;
+}
+
+.media-doc-icon {
+  font-size: 28px;
+  width: 42px;
+  height: 42px;
+  background: rgba(56,189,248,0.12);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.media-doc-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.media-doc-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-doc-size {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Attachment menu */
+#attachMenu {
+  position: absolute;
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  left: 12px;
+  background: #1a232d;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+  animation: attachMenuPop 0.2s ease-out;
+}
+
+@keyframes attachMenuPop {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.attach-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  transition: background 0.15s;
+  min-width: 180px;
+}
+
+.attach-menu-item:active {
+  background: rgba(255,255,255,0.08);
+}
+
+.attach-menu-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.attach-menu-icon.image { background: rgba(168,85,247,0.18); color: #c084fc; }
+.attach-menu-icon.video { background: rgba(244,63,94,0.18); color: #fda4af; }
+.attach-menu-icon.doc { background: rgba(56,189,248,0.18); color: #7dd3fc; }
+.attach-menu-icon.camera { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+.attach-menu-icon.location { background: rgba(245,158,11,0.18); color: #fbbf24; }
+.attach-menu-icon.contact { background: rgba(139,92,246,0.18); color: #a78bfa; }
+
+/* ===================================================
+   MEDIA VIEWER (fullscreen preview)
+   =================================================== */
+
+#mediaViewer {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  animation: mediaViewerIn 0.2s ease-out;
+}
+
+@keyframes mediaViewerIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.media-viewer-top {
+  padding: calc(10px + env(safe-area-inset-top, 24px)) 12px 10px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.85), transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+}
+
+.media-viewer-close {
+  background: rgba(255,255,255,0.15);
+  border: 0;
+  color: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.media-viewer-save {
+  background: rgba(16,185,129,0.25);
+  border: 1px solid rgba(16,185,129,0.5);
+  color: #10b981;
+  padding: 7px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.media-viewer-content {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.media-viewer-content img,
+.media-viewer-content video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* ===================================================
+   TRANSFER QUEUE PANEL (mini widget)
+   =================================================== */
+
+#transferQueue {
+  position: fixed;
+  top: calc(60px + env(safe-area-inset-top, 24px));
+  right: 12px;
+  width: 240px;
+  max-height: 50vh;
+  overflow-y: auto;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.transfer-item {
+  background: rgba(18,24,33,0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(56,189,248,0.3);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #fff;
+  font-size: 11px;
+  pointer-events: auto;
+  animation: transferItemIn 0.25s ease-out;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+}
+
+@keyframes transferItemIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.transfer-item-title {
+  font-weight: 800;
+  color: #38bdf8;
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.transfer-item-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.transfer-item-pct {
+  color: #10b981;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.transfer-item-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.transfer-item-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #38bdf8);
+  transition: width 0.2s linear;
+  border-radius: 2px;
+}
+
+.transfer-item-status {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.transfer-item-cancel {
+  background: rgba(244,63,94,0.2);
+  border: 1px solid rgba(244,63,94,0.5);
+  color: #fda4af;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+/* Media message meta ticks */
+.media-bubble .chat-meta {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  background: rgba(0,0,0,0.55);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+}
