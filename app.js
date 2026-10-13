@@ -136,6 +136,10 @@ let qualityLevel = 'high', qualityTimer = null, wakeLock = null, vibrationInterv
 let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
 
+// 🆕 FIX बग 3: यह flag याद रखेगा कि हमने handleDirectAcceptCall से कॉल join की है।
+// जब तक यह true है, listenForIncoming का onValue 'busy' सेट नहीं करेगा।
+let callJoinedViaDirectAccept = false;
+
 // ===================================================
 // नेटिव Android ब्रिज और ऑडियो हेल्पर्स
 // ===================================================
@@ -169,6 +173,10 @@ function resetHardwareAudio() {
 const ringtoneAudio = new Audio('ringtone.mp3');
 ringtoneAudio.loop = true;
 let audioCtx = null, outgoingRingTimer = null, incomingRingRetryTimer = null;
+
+// 🆕 FIX बग 4: नेटिव साइड अब हमेशा रिंगटोन बजाएगा — 
+// JS साइड सिर्फ उस समय वेब रिंगटोन बजाएगा जब ऐप फोरग्राउंड में हो 
+// और कोई नेटिव रिंगटोन न बज रही हो।
 
 function ensureAudioContext() {
   try {
@@ -241,7 +249,7 @@ function playBeepTone() {
     osc.frequency.setValueAtTime(440, ctx.currentTime); osc.type = 'sine';
     gain.gain.setValueAtTime(0.35, ctx.currentTime);
     gain.gain.setValueAtTime(0.35, ctx.currentTime + 1.0);
-    gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(); osc.stop(ctx.currentTime + 1.2);
   } catch(e) {}
@@ -253,9 +261,10 @@ function startOutgoingCallTone() {
 }
 function stopOutgoingCallTone() { if (outgoingRingTimer) { clearInterval(outgoingRingTimer); outgoingRingTimer = null; } }
 
+// 🆕 FIX बग 4: अब यह function सिर्फ तब चलता है जब ऐप फोरग्राउंड में हो।
+// बैकग्राउंड/लॉक स्क्रीन पर नेटिव साइड रिंगटोन बजाता है, JS नहीं।
 async function startIncomingRingtone() {
   stopOutgoingCallTone(); startVibration();
-  // अगर ऐप खुली है तो वेब ऑडियो रिंगटोन भी बजाएँ
   try {
     ensureAudioContext(); ringtoneAudio.currentTime = 0; await ringtoneAudio.play();
     if (incomingRingRetryTimer) { clearInterval(incomingRingRetryTimer); incomingRingRetryTimer = null; }
@@ -495,8 +504,14 @@ function setupNativePushListeners() {
   });
 }
 
-// इनकमिंग कॉल हैंडलर: स्क्रीन पर सिर्फ डायलॉग दिखेगा, बैकग्राउंड चैट नहीं दिखेगी
-function handleIncomingCallNotification(data) {
+// ===================================================
+// 🆕 FIX बग 4: इनकमिंग कॉल हैंडलर
+// नेटिव रिंगटोन को अब JS कभी नहीं छूता। 
+// JS सिर्फ तभी वेब रिंगटोन बजाएगा जब ऐप फोरग्राउंड में दिख रही हो
+// (यानी user_inbox का Realtime DB listener जो फायर होता है)।
+// नेटिव साइड बैकग्राउंड के लिए खुद जिम्मेदार है।
+// ===================================================
+function handleIncomingCallNotification(data, isFromForegroundListener = false) {
   if (!data || !data.callId) return;
   if (activeCallId === data.callId && !incomingDialog.hidden) return;
 
@@ -512,9 +527,25 @@ function handleIncomingCallNotification(data) {
   chatScreen.hidden = true;
   callScreen.hidden = true;
   
-  $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
+  $('incomingName').textContent = currentCallTargetName + (
+    isAudioOnlyCall 
+      ? (currentLang === 'hi' ? ' (ऑडियो कॉल)...' : ' (Audio Call)...') 
+      : (currentLang === 'hi' ? ' (वीडियो कॉल)...' : ' (Video Call)...')
+  );
   incomingDialog.hidden = false;
-  startIncomingRingtone();
+
+  // 🆕 FIX बग 4: रिंगटोन का फैसला अब सिर्फ इस बात से होगा कि 
+  // यह call Realtime DB listener (फोरग्राउंड) से आई है या नहीं।
+  // pushNotificationReceived (Native bridge) से आई call पर नेटिव साइड 
+  // पहले से ही रिंग कर रहा है, इसलिए वेब रिंगटोन मत बजाओ।
+  if (isFromForegroundListener) {
+    // फोरग्राउंड में हैं — नेटिव नहीं बजा रहा, वेब बजाओ
+    if (incomingDialog.hidden === false) {
+      startIncomingRingtone();
+    }
+  }
+  // वरना कुछ मत करो — नेटिव साइड बजा रहा है
+
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
 }
 
@@ -534,6 +565,14 @@ async function handleDirectAcceptCall(callId) {
     currentCallTargetId = sData.callerId || '';
     currentCallTargetName = sData.callerName || 'उपयोगकर्ता';
     isAudioOnlyCall = !!sData.audioOnly;
+
+    // 🆕 FIX बग 3: इस flag को true कर दो ताकि listenForIncoming का onValue 
+    // इसे 'busy' न समझे जब वह अगली बार 'calling' status देखे।
+    callJoinedViaDirectAccept = true;
+
+    // 🆕 FIX बग 3: user_inbox को तुरंत साफ कर दो ताकि 
+    // onValue का stale 'calling' status अगली बार न आए।
+    remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
 
     incomingDialog.hidden = true;
     lobbyScreen.hidden = true;
@@ -568,7 +607,7 @@ function checkNativeLaunchIntent() {
         callId: callId,
         callerName: callerName,
         audioOnly: audioOnly
-      });
+      }, false);
     } else if (action === "REJECT" && callId) {
       window.AndroidAudio.clearLaunchCallAction();
       stopAllCallTones();
@@ -1199,7 +1238,6 @@ chatInput.addEventListener('input', () => {
 });
 ['keyup', 'change', 'paste', 'compositionend'].forEach(ev => chatInput.addEventListener(ev, updateActionBtnState));
 
-// इंस्टेंट डबल-टिक (Delivered Receipt) हेतु पुश पेलोड
 async function sendChatMessagePush(targetId, textContent, roomId, msgId) {
   try {
     const tSnap = await get(ref(db, `users/${targetId}`));
@@ -1448,25 +1486,47 @@ $('photoFileInput').onchange = e => {
 
 let currentCallType = 'outgoing', currentCallTargetId = null, currentCallTargetName = null;
 
+// ===================================================
+// 🆕 FIX बग 3: listenForIncoming को पूरी तरह से सुरक्षित बनाया
+// - अगर हम पहले से connected हैं और यह call हमारी ही है → skip (busy मत करो)
+// - handleDirectAcceptCall के बाद तुरंत user_inbox remove हो चुका है
+// - अगर stale 'calling' status आया भी, तो हम उसे ignore करेंगे
+// ===================================================
 function listenForIncoming() {
   const incomingRef = ref(db, `user_inbox/${myUserId}`);
   
   get(incomingRef).then(snap => {
     const data = snap.val();
     if (data && data.status === 'calling' && !activeCallId) {
-      handleIncomingCallNotification(data);
+      handleIncomingCallNotification(data, true);
     }
   }).catch(()=>{});
 
   onValue(incomingRef, async (snap) => {
-    const data = snap.val(); if (!data) return;
+    const data = snap.val(); 
+    if (!data) return;
+
+    // 🆕 FIX बग 3: अगर यह call हमने अभी handleDirectAcceptCall से join की है, 
+    // तो इसे 'busy' मत समझो। सिर्फ ignore करो।
+    if (callJoinedViaDirectAccept && activeCallId === data.callId) {
+      remove(incomingRef).catch(()=>{});
+      return;
+    }
+
     if (data.status === 'calling') {
+      // 🆕 FIX बग 3: अगर activeCallId पहले से इसी call की है और हम connected हैं,
+      // तो stale 'calling' status को ignore करो — busy मत करो।
+      if (activeCallId === data.callId && isCallConnected) {
+        remove(incomingRef).catch(()=>{});
+        return;
+      }
+      // बाकी condition — सही तरीके से busy करो
       if (isCallConnected || (activeCallId && !callScreen.hidden)) {
         await update(ref(db, `call_sessions/${data.callId}`), { status: 'busy' }).catch(()=>{});
         await remove(incomingRef).catch(()=>{});
         return;
       }
-      handleIncomingCallNotification(data);
+      handleIncomingCallNotification(data, true);
       await update(ref(db, `users/${myUserId}`), { activeCallId: data.callId }).catch(()=>{});
       await update(incomingRef, { status: 'ringing' }).catch(()=>{});
       await update(ref(db, `call_sessions/${data.callId}`), { status: 'ringing' }).catch(()=>{});
@@ -1529,7 +1589,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
   
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
-  // Jitsi Pattern: पूरे कॉल सेशन पर onDisconnect:ended कभी नहीं लगाना है
 
   await set(sessionRef, {
     callId: activeCallId, callerId: myUserId, callerName: myUserName, targetId: remoteId, audioOnly: !!audioOnly, status: 'calling', createdAt: serverTimestamp()
@@ -1595,6 +1654,10 @@ $('btnAccept').onclick = async () => {
   if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession(); 
 };
 
+// ===================================================
+// 🆕 FIX बग 1: Reject करने के बाद lobby screen वापस दिखाओ
+// पहले सिर्फ incomingDialog hidden होता था, तीनों screens hidden रह जाती थीं → black screen
+// ===================================================
 $('btnReject').onclick = async () => {
   stopAllCallTones(); 
   incomingDialog.hidden = true;
@@ -1606,6 +1669,27 @@ $('btnReject').onclick = async () => {
   if (activeCallId) await update(ref(db, `call_sessions/${activeCallId}`), { status: 'rejected' }).catch(()=>{});
   await update(ref(db, `user_inbox/${myUserId}`), { status: 'rejected' }).catch(()=>{});
   setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
+
+  // 🆕 FIX बग 1: state रीसेट करो और lobby screen वापस दिखाओ
+  // (यह सिर्फ अनलॉक स्क्रीन के लिए मायने रखता है — लॉक स्क्रीन पर closeIfLocked finish कर देगा)
+  const wasLocked = window.AndroidAudio && typeof window.AndroidAudio.isDeviceLocked === 'function' && window.AndroidAudio.isDeviceLocked();
+
+  if (!wasLocked) {
+    // सारे call-related state साफ करो
+    activeCallId = null;
+    isCallConnected = false;
+    isAudioOnlyCall = false;
+    currentCallTargetId = null;
+    currentCallTargetName = null;
+    currentCallType = 'outgoing';
+    callJoinedViaDirectAccept = false;
+
+    // स्क्रीन वापस दिखाओ
+    callScreen.hidden = true;
+    chatScreen.hidden = true;
+    lobbyScreen.hidden = false;
+  }
+
   closeIfLocked();
 };
 
@@ -2441,7 +2525,7 @@ function cleanupKidsModules() {
 
 async function joinCallSession() {
   clearTimeout(callTimeoutTimer); callTimeoutTimer = null;
-  stopAllCallTones(); // कॉल जुड़ते ही सभी रिंगटोन तुरंत बंद
+  stopAllCallTones();
   lobbyScreen.hidden = true; chatScreen.hidden = true; callScreen.hidden = false;
   isCallConnected = true; isHangingUp = false;
   ignoreBackUntil = Date.now() + 2000;
@@ -2452,7 +2536,6 @@ async function joinCallSession() {
 
   updateCallModeVisuals(isAudioOnlyCall);
 
-  // वॉइस कॉल डिफ़ॉल्ट रूप से इयरपीस पर, वीडियो कॉल लाउडस्पीकर पर
   if (isAudioOnlyCall) {
     setHardwareSpeaker(false);
   } else {
@@ -2466,13 +2549,16 @@ async function joinCallSession() {
   listenWhiteboardAutoSync();
   listenTictactoeSession();
 
-  // Jitsi Pattern: onDisconnect केवल यूज़र के अपने सदस्य नोड पर रहता है (कॉल सेशन पर नहीं)
   const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
   onDisconnect(myMemberRef).remove().catch(()=>{});
 
   await set(myMemberRef, {
     name: myUserName, camEnabled: !isAudioOnlyCall, micEnabled, audioOnly: isAudioOnlyCall, joinedAt: Date.now()
   });
+
+  // 🆕 FIX बग 3: यहाँ callJoinedViaDirectAccept को रीसेट कर दो
+  // (अब user_inbox साफ है, stale 'calling' वापस नहीं आएगा)
+  callJoinedViaDirectAccept = false;
 
   if (callSessionUnsub) callSessionUnsub();
   callSessionUnsub = onValue(ref(db, `call_sessions/${activeCallId}/status`), snap => {
@@ -2512,7 +2598,6 @@ function initiatePeerConnection(peerId, peerName) {
     addRemoteVideoCell(peerId, e.streams[0], peerName);
     updateRemoteGridClass();
 
-    // Jitsi Audio Routing Fix: रिमोट ट्रैक बजते ही Android 15 & 16 के लिए इयरपीस को री-अप्लाई करें
     if (isAudioOnlyCall && !speakerEnabled) {
       setTimeout(() => { setHardwareSpeaker(false); }, 300);
       setTimeout(() => { setHardwareSpeaker(false); }, 1000);
@@ -2711,7 +2796,6 @@ $('camBtn').onclick = async (e) => {
   scheduleAutoHide();
 };
 
-// लाउडस्पीकर / इयरपीस टॉगल बटन
 $('speakerBtn').onclick = (e) => {
   e.stopPropagation();
   setHardwareSpeaker(!speakerEnabled);
@@ -2721,7 +2805,6 @@ $('speakerBtn').onclick = (e) => {
   scheduleAutoHide();
 };
 
-// टॉप बार में कैमरा फ्लिप बटन
 $('flipBtn').onclick = async (e) => {
   e.stopPropagation();
   $('funModeTray').hidden = true;
@@ -2803,6 +2886,9 @@ async function hangup(silent = false) {
     remoteGrid.innerHTML = ''; activeCallId = null; isCallConnected = false; isAudioOnlyCall = false;
     callStartTime = 0;
 
+    // 🆕 FIX बग 3: हर hangup पर flag रीसेट
+    callJoinedViaDirectAccept = false;
+
     callScreen.classList.remove('video-swapped');
     controlsBar.classList.remove('fade-out');
     $('callTopBar').classList.remove('fade-out');
@@ -2817,7 +2903,6 @@ async function hangup(silent = false) {
     callScreen.hidden = true; incomingDialog.hidden = true; outgoingDialog.hidden = true; lobbyScreen.hidden = false;
     isHangingUp = false;
 
-    // यदि कॉल लॉक स्क्रीन पर चल रही थी, तो ऐप को तुरंत बंद (finish) करें ताकि फ़ोन सुरक्षित लॉक रहे
     closeIfLocked();
   }
 }
@@ -3025,7 +3110,6 @@ function handleDeepLinks() {
         } catch(e) {}
       });
 
-      // जब ऐप बैकग्राउंड से फ़ोरग्राउंड में आए, तो तुरंत चेक करें कि क्या कॉल का नया एक्शन आया है
       App.addListener('appStateChange', (state) => {
         if (state.isActive) {
           checkNativeLaunchIntent();
