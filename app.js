@@ -1,6 +1,6 @@
 // ===================================================
-// 📄 app.js — Part 1 of 3
-// Headers, Variables, Utilities, Media Transfer State
+// 📄 app.js — Part 1 of 3 (Updated)
+// Headers, Variables, Permissions Flow, Utilities
 // ===================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -155,25 +155,38 @@ let ignoreBackUntil = 0;
 let callJoinedViaDirectAccept = false;
 
 // ===================================================
-// 🆕 MEDIA TRANSFER STATE (WebRTC Data Channel)
+// MEDIA TRANSFER STATE (WebRTC Data Channel)
 // ===================================================
-// ये structure: { mediaId: { ...transfer metadata... } }
 let activeTransfers = {};
-// WebRTC data channel connection pool: { peerId: RTCDataChannel }
 let mediaDataChannels = {};
-// WebRTC data channel peer connection pool: { peerId: RTCPeerConnection }
 let mediaPeerConnections = {};
-// Message chunks buffer for reassembly: { mediaId: [chunks...] }
 let incomingChunks = {};
-// Currently open media viewer state
 let mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
-// Chunk size for WebRTC data channel (16 KB is safe across all browsers)
 const CHUNK_SIZE = 16 * 1024;
-// Threshold: files up to this size go through Firebase RTDB (offline-friendly)
-const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024; // 5 MB
-// Buffer threshold for backpressure
-const BUFFER_HIGH_THRESHOLD = 8 * 1024 * 1024; // 8 MB
-const BUFFER_LOW_THRESHOLD = 1 * 1024 * 1024;  // 1 MB
+const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024;
+const BUFFER_HIGH_THRESHOLD = 8 * 1024 * 1024;
+const BUFFER_LOW_THRESHOLD = 1 * 1024 * 1024;
+
+// ===================================================
+// 🆕 PERMISSION STATE
+// ===================================================
+let permissionCallbackCounter = 0;
+let permissionCallbacks = {};
+let splashHidden = false;
+
+// ===================================================
+// 🆕 SPLASH SCREEN
+// ===================================================
+function hideSplashScreen() {
+  if (splashHidden) return;
+  splashHidden = true;
+  const splash = $('splashScreen');
+  if (!splash) return;
+  splash.classList.add('hide');
+  setTimeout(() => {
+    if (splash.parentNode) splash.parentNode.removeChild(splash);
+  }, 500);
+}
 
 // ===================================================
 // NATIVE BRIDGE HELPERS
@@ -212,7 +225,6 @@ function isDeviceLocked() {
   return false;
 }
 
-// 🆕 Save base64 media to Downloads
 function saveMediaViaNative(base64Data, fileName, mimeType) {
   if (window.AndroidAudio && typeof window.AndroidAudio.saveMediaToDownloads === 'function') {
     try {
@@ -222,10 +234,107 @@ function saveMediaViaNative(base64Data, fileName, mimeType) {
   return '';
 }
 
-// 🆕 Share saved file via native intent
 function shareMediaViaNative(fileUri) {
   if (window.AndroidAudio && typeof window.AndroidAudio.shareMediaUri === 'function') {
     try { window.AndroidAudio.shareMediaUri(fileUri); } catch(e) {}
+  }
+}
+
+// ===================================================
+// 🆕 PERMISSION BRIDGE (JS side)
+// ===================================================
+function requestAllPermissionsNative() {
+  return new Promise((resolve) => {
+    if (!window.AndroidAudio || typeof window.AndroidAudio.requestAllPermissions !== 'function') {
+      // Native नहीं है (PWA) — fallback
+      requestAllPermissionsWeb().then(resolve);
+      return;
+    }
+
+    const cbId = 'perm_' + (++permissionCallbackCounter);
+    permissionCallbacks[cbId] = resolve;
+
+    try {
+      window.AndroidAudio.requestAllPermissions(cbId);
+    } catch(e) {
+      console.warn('requestAllPermissions error:', e);
+      delete permissionCallbacks[cbId];
+      resolve({ allGranted: false, denied: ['unknown'] });
+    }
+  });
+}
+
+// 🆕 Native callback handler (MainActivity से call होगा)
+window.__onPermissionResult = function(callbackId, allGranted, deniedList) {
+  try {
+    const cb = permissionCallbacks[callbackId];
+    if (cb) {
+      delete permissionCallbacks[callbackId];
+      const denied = deniedList ? deniedList.split(',').filter(Boolean) : [];
+      cb({ allGranted, denied });
+    }
+  } catch(e) {
+    console.warn('Permission callback error:', e);
+  }
+};
+
+// Web fallback (PWA के लिए) — browser से permissions माँगो
+async function requestAllPermissionsWeb() {
+  const denied = [];
+
+  // Camera + Mic
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    stream.getTracks().forEach(t => t.stop());
+  } catch(e) {
+    denied.push('camera_or_mic');
+  }
+
+  // Notification
+  try {
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') denied.push('notification');
+    }
+  } catch(e) {
+    denied.push('notification');
+  }
+
+  // Location
+  try {
+    if ('geolocation' in navigator) {
+      await new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          () => resolve(),
+          () => { denied.push('location'); resolve(); },
+          { timeout: 3000 }
+        );
+      });
+    }
+  } catch(e) {
+    denied.push('location');
+  }
+
+  // Push notifications subscription (web)
+  try {
+    await requestNotificationPermission();
+  } catch(e) {}
+
+  return { allGranted: denied.length === 0, denied };
+}
+
+function hasAllPermissionsNative() {
+  if (window.AndroidAudio && typeof window.AndroidAudio.hasAllPermissions === 'function') {
+    try { return window.AndroidAudio.hasAllPermissions(); } catch(e) {}
+  }
+  return false;
+}
+
+function openAppSettingsNative() {
+  if (window.AndroidAudio && typeof window.AndroidAudio.openAppSettings === 'function') {
+    try { window.AndroidAudio.openAppSettings(); } catch(e) {}
+  } else {
+    toast(currentLang === 'hi' ? 'सेटिंग्स में जाकर अनुमतियाँ दें' : 'Please grant permissions in settings');
   }
 }
 
@@ -390,7 +499,6 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
 
-// 🆕 Get file icon based on mime type
 function getFileIcon(mimeType, fileName) {
   if (!mimeType) mimeType = '';
   if (mimeType.startsWith('image/')) return '🖼️';
@@ -418,7 +526,7 @@ function clearOngoingCallNotification() {
 }
 
 // ===================================================
-// WHATSAPP SHARE + APK DOWNLOAD
+// SHARE + APK DOWNLOAD
 // ===================================================
 const shareBtn = $('shareAppBtn');
 if (shareBtn) {
@@ -448,7 +556,7 @@ if (apkDlBtn) {
 }
 
 // ===================================================
-// MEDIA PERMISSIONS
+// MEDIA PERMISSIONS (getUserMedia)
 // ===================================================
 async function acquireCallMedia(audioOnly = false) {
   if (localStream) {
@@ -525,22 +633,44 @@ async function requestNotificationPermission() {
   }
 }
 
-async function triggerAutoPermissionGate() {
-  const permGranted = localStorage.getItem('perms_requested');
-  if (permGranted) return;
-  const hasMedia = await checkMediaPermissions(false);
-  let hasNotif = false;
-  if ('Notification' in window) hasNotif = Notification.permission === 'granted';
-  if (!hasMedia || !hasNotif) $('permNoticeModal').hidden = false;
-}
+// ===================================================
+// 🆕 NEW PERMISSION FLOW
+// ===================================================
+async function runFullPermissionFlow() {
+  toast(currentLang === 'hi' ? '🛡️ अनुमतियाँ माँगी जा रही हैं...' : '🛡️ Requesting permissions...');
 
-$('grantPermsBtn').onclick = async () => {
-  $('permNoticeModal').hidden = true;
-  localStorage.setItem('perms_requested', 'true');
-  await checkMediaPermissions(true);
-  await requestNotificationPermission();
-  ensureAudioContext();
-};
+  const result = await requestAllPermissionsNative();
+
+  // चाहे granted हो या denied, notification token भी register करो
+  try {
+    await requestNotificationPermission();
+  } catch(e) {}
+
+  if (result.allGranted) {
+    toast(currentLang === 'hi' ? '✅ सभी अनुमतियाँ मिल गईं' : '✅ All permissions granted');
+  } else {
+    const denied = result.denied || [];
+    console.warn('Denied permissions:', denied);
+
+    // अगर important permissions denied हैं, तो user को settings खोलने का विकल्प दो
+    const importantDenied = denied.some(p =>
+      p.includes('CAMERA') || p.includes('RECORD_AUDIO') ||
+      p.includes('POST_NOTIFICATIONS')
+    );
+
+    if (importantDenied) {
+      const msg = currentLang === 'hi'
+        ? 'कुछ ज़रूरी अनुमतियाँ नहीं मिलीं। क्या आप सेटिंग्स खोलकर उन्हें दे सकते हैं?'
+        : 'Some important permissions were denied. Open settings to grant them?';
+      if (confirm(msg)) {
+        openAppSettingsNative();
+        return false;
+      }
+    }
+  }
+
+  return result.allGranted;
+}
 
 // ===================================================
 // NATIVE PUSH LISTENERS
@@ -615,7 +745,7 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
 }
 
 // ===================================================
-// DIRECT ACCEPT (Notification Accept)
+// DIRECT ACCEPT
 // ===================================================
 async function handleDirectAcceptCall(callId) {
   try {
@@ -664,18 +794,21 @@ function checkNativeLaunchIntent() {
       window.AndroidAudio.clearLaunchCallAction();
       stopAllCallTones();
       handleDirectAcceptCall(callId);
+      return;
     } else if (action === "SHOW_INCOMING" && callId) {
       window.AndroidAudio.clearLaunchCallAction();
       handleIncomingCallNotification({ callId, callerName, audioOnly }, false);
+      return;
     } else if (action === "REJECT" && callId) {
       window.AndroidAudio.clearLaunchCallAction();
       stopAllCallTones();
       update(ref(db, `call_sessions/${callId}`), { status: 'rejected' }).catch(()=>{});
       closeIfLocked();
+      return;
     }
   }
 
-  // 🆕 Chat intent from notification tap
+  // Chat intent from notification tap
   if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchChatTargetId === 'function') {
     const chatTargetId = window.AndroidAudio.getLaunchChatTargetId();
     const chatTargetName = window.AndroidAudio.getLaunchChatTargetName();
@@ -749,27 +882,86 @@ function listenSelfAccountStatus() {
       hangup(true); localStorage.clear();
       myUserId = ''; myUserName = '';
       myHeaderName.textContent = '...';
-      chatScreen.hidden = true; callScreen.hidden = true; lobbyScreen.hidden = false;
+      chatScreen.hidden = true; callScreen.hidden = true; lobbyScreen.hidden = true;
       $('nameInput').value = ''; $('nameModal').hidden = false;
       toast(currentLang === 'hi' ? '⚠️ आपकी आईडी रीसेट हो गई है।' : '⚠️ Your ID was reset.');
     }
   });
 }
 
+// ===================================================
+// USER CHECK + NAME SAVE (🆕 New flow)
+// ===================================================
 function checkUser() {
-  if (!myUserId || !myUserName) $('nameModal').hidden = false;
-  else { $('nameModal').hidden = true; initPresence(); }
+  // पहले lobby को hidden रखो (index.html में already hidden है)
+  lobbyScreen.hidden = true;
+  chatScreen.hidden = true;
+  callScreen.hidden = true;
+
+  // अगर नाम नहीं है → name modal दिखाओ
+  if (!myUserId || !myUserName) {
+    $('nameModal').hidden = false;
+    // 🆕 Splash हटाओ अब (क्योंकि UI ready है)
+    setTimeout(hideSplashScreen, 300);
+    return;
+  }
+
+  // नाम है → अगर permissions नहीं दी हैं तो permission modal दिखाओ
+  const permsDone = localStorage.getItem('perms_done_v2') === 'true';
+  const alreadyHasAll = isNative ? hasAllPermissionsNative() : true;
+
+  if (!permsDone || !alreadyHasAll) {
+    // 🆕 पहले Permission Modal दिखाओ, फिर lobby
+    $('nameModal').hidden = true;
+    $('permNoticeModal').hidden = false;
+    setTimeout(hideSplashScreen, 300);
+    return;
+  }
+
+  // सब ठीक → lobby खोलो
+  $('nameModal').hidden = true;
+  $('permNoticeModal').hidden = true;
+  lobbyScreen.hidden = false;
+  setTimeout(hideSplashScreen, 300);
+  initPresence();
 }
 
+// 🆕 Name save — अब permission modal खोलो, फिर permissions माँगो
 $('saveNameBtn').onclick = async () => {
-  const val = $('nameInput').value.trim(); if (!val) return;
+  const val = $('nameInput').value.trim();
+  if (!val) return;
+
   myUserName = val;
   myUserId = val.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Math.floor(100 + Math.random()*900);
-  localStorage.setItem('vc_user_id', myUserId); localStorage.setItem('vc_user_name', myUserName);
+  localStorage.setItem('vc_user_id', myUserId);
+  localStorage.setItem('vc_user_name', myUserName);
+
+  // 🆕 Name modal बंद करो
   $('nameModal').hidden = true;
-  await checkMediaPermissions();
-  await requestNotificationPermission();
+
+  // 🆕 Permission Modal दिखाओ (permissions यहाँ नहीं माँगेंगे)
+  $('permNoticeModal').hidden = false;
+};
+
+// 🆕 Grant Permissions button — अब सारी permissions एक साथ माँगे
+$('grantPermsBtn').onclick = async () => {
+  $('permNoticeModal').hidden = true;
+
+  // सारी permissions एक साथ माँगो
+  const allGranted = await runFullPermissionFlow();
+
+  // Mark as done (चाहे सब मिलें या नहीं — user ने एक बार देख लिया)
+  localStorage.setItem('perms_done_v2', 'true');
+
+  // Lobby खोलो
+  lobbyScreen.hidden = false;
   initPresence();
+
+  if (!allGranted) {
+    setTimeout(() => {
+      toast(currentLang === 'hi' ? '⚠️ कुछ अनुमतियाँ बंद हैं — सेटिंग्स से चालू करें' : '⚠️ Some permissions denied — enable in settings');
+    }, 800);
+  }
 };
 
 // ===================================================
@@ -805,11 +997,13 @@ $('saveEditedNameBtn').onclick = async () => {
   toast(currentLang === 'hi' ? '✅ नाम सुरक्षित कर लिया गया' : '✅ Name saved');
 };
 
+// 🆕 Recheck permissions button — full flow फिर चलाओ
 $('recheckPermsBtn').onclick = async () => {
   $('profileModal').hidden = true;
-  await checkMediaPermissions(true);
-  await requestNotificationPermission();
-  toast(currentLang === 'hi' ? 'अनुमतियाँ जाँची गईं' : 'Permissions checked');
+  localStorage.removeItem('perms_done_v2');
+  await runFullPermissionFlow();
+  localStorage.setItem('perms_done_v2', 'true');
+  toast(currentLang === 'hi' ? '✅ अनुमतियाँ जाँची गईं' : '✅ Permissions checked');
 };
 
 $('clearChatHistoryBtn').onclick = async () => {
@@ -1133,28 +1327,450 @@ searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
 
 // ===================================================
-// Media Transfer (WebRTC Data Channel), Chat, Media Viewer
+// END OF PART 1
+// ===================================================
+// ===================================================
+// 📄 app.js — Part 2 of 3
+// Long-Press Menu, Media Transfer, Chat, Media Viewer
 // ===================================================
 
 // ===================================================
-// 🆕 MEDIA TRANSFER — WEBRTC DATA CHANNEL
+// 🆕 CHAT MESSAGE LONG-PRESS MENU
 // ===================================================
+let longPressTimer = null;
+let longPressStartX = 0;
+let longPressStartY = 0;
+let longPressMoved = false;
+let currentLongPressMsgId = null;
+let currentLongPressMsgData = null;
+let replyToMessageId = null;
+let replyToMessageData = null;
 
 /**
- * Peer के साथ WebRTC Data Channel बनाता है (media transfer के लिए)।
- * यह call के peer connection से अलग है — independent channel।
+ * Chat bubble पर long-press event setup करता है।
+ * हर message element के लिए यह function call होता है।
  */
+function attachBubbleLongPress(el, msgId, m) {
+  const HOLD_TIME = 500; // ms
+
+  const onStart = (e) => {
+    // अगर touch point image/video/doc bubble के ऊपर है, तो भी menu दिखाएँ
+    longPressStartX = e.touches ? e.touches[0].clientX : e.clientX;
+    longPressStartY = e.touches ? e.touches[0].clientY : e.clientY;
+    longPressMoved = false;
+
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      if (longPressMoved) return;
+      openMessageMenu(el, msgId, m);
+    }, HOLD_TIME);
+  };
+
+  const onMove = (e) => {
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const dx = Math.abs(x - longPressStartX);
+    const dy = Math.abs(y - longPressStartY);
+    if (dx > 10 || dy > 10) {
+      longPressMoved = true;
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
+
+  const onEnd = () => {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  };
+
+  el.addEventListener('touchstart', onStart, { passive: true });
+  el.addEventListener('touchmove', onMove, { passive: true });
+  el.addEventListener('touchend', onEnd);
+  el.addEventListener('touchcancel', onEnd);
+
+  el.addEventListener('mousedown', onStart);
+  el.addEventListener('mousemove', onMove);
+  el.addEventListener('mouseup', onEnd);
+  el.addEventListener('mouseleave', onEnd);
+
+  // Desktop के लिए right-click
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    openMessageMenu(el, msgId, m);
+  });
+}
+
+/**
+ * Message पर long-press होने पर floating menu दिखाता है।
+ */
+function openMessageMenu(el, msgId, m) {
+  currentLongPressMsgId = msgId;
+  currentLongPressMsgData = m;
+
+  const isMine = m.senderId === myUserId;
+  const isDeleted = m.deleted === true;
+  const isSystemCall = m.type === 'system-call';
+
+  // पहले से कोई menu है? हटाओ
+  const existing = $('msgLongPressMenu');
+  if (existing) existing.remove();
+
+  const menu = document.createElement('div');
+  menu.id = 'msgLongPressMenu';
+  menu.className = 'msg-long-press-menu';
+
+  let itemsHtml = '';
+
+  // Reply (सिर्फ text/media messages के लिए)
+  if (!isSystemCall && !isDeleted) {
+    itemsHtml += `
+      <button class="menu-item" data-action="reply">
+        <span class="menu-item-ic">↩️</span>
+        <span>जवाब दें (Reply)</span>
+      </button>
+    `;
+  }
+
+  // Copy (सिर्फ text messages के लिए)
+  if (!isSystemCall && !isDeleted && (m.type === undefined || m.type === null || m.type === 'text')) {
+    itemsHtml += `
+      <button class="menu-item" data-action="copy">
+        <span class="menu-item-ic">📋</span>
+        <span>कॉपी करें (Copy)</span>
+      </button>
+    `;
+  }
+
+  // Forward (सिर्फ text/media messages के लिए)
+  if (!isSystemCall && !isDeleted) {
+    itemsHtml += `
+      <button class="menu-item" data-action="forward">
+        <span class="menu-item-ic">➡️</span>
+        <span>फॉरवर्ड करें (Forward)</span>
+      </button>
+    `;
+  }
+
+  // Star (सिर्फ text/media messages के लिए)
+  if (!isSystemCall && !isDeleted) {
+    itemsHtml += `
+      <button class="menu-item" data-action="star">
+        <span class="menu-item-ic">⭐</span>
+        <span>स्टार करें (Star)</span>
+      </button>
+    `;
+  }
+
+  // Delete (सबके लिए)
+  if (!isDeleted) {
+    if (isMine) {
+      itemsHtml += `
+        <button class="menu-item" data-action="delete-me">
+          <span class="menu-item-ic">🗑️</span>
+          <span>मेरे लिए हटाएँ (Delete for me)</span>
+        </button>
+        <button class="menu-item danger" data-action="delete-all">
+          <span class="menu-item-ic">🗑️</span>
+          <span>सबके लिए हटाएँ (Delete for everyone)</span>
+        </button>
+      `;
+    } else {
+      itemsHtml += `
+        <button class="menu-item" data-action="delete-me">
+          <span class="menu-item-ic">🗑️</span>
+          <span>मेरे लिए हटाएँ (Delete for me)</span>
+        </button>
+      `;
+    }
+  }
+
+  menu.innerHTML = `
+    <div class="menu-backdrop"></div>
+    <div class="menu-box">${itemsHtml}</div>
+  `;
+
+  document.body.appendChild(menu);
+
+  // Menu item click handlers
+  menu.querySelectorAll('.menu-item').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      closeMessageMenu();
+      await handleMessageAction(action, msgId, m);
+    };
+  });
+
+  // Backdrop click → close
+  menu.querySelector('.menu-backdrop').onclick = () => closeMessageMenu();
+
+  // Auto hide after 4 seconds of inactivity (optional)
+  setTimeout(() => {
+    if ($('msgLongPressMenu')) closeMessageMenu();
+  }, 6000);
+}
+
+function closeMessageMenu() {
+  const menu = $('msgLongPressMenu');
+  if (menu) menu.remove();
+  currentLongPressMsgId = null;
+  currentLongPressMsgData = null;
+}
+
+/**
+ * Menu action handle करता है।
+ */
+async function handleMessageAction(action, msgId, m) {
+  if (!currentChatTargetId || !msgId) return;
+
+  const roomId = getChatRoomId(myUserId, currentChatTargetId);
+  const roomPath = `chats/${roomId}/messages/${msgId}`;
+
+  switch (action) {
+    case 'copy':
+      try {
+        await navigator.clipboard.writeText(m.text || '');
+        toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied');
+      } catch(e) {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = m.text || '';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied'); } catch(e2) {}
+        document.body.removeChild(ta);
+      }
+      break;
+
+    case 'reply':
+      startReply(msgId, m);
+      break;
+
+    case 'forward':
+      openForwardDialog(msgId, m);
+      break;
+
+    case 'star':
+      await toggleStarMessage(roomPath, m);
+      break;
+
+    case 'delete-me':
+      await deleteMessage(roomPath, msgId, false);
+      break;
+
+    case 'delete-all':
+      const confirmMsg = currentLang === 'hi'
+        ? 'क्या आप सबके लिए यह मैसेज हटाना चाहते हैं?'
+        : 'Delete this message for everyone?';
+      if (confirm(confirmMsg)) {
+        await deleteMessage(roomPath, msgId, true);
+      }
+      break;
+  }
+}
+
+/**
+ * Reply mode शुरू करता है — input के ऊपर preview दिखाता है।
+ */
+function startReply(msgId, m) {
+  replyToMessageId = msgId;
+  replyToMessageData = m;
+
+  let previewText = m.text || '';
+  if (m.type === 'image') previewText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
+  else if (m.type === 'video') previewText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
+  else if (m.type === 'audio') previewText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
+  else if (m.type === 'doc') previewText = '📄 ' + (currentLang==='hi'?'दस्तावेज़':'Document');
+
+  showReplyPreview(m.senderName || 'उपयोगकर्ता', previewText);
+  chatInput.focus();
+}
+
+function showReplyPreview(senderName, text) {
+  let box = $('replyPreviewBox');
+  if (box) box.remove();
+
+  box = document.createElement('div');
+  box.id = 'replyPreviewBox';
+  box.className = 'reply-preview-box';
+  box.innerHTML = `
+    <div class="reply-preview-bar"></div>
+    <div class="reply-preview-content">
+      <div class="reply-preview-sender">↩️ ${safeName(senderName)}</div>
+      <div class="reply-preview-text">${safeName(text)}</div>
+    </div>
+    <button class="reply-preview-close" id="closeReplyBtn">✕</button>
+  `;
+
+  const footer = document.querySelector('.chat-footer');
+  if (footer) footer.insertBefore(box, footer.firstChild);
+
+  box.querySelector('#closeReplyBtn').onclick = (e) => {
+    e.stopPropagation();
+    cancelReply();
+  };
+}
+
+function cancelReply() {
+  replyToMessageId = null;
+  replyToMessageData = null;
+  const box = $('replyPreviewBox');
+  if (box) box.remove();
+}
+
+/**
+ * Star message toggle।
+ */
+async function toggleStarMessage(roomPath, m) {
+  const newStar = !m.starred;
+  try {
+    await update(ref(db, roomPath), { starred: newStar });
+    toast(newStar
+      ? (currentLang === 'hi' ? '⭐ स्टार किया' : '⭐ Starred')
+      : (currentLang === 'hi' ? 'स्टार हटाया' : 'Unstarred'));
+  } catch(e) {
+    toast(currentLang === 'hi' ? 'त्रुटि' : 'Error');
+  }
+}
+
+/**
+ * Message delete logic।
+ * forEveryone=true → सबके लिए delete, वरना सिर्फ मेरे लिए।
+ */
+async function deleteMessage(roomPath, msgId, forEveryone) {
+  try {
+    if (forEveryone) {
+      // सबके लिए delete — message को placeholder से replace करो
+      await update(ref(db, roomPath), {
+        deleted: true,
+        deletedAt: Date.now(),
+        text: '🚫 ' + (currentLang === 'hi' ? 'यह संदेश हटा दिया गया है' : 'This message was deleted'),
+        data: null,
+        type: 'deleted',
+        senderName: myUserName
+      });
+    } else {
+      // मेरे लिए delete — Firebase में नहीं, सिर्फ local UI से हटाओ
+      const el = $(`msg_${msgId}`);
+      if (el) {
+        el.style.transition = 'opacity 0.3s, transform 0.3s';
+        el.style.opacity = '0';
+        el.style.transform = 'scale(0.9)';
+        setTimeout(() => el.remove(), 300);
+      }
+
+      // localStorage में "deletedForMe" list update करो
+      try {
+        const key = `vc_deleted_${myUserId}_${getChatRoomId(myUserId, currentChatTargetId)}`;
+        const list = JSON.parse(localStorage.getItem(key) || '[]');
+        if (!list.includes(msgId)) list.push(msgId);
+        localStorage.setItem(key, JSON.stringify(list));
+      } catch(e) {}
+    }
+
+    toast(forEveryone
+      ? (currentLang === 'hi' ? '🗑️ सबके लिए हटाया' : '🗑️ Deleted for everyone')
+      : (currentLang === 'hi' ? '🗑️ हटा दिया' : '🗑️ Deleted'));
+  } catch(e) {
+    console.warn('Delete error:', e);
+    toast(currentLang === 'hi' ? 'त्रुटि' : 'Error');
+  }
+}
+
+/**
+ * Message को "मेरे लिए delete" वाले list में से check करता है।
+ */
+function isDeletedForMe(msgId) {
+  try {
+    const key = `vc_deleted_${myUserId}_${getChatRoomId(myUserId, currentChatTargetId)}`;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    return list.includes(msgId);
+  } catch(e) {
+    return false;
+  }
+}
+
+/**
+ * Forward dialog — simple prompt से contact चुनो।
+ */
+function openForwardDialog(msgId, m) {
+  const users = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
+  if (!users.length) {
+    toast(currentLang === 'hi' ? 'कोई संपर्क नहीं' : 'No contacts');
+    return;
+  }
+
+  const names = users.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
+  const input = prompt((currentLang === 'hi' ? 'किसे फॉरवर्ड करें? (नंबर लिखें)\n\n' : 'Forward to? (enter number)\n\n') + names);
+  if (!input) return;
+
+  const idx = parseInt(input) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= users.length) {
+    toast(currentLang === 'hi' ? 'गलत नंबर' : 'Invalid');
+    return;
+  }
+
+  const targetId = users[idx];
+  const targetName = allOnlineUsers[targetId].name;
+
+  // Forward message बनाओ
+  forwardMessageTo(targetId, m, targetName);
+}
+
+async function forwardMessageTo(targetId, m, targetName) {
+  try {
+    const roomId = getChatRoomId(myUserId, targetId);
+    const roomPath = `chats/${roomId}/messages`;
+    const targetOnline = !!allOnlineUsers[targetId]?.online;
+
+    const newMsgRef = push(ref(db, roomPath));
+    const newMsgId = newMsgRef.key;
+
+    const msgData = {
+      senderId: myUserId,
+      senderName: myUserName,
+      time: Date.now(),
+      delivered: targetOnline,
+      read: false,
+      forwarded: true
+    };
+
+    if (m.type === 'image' || m.type === 'video' || m.type === 'doc') {
+      msgData.type = m.type;
+      msgData.data = m.data || null;
+      msgData.text = m.text || '';
+      msgData.fileName = m.fileName;
+      msgData.mimeType = m.mimeType;
+      msgData.fileSize = m.fileSize;
+      msgData.mediaId = m.mediaId;
+    } else if (m.type === 'audio') {
+      msgData.type = 'audio';
+      msgData.data = m.data;
+      msgData.duration = m.duration;
+      msgData.durationSec = m.durationSec;
+    } else {
+      msgData.text = m.text || '';
+    }
+
+    await set(newMsgRef, msgData);
+    toast(`${targetName} ${currentLang === 'hi' ? 'को फॉरवर्ड कर दिया' : 'forwarded'}`);
+  } catch(e) {
+    console.warn('Forward error:', e);
+    toast(currentLang === 'hi' ? 'फॉरवर्ड फेल' : 'Forward failed');
+  }
+}
+
+// ===================================================
+// MEDIA TRANSFER — WEBRTC DATA CHANNEL
+// ===================================================
 async function getOrCreateMediaDataChannel(peerId) {
-  // अगर पहले से open channel है तो return
   if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
     return mediaDataChannels[peerId];
   }
 
-  // नया peer connection बनाओ
   const pc = new RTCPeerConnection(ICE_SERVERS);
   mediaPeerConnections[peerId] = pc;
 
-  // ICE candidates सेटअप
   const myPath = `media_signals/${myUserId}__${peerId}`;
   const peerPath = `media_signals/${peerId}__${myUserId}`;
 
@@ -1175,7 +1791,6 @@ async function getOrCreateMediaDataChannel(peerId) {
     for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
   };
 
-  // Deterministic offer/answer — chhota ID पहले offer करे
   const iAmOfferer = myUserId < peerId;
 
   return new Promise(async (resolve, reject) => {
@@ -1191,7 +1806,7 @@ async function getOrCreateMediaDataChannel(peerId) {
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await set(ref(db, `${myPath}/offer`), { sdp: offer.sdp, type: offer.type });
+      await set(ref(db, `${myPath}/offer`), { sdp: offer.sdp, type: offer.type, ts: Date.now() });
 
       const unsubAns = onValue(ref(db, `${peerPath}/answer`), async snap => {
         const a = snap.val();
@@ -1226,23 +1841,18 @@ async function getOrCreateMediaDataChannel(peerId) {
           await pc.flushIce();
           const ans = await pc.createAnswer();
           await pc.setLocalDescription(ans);
-          await set(ref(db, `${myPath}/answer`), { sdp: ans.sdp, type: ans.type });
+          await set(ref(db, `${myPath}/answer`), { sdp: ans.sdp, type: ans.type, ts: Date.now() });
         }
       });
     }
   });
 }
 
-/**
- * Data channel पर incoming messages handle करता है — control + chunks।
- */
 function setupMediaDataChannel(peerId, dc) {
   dc.binaryType = 'arraybuffer';
 
   dc.onmessage = (event) => {
     const data = event.data;
-
-    // अगर String है तो control message (JSON)
     if (typeof data === 'string') {
       try {
         const msg = JSON.parse(data);
@@ -1250,37 +1860,24 @@ function setupMediaDataChannel(peerId, dc) {
       } catch(e) {}
       return;
     }
-
-    // अगर ArrayBuffer है तो chunk है — लेकिन chunk का metadata अलग control message से आता है
-    // हम simple protocol follow करेंगे: पहले JSON header, फिर chunks
     if (data instanceof ArrayBuffer) {
       handleIncomingChunk(peerId, data);
     }
   };
 
-  dc.onclose = () => {
-    delete mediaDataChannels[peerId];
-  };
-
-  dc.onerror = (err) => {
-    console.warn('Data channel error:', err);
-  };
+  dc.onclose = () => { delete mediaDataChannels[peerId]; };
+  dc.onerror = (err) => { console.warn('Data channel error:', err); };
 }
 
-/**
- * Control message handle करता है (metadata, start, end, ack, cancel)।
- */
 function handleMediaControlMessage(peerId, msg) {
   const mediaId = msg.mediaId;
   if (!mediaId) return;
 
   switch (msg.type) {
     case 'media-start':
-      // नया transfer शुरू हुआ — metadata save करो
       incomingChunks[mediaId] = [];
       activeTransfers[mediaId] = {
-        mediaId,
-        peerId,
+        mediaId, peerId,
         direction: 'receive',
         fileName: msg.fileName || 'file',
         mimeType: msg.mimeType || 'application/octet-stream',
@@ -1293,41 +1890,28 @@ function handleMediaControlMessage(peerId, msg) {
         status: 'receiving'
       };
       renderTransferQueue();
-
-      // Receiver की तरफ से send notification FCM भेजना नहीं — sender ही भेजेगा
-      break;
-
-    case 'media-chunk-ack':
-      // Sender को backpressure relief (optional)
-      // हम explicitly ack नहीं भेजते, बल्कि dc.bufferedAmount से पता करते हैं
       break;
 
     case 'media-end':
-      // सब chunks आ गए — assemble करो
       if (incomingChunks[mediaId]) {
         const transfer = activeTransfers[mediaId];
         const chunks = incomingChunks[mediaId];
-
-        // पूरा file blob बनाओ
         const blob = new Blob(chunks, { type: transfer?.mimeType || 'application/octet-stream' });
 
-        // metadata receive करने के बाद sender ने FCM भेजी है जिसमें messageId है
-        // (चैट में media message का record sender की तरफ से set हो चुका है)
-        // हम चैट में असली data URL placeholder update करेंगे:
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64Data = reader.result;
           updateChatMediaMessageWithData(mediaId, base64Data);
 
-          // Auto-save to Downloads (chhoti चीज़ों के लिए)
+          // छोटी फाइल auto-save
           if (transfer && transfer.totalSize < SMALL_FILE_THRESHOLD) {
-            const uri = saveMediaViaNative(base64Data.split(',')[1] || base64Data, transfer.fileName, transfer.mimeType);
+            const base64Only = base64Data.split(',')[1] || base64Data;
+            const uri = saveMediaViaNative(base64Only, transfer.fileName, transfer.mimeType);
             if (uri) toast(currentLang === 'hi' ? '✅ फाइल Downloads में सेव हो गई' : '✅ File saved to Downloads');
           }
         };
         reader.readAsDataURL(blob);
 
-        // Transfer complete mark
         if (activeTransfers[mediaId]) {
           activeTransfers[mediaId].status = 'complete';
           activeTransfers[mediaId].completedAt = Date.now();
@@ -1337,7 +1921,6 @@ function handleMediaControlMessage(peerId, msg) {
             renderTransferQueue();
           }, 2500);
         }
-
         delete incomingChunks[mediaId];
       }
       break;
@@ -1353,15 +1936,17 @@ function handleMediaControlMessage(peerId, msg) {
       }
       delete incomingChunks[mediaId];
       break;
+
+    case 'media-request':
+      // Sender: receiver file माँग रहा है — अभी simple fallback
+      toast(currentLang === 'hi'
+        ? '⚠️ सामने वाले को दोबारा भेजने के लिए फ़ाइल select करें'
+        : '⚠️ Re-select the file to resend');
+      break;
   }
 }
 
-/**
- * Incoming binary chunk को buffer में जमा करता है।
- */
 function handleIncomingChunk(peerId, arrayBuffer) {
-  // जिस mediaId का transfer अभी active है उसी में डालेंगे
-  // हम protocol में assume करते हैं कि chunks ordered हैं और एक समय पर एक ही transfer हो रहा है उस peer के साथ
   const activeMediaIds = Object.keys(activeTransfers).filter(id => {
     const t = activeTransfers[id];
     return t.peerId === peerId && t.direction === 'receive' && t.status === 'receiving';
@@ -1377,15 +1962,11 @@ function handleIncomingChunk(peerId, arrayBuffer) {
   transfer.receivedChunks = (transfer.receivedChunks || 0) + 1;
   transfer.receivedBytes = (transfer.receivedBytes || 0) + arrayBuffer.byteLength;
 
-  // Progress update (har 10 chunks पर UI update, performance के लिए)
   if (transfer.receivedChunks % 10 === 0 || transfer.receivedBytes >= transfer.totalSize) {
     renderTransferQueue();
   }
 }
 
-/**
- * Sender: फाइल को chunks में divide करके peer को भेजता है।
- */
 async function sendMediaFileOverDataChannel(peerId, file) {
   let dc;
   try {
@@ -1398,10 +1979,8 @@ async function sendMediaFileOverDataChannel(peerId, file) {
   const mediaId = `media_${Date.now()}_${Math.floor(Math.random()*10000)}`;
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-  // Transfer entry बनाओ
   activeTransfers[mediaId] = {
-    mediaId,
-    peerId,
+    mediaId, peerId,
     direction: 'send',
     fileName: file.name || 'file',
     mimeType: file.type || 'application/octet-stream',
@@ -1415,7 +1994,6 @@ async function sendMediaFileOverDataChannel(peerId, file) {
   };
   renderTransferQueue();
 
-  // भेजने वाले को control message: media-start
   dc.send(JSON.stringify({
     type: 'media-start',
     mediaId,
@@ -1426,10 +2004,8 @@ async function sendMediaFileOverDataChannel(peerId, file) {
     totalChunks
   }));
 
-  // छोटा delay ताकि receiver metadata प्रोसेस कर सके
   await new Promise(r => setTimeout(r, 100));
 
-  // Chunk-wise भेजो, backpressure handle करते हुए
   const arrayBuffer = await file.arrayBuffer();
   let offset = 0;
 
@@ -1441,7 +2017,6 @@ async function sendMediaFileOverDataChannel(peerId, file) {
       return null;
     }
 
-    // Backpressure check
     if (dc.bufferedAmount > BUFFER_HIGH_THRESHOLD) {
       await waitForBufferDrain(dc);
     }
@@ -1454,13 +2029,11 @@ async function sendMediaFileOverDataChannel(peerId, file) {
     activeTransfers[mediaId].sentChunks++;
     activeTransfers[mediaId].sentBytes = offset;
 
-    // UI har 10 chunks पर
     if (activeTransfers[mediaId].sentChunks % 10 === 0 || offset >= file.size) {
       renderTransferQueue();
     }
   }
 
-  // End message
   dc.send(JSON.stringify({ type: 'media-end', mediaId }));
 
   activeTransfers[mediaId].status = 'complete';
@@ -1475,9 +2048,6 @@ async function sendMediaFileOverDataChannel(peerId, file) {
   return mediaId;
 }
 
-/**
- * Buffer drain होने का इंतज़ार (backpressure के लिए)।
- */
 function waitForBufferDrain(dc) {
   return new Promise(resolve => {
     const checkInterval = setInterval(() => {
@@ -1489,9 +2059,6 @@ function waitForBufferDrain(dc) {
   });
 }
 
-/**
- * MIME type से media type निकालो।
- */
 function getMediaTypeFromMime(mime) {
   if (!mime) return 'doc';
   if (mime.startsWith('image/')) return 'image';
@@ -1501,18 +2068,14 @@ function getMediaTypeFromMime(mime) {
 }
 
 // ===================================================
-// 🆕 TRANSFER QUEUE UI (Floating panel)
+// TRANSFER QUEUE UI
 // ===================================================
 function renderTransferQueue() {
   const queue = $('transferQueue');
   if (!queue) return;
-
   const transfers = Object.values(activeTransfers);
 
-  if (transfers.length === 0) {
-    queue.innerHTML = '';
-    return;
-  }
+  if (transfers.length === 0) { queue.innerHTML = ''; return; }
 
   queue.innerHTML = transfers.map(t => {
     const isSend = t.direction === 'send';
@@ -1548,12 +2111,10 @@ function renderTransferQueue() {
     `;
   }).join('');
 
-  // Cancel buttons wire करो
   queue.querySelectorAll('.transfer-item-cancel').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
-      const mediaId = btn.dataset.cancelId;
-      cancelTransfer(mediaId);
+      cancelTransfer(btn.dataset.cancelId);
     };
   });
 }
@@ -1565,7 +2126,6 @@ function cancelTransfer(mediaId) {
   t.status = 'cancelled';
   renderTransferQueue();
 
-  // Peer को बताओ
   const dc = mediaDataChannels[t.peerId];
   if (dc && dc.readyState === 'open') {
     try { dc.send(JSON.stringify({ type: 'media-cancel', mediaId })); } catch(e) {}
@@ -1579,7 +2139,7 @@ function cancelTransfer(mediaId) {
 }
 
 // ===================================================
-// 🆕 CHAT SCREEN OPEN/CLOSE
+// CHAT SCREEN OPEN/CLOSE
 // ===================================================
 let chatUnsub = null;
 let activePlayingAudio = null;
@@ -1609,6 +2169,7 @@ function openChat(tId, tName, isOnline) {
   chatScreen.hidden = false;
   chatInput.value = '';
   chatInput.style.height = '44px';
+  cancelReply();
   updateActionBtnState();
   loadChatMessages();
 }
@@ -1617,6 +2178,7 @@ function closeChat() {
   if (chatUnsub) { chatUnsub(); chatUnsub = null; }
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
   discardRecording();
+  cancelReply();
   if (activePlayingAudio) { activePlayingAudio.pause(); activePlayingAudio = null; }
   currentChatTargetId = null;
   update(ref(db, `users/${myUserId}`), { typingTo: null }).catch(()=>{});
@@ -1628,7 +2190,7 @@ $('chatCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentCha
 $('chatVoiceCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, true); };
 
 // ===================================================
-// 🆕 VOICE NOTE BUBBLE (audio message playback)
+// VOICE NOTE BUBBLE
 // ===================================================
 function attachVoiceBubbleEvents(container) {
   const btn = container.querySelector('.voice-play-circle');
@@ -1690,7 +2252,7 @@ function attachVoiceBubbleEvents(container) {
 }
 
 // ===================================================
-// 🆕 LOAD CHAT MESSAGES (with media support)
+// LOAD CHAT MESSAGES
 // ===================================================
 function loadChatMessages() {
   const body = $('chatBody');
@@ -1713,7 +2275,9 @@ function loadChatMessages() {
     sortedKeys.forEach(msgId => {
       const m = msgs[msgId];
 
-      // Read receipt
+      // मेरे लिए delete किया हुआ? skip
+      if (isDeletedForMe(msgId)) return;
+
       if (m.senderId !== myUserId && !m.read) {
         update(ref(db, `${roomPath}/${msgId}`), { read: true, delivered: true, readAt: Date.now() }).catch(()=>{});
       }
@@ -1726,7 +2290,6 @@ function loadChatMessages() {
         else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
       }
 
-      // अगर पहले से element है, तो सिर्फ meta update करो (ticks)
       if (el) {
         const metaEl = el.querySelector('.chat-meta');
         if (metaEl && m.senderId === myUserId) {
@@ -1735,7 +2298,6 @@ function loadChatMessages() {
         return;
       }
 
-      // नया element बनाओ
       el = document.createElement('div');
       el.id = `msg_${msgId}`;
       el.dataset.msgId = msgId;
@@ -1749,23 +2311,43 @@ function loadChatMessages() {
         return;
       }
 
+      // Deleted message
+      if (m.type === 'deleted' || m.deleted) {
+        el.className = `chat-bubble ${m.senderId === myUserId ? 'me' : 'them'}`;
+        el.innerHTML = `
+          <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
+          <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
+        `;
+        body.appendChild(el);
+        shouldScroll = true;
+        return;
+      }
+
       el.className = `chat-bubble ${m.senderId === myUserId ? 'me' : 'them'}`;
       let contentHtml = '';
 
-      if (m.type === 'image') {
-        // अगर data मौजूद है तो दिखाओ, वरना download placeholder
-        if (m.data) {
-          contentHtml = `
-            <div class="media-bubble">
-              <img src="${m.data}" alt="image" data-media-id="${m.mediaId || msgId}">
+      // Reply preview (अगर यह मैसेज किसी का reply है)
+      if (m.replyTo) {
+        contentHtml += `
+          <div class="chat-reply-preview">
+            <div class="chat-reply-bar"></div>
+            <div class="chat-reply-body">
+              <div class="chat-reply-sender">${safeName(m.replyTo.senderName || 'उपयोगकर्ता')}</div>
+              <div class="chat-reply-text">${safeName(m.replyTo.text || '')}</div>
             </div>
-          `;
+          </div>
+        `;
+      }
+
+      if (m.type === 'image') {
+        if (m.data) {
+          contentHtml += `<div class="media-bubble"><img src="${m.data}" alt="image" data-media-id="${m.mediaId || msgId}"></div>`;
         } else {
-          contentHtml = buildMediaPlaceholderHtml(msgId, m);
+          contentHtml += buildMediaPlaceholderHtml(msgId, m);
         }
       } else if (m.type === 'video') {
         if (m.data) {
-          contentHtml = `
+          contentHtml += `
             <div class="media-bubble">
               <div class="media-video-thumb">
                 <video src="${m.data}" preload="metadata" playsinline></video>
@@ -1774,12 +2356,12 @@ function loadChatMessages() {
             </div>
           `;
         } else {
-          contentHtml = buildMediaPlaceholderHtml(msgId, m);
+          contentHtml += buildMediaPlaceholderHtml(msgId, m);
         }
       } else if (m.type === 'doc' || m.type === 'file') {
-        contentHtml = buildDocBubbleHtml(msgId, m);
+        contentHtml += buildDocBubbleHtml(msgId, m);
       } else if (m.type === 'audio') {
-        contentHtml = `
+        contentHtml += `
           <div class="voice-note-bubble" id="vn_${msgId}">
             <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}">▶</button>
             <div class="voice-meta-area">
@@ -1789,24 +2371,24 @@ function loadChatMessages() {
           </div>
         `;
       } else {
-        contentHtml = `<div>${safeName(m.text)}</div>`;
+        contentHtml += `<div>${safeName(m.text)}</div>`;
       }
 
       el.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}</div>`;
 
-      // Events wire करो
       if (m.type === 'audio') attachVoiceBubbleEvents(el);
       if (m.type === 'image' && m.data) {
-        el.querySelector('img').onclick = () => openMediaViewer(m.data, m.mimeType || 'image/jpeg', m.fileName || 'image');
+        const img = el.querySelector('img');
+        if (img) img.onclick = () => openMediaViewer(m.data, m.mimeType || 'image/jpeg', m.fileName || 'image');
       }
       if (m.type === 'video' && m.data) {
-        el.querySelector('.media-video-thumb').onclick = () => openMediaViewer(m.data, m.mimeType || 'video/mp4', m.fileName || 'video');
+        const thumb = el.querySelector('.media-video-thumb');
+        if (thumb) thumb.onclick = () => openMediaViewer(m.data, m.mimeType || 'video/mp4', m.fileName || 'video');
       }
       if (m.type === 'doc' || m.type === 'file') {
         const docBubble = el.querySelector('.media-doc-bubble');
         if (docBubble) docBubble.onclick = () => handleDocDownload(msgId, m);
       }
-      // Download placeholder button
       const dlBtn = el.querySelector('.media-download-btn');
       if (dlBtn) {
         dlBtn.onclick = (e) => {
@@ -1814,6 +2396,9 @@ function loadChatMessages() {
           requestMediaFromPeer(msgId, m);
         };
       }
+
+      // 🆕 Long-press menu attach करो
+      attachBubbleLongPress(el, msgId, m);
 
       body.appendChild(el);
       shouldScroll = true;
@@ -1826,9 +2411,6 @@ function loadChatMessages() {
   });
 }
 
-/**
- * Media placeholder HTML बनाता है — जब data अभी download नहीं हुआ।
- */
 function buildMediaPlaceholderHtml(msgId, m) {
   const sizeText = m.fileSize ? formatFileSize(m.fileSize) : '';
   const icon = m.type === 'image' ? '🖼️' : (m.type === 'video' ? '🎥' : '📎');
@@ -1844,9 +2426,6 @@ function buildMediaPlaceholderHtml(msgId, m) {
   `;
 }
 
-/**
- * Document bubble (PDF, DOC, etc.)
- */
 function buildDocBubbleHtml(msgId, m) {
   const icon = getFileIcon(m.mimeType, m.fileName);
   const size = m.fileSize ? formatFileSize(m.fileSize) : '';
@@ -1862,7 +2441,7 @@ function buildDocBubbleHtml(msgId, m) {
 }
 
 // ===================================================
-// 🆕 CHAT MESSAGE SEND (text)
+// SEND CHAT MESSAGE
 // ===================================================
 function updateActionBtnState() {
   const hasText = chatInput.value.trim().length > 0;
@@ -1908,7 +2487,6 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId, mediaMe
       messageId: msgId
     };
 
-    // अगर media है तो अतिरिक्त metadata भेजो
     if (mediaMeta) {
       payload.mediaType = mediaMeta.mediaType;
       payload.mediaSize = mediaMeta.mediaSize;
@@ -1942,19 +2520,36 @@ async function sendChatMessage() {
   const newMsgRef = push(ref(db, roomPath));
   const newMsgId = newMsgRef.key;
 
-  latestChatSnippets[currentChatTargetId] = { text: txt, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
-  localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
-  renderContacts();
-
-  await set(newMsgRef, {
+  const msgData = {
     senderId: myUserId,
     senderName: myUserName,
     text: txt,
     time: Date.now(),
     delivered: targetOnline,
     read: false
-  });
+  };
 
+  // 🆕 Reply support
+  if (replyToMessageId && replyToMessageData) {
+    let previewText = replyToMessageData.text || '';
+    if (replyToMessageData.type === 'image') previewText = '📷 फ़ोटो';
+    else if (replyToMessageData.type === 'video') previewText = '🎥 वीडियो';
+    else if (replyToMessageData.type === 'audio') previewText = '🎙 वॉयस नोट';
+    else if (replyToMessageData.type === 'doc') previewText = '📄 दस्तावेज़';
+
+    msgData.replyTo = {
+      msgId: replyToMessageId,
+      senderName: replyToMessageData.senderName || 'उपयोगकर्ता',
+      text: previewText
+    };
+    cancelReply();
+  }
+
+  latestChatSnippets[currentChatTargetId] = { text: txt, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
+  localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
+  renderContacts();
+
+  await set(newMsgRef, msgData);
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
 }
 
@@ -1991,7 +2586,7 @@ chatInput.addEventListener('keydown', e => {
 });
 
 // ===================================================
-// 🆕 MEDIA MESSAGE SEND (via WebRTC Data Channel)
+// SEND MEDIA MESSAGE
 // ===================================================
 async function sendMediaMessage(file) {
   if (!file || !currentChatTargetId) return;
@@ -2000,7 +2595,7 @@ async function sendMediaMessage(file) {
   const targetOnline = !!allOnlineUsers[targetId]?.online;
 
   if (!targetOnline) {
-    toast(currentLang === 'hi' ? '⚠️ सामने वाला ऑफलाइन है — पहले चैट में आए' : '⚠️ Receiver is offline — ask them to come online');
+    toast(currentLang === 'hi' ? '⚠️ सामने वाला ऑफलाइन है — पहले चैट में आए' : '⚠️ Receiver is offline');
     return;
   }
 
@@ -2011,7 +2606,6 @@ async function sendMediaMessage(file) {
   const newMsgRef = push(ref(db, roomPath));
   const newMsgId = newMsgRef.key;
 
-  // चैट में placeholder message भेजो (data अभी नहीं है)
   const label = mediaType === 'image' ? '📷 फ़ोटो' : (mediaType === 'video' ? '🎥 वीडियो' : (mediaType === 'audio' ? '🎙 वॉयस नोट' : '📄 दस्तावेज़'));
 
   latestChatSnippets[targetId] = {
@@ -2038,7 +2632,6 @@ async function sendMediaMessage(file) {
     read: false
   });
 
-  // FCM notification
   sendChatMessagePush(targetId, label, roomId, newMsgId, {
     mediaType,
     mediaSize: file.size,
@@ -2047,12 +2640,10 @@ async function sendMediaMessage(file) {
     mimeType: file.type
   });
 
-  // अब WebRTC Data Channel से भेजो
   toast(currentLang === 'hi' ? '⏫ भेज रहे हैं...' : '⏫ Sending...');
   const sentMediaId = await sendMediaFileOverDataChannel(targetId, file);
 
   if (sentMediaId) {
-    // Chat message में delivered: true कर दो
     update(ref(db, `${roomPath}/${newMsgId}`), { delivered: true }).catch(()=>{});
     toast(currentLang === 'hi' ? '✅ भेज दिया' : '✅ Sent');
   } else {
@@ -2060,11 +2651,7 @@ async function sendMediaMessage(file) {
   }
 }
 
-/**
- * Receiver: जब download button दबाए, तो peer से request भेजो।
- */
 async function requestMediaFromPeer(msgId, msg) {
-  // अगर sender के साथ data channel पहले से है तो उपयोग करो
   const peerId = msg.senderId;
   if (!peerId) return;
 
@@ -2076,7 +2663,6 @@ async function requestMediaFromPeer(msgId, msg) {
 
   toast(currentLang === 'hi' ? '⏬ Sender से request भेजी...' : '⏬ Requested from sender...');
 
-  // Request control message भेजो
   let dc;
   try {
     dc = await getOrCreateMediaDataChannel(peerId);
@@ -2092,31 +2678,18 @@ async function requestMediaFromPeer(msgId, msg) {
   }));
 }
 
-/**
- * Sender: जब receiver request भेजे, तो फाइल दोबारा भेजो।
- * (हमने request handler setupMediaDataChannel में install नहीं किया — अब करते हैं)
- */
-// ⚠️ हम पहले से setupMediaDataChannel को extended कर रहे हैं (नीचे देखें)
-
-/**
- * Chat message को base64 data के साथ update करता है (जब download पूरा हो)।
- */
 function updateChatMediaMessageWithData(mediaId, base64Data) {
   if (!currentChatTargetId) return;
-
   const roomId = getChatRoomId(myUserId, currentChatTargetId);
   const roomPath = `chats/${roomId}/messages`;
 
-  // mediaId के आधार पर message ढूँढो — हम उन messages पर iterate करते हैं जिनमें यह mediaId है
   get(ref(db, roomPath)).then(snap => {
     const msgs = snap.val() || {};
     Object.keys(msgs).forEach(k => {
       const m = msgs[k];
       if (m.mediaId === mediaId && !m.data) {
-        // Chat message में data डाल दो
         update(ref(db, `${roomPath}/${k}`), { data: base64Data }).catch(()=>{});
 
-        // UI तुरंत update करो
         const el = document.getElementById(`msg_${k}`);
         if (el) {
           const overlay = el.querySelector('.media-download-overlay');
@@ -2133,21 +2706,16 @@ function updateChatMediaMessageWithData(mediaId, base64Data) {
   });
 }
 
-/**
- * Document download handler।
- */
 function handleDocDownload(msgId, m) {
   if (m.data) {
-    // पहले से downloaded — share या open
     openMediaViewer(m.data, m.mimeType || 'application/octet-stream', m.fileName || 'document');
   } else {
-    // Download करो
     requestMediaFromPeer(msgId, m);
   }
 }
 
 // ===================================================
-// 🆕 MEDIA VIEWER (fullscreen preview)
+// MEDIA VIEWER
 // ===================================================
 function openMediaViewer(dataUrl, mimeType, fileName) {
   mediaViewerState = { dataUrl, mimeType, fileName };
@@ -2168,7 +2736,6 @@ function openMediaViewer(dataUrl, mimeType, fileName) {
     vid.playsInline = true;
     content.appendChild(vid);
   } else {
-    // Doc या unknown — भले ही चलाना संभव न हो, browser native renderer दिखाएगा
     const iframe = document.createElement('iframe');
     iframe.src = dataUrl;
     iframe.style.cssText = 'width:100%;height:100%;border:0;background:#fff';
@@ -2186,7 +2753,6 @@ $('closeMediaViewerBtn').onclick = () => {
 
 $('saveMediaBtn').onclick = () => {
   if (!mediaViewerState.dataUrl) return;
-
   const { dataUrl, mimeType, fileName } = mediaViewerState;
   const base64Only = dataUrl.split(',')[1] || dataUrl;
 
@@ -2194,7 +2760,6 @@ $('saveMediaBtn').onclick = () => {
   if (uri) {
     toast(currentLang === 'hi' ? '✅ Downloads में सेव हो गई' : '✅ Saved to Downloads');
   } else {
-    // Fallback: browser download
     const a = document.createElement('a');
     a.href = dataUrl;
     a.download = fileName || 'media';
@@ -2206,7 +2771,7 @@ $('saveMediaBtn').onclick = () => {
 };
 
 // ===================================================
-// 🆕 ATTACH MENU (WhatsApp-style)
+// ATTACH MENU
 // ===================================================
 const attachBtn = $('attachBtn');
 const attachMenu = $('attachMenu');
@@ -2242,32 +2807,28 @@ attachMenu.querySelectorAll('.attach-menu-item').forEach(btn => {
 });
 
 // ===================================================
-// 🆕 FILE INPUT HANDLERS
+// FILE INPUT HANDLERS
 // ===================================================
 $('photoFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-
 $('videoFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-
 $('docFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-
 $('anyFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-
 $('cameraCaptureInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
@@ -2275,7 +2836,7 @@ $('cameraCaptureInput').onchange = (e) => {
 };
 
 // ===================================================
-// 🆕 LOCATION MESSAGE
+// LOCATION MESSAGE
 // ===================================================
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
@@ -2301,11 +2862,7 @@ function sendLocationMessage() {
     const label = '📍 लोकेशन';
 
     latestChatSnippets[currentChatTargetId] = {
-      text: label,
-      time: Date.now(),
-      senderId: myUserId,
-      read: false,
-      delivered: targetOnline
+      text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
     };
     localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
     renderContacts();
@@ -2313,7 +2870,7 @@ function sendLocationMessage() {
     await set(newMsgRef, {
       senderId: myUserId,
       senderName: myUserName,
-      type: 'doc',  // treat as a doc for compatibility
+      type: 'doc',
       text: label,
       fileName: 'लोकेशन',
       mimeType: 'text/plain',
@@ -2325,8 +2882,7 @@ function sendLocationMessage() {
     });
 
     sendChatMessagePush(currentChatTargetId, label, roomId, newMsgId, {
-      mediaType: 'doc',
-      fileName: 'लोकेशन'
+      mediaType: 'doc', fileName: 'लोकेशन'
     });
 
     toast(currentLang === 'hi' ? '✅ लोकेशन भेज दी' : '✅ Location sent');
@@ -2336,7 +2892,7 @@ function sendLocationMessage() {
 }
 
 // ===================================================
-// 🆕 CONTACT MESSAGE
+// CONTACT MESSAGE
 // ===================================================
 async function sendContactMessage() {
   if (!currentChatTargetId) return;
@@ -2353,7 +2909,7 @@ async function sendContactMessage() {
 
   const idx = parseInt(input) - 1;
   if (isNaN(idx) || idx < 0 || idx >= list.length) {
-    toast(currentLang === 'hi' ? 'गलत नंबर' : 'Invalid number');
+    toast(currentLang === 'hi' ? 'गलत नंबर' : 'Invalid');
     return;
   }
 
@@ -2370,11 +2926,7 @@ async function sendContactMessage() {
   const label = `👤 ${contact.name}`;
 
   latestChatSnippets[currentChatTargetId] = {
-    text: label,
-    time: Date.now(),
-    senderId: myUserId,
-    read: false,
-    delivered: targetOnline
+    text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
   };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
@@ -2394,48 +2946,14 @@ async function sendContactMessage() {
   });
 
   sendChatMessagePush(currentChatTargetId, label, roomId, newMsgId, {
-    mediaType: 'doc',
-    fileName: contact.name + '.vcf',
-    mimeType: 'text/vcard'
+    mediaType: 'doc', fileName: contact.name + '.vcf', mimeType: 'text/vcard'
   });
 
   toast(currentLang === 'hi' ? '✅ संपर्क भेज दिया' : '✅ Contact sent');
 }
 
 // ===================================================
-// 🆕 MEDIA REQUEST HANDLER (Sender side)
-// ===================================================
-// SetupMediaDataChannel के dc.onmessage में 'media-request' भी handle करना है।
-// हम इसे यहाँ extend करते हैं ताकि sender अपनी file दोबारा भेज सके।
-
-// Note: original setupMediaDataChannel में 'media-request' केस को भी हैंडल करने के लिए
-// handleMediaControlMessage को extend करना होगा। नीचे वह extended logic है:
-
-const _originalHandleMediaControlMessage = handleMediaControlMessage;
-handleMediaControlMessage = function(peerId, msg) {
-  if (msg.type === 'media-request' && msg.mediaId) {
-    // Sender: दूसरे ने फाइल माँगी है — हमारे पास cache से निकालकर भेजो
-    resendMediaToPeer(peerId, msg.mediaId, msg.messageId);
-    return;
-  }
-  _originalHandleMediaControlMessage(peerId, msg);
-};
-
-/**
- * Sender: cached file दोबारा भेजो (जब receiver ने download request किया हो)।
- * हम इसे सरल रखने के लिए localStorage में cache नहीं रखते — बल्कि उपयोगकर्ता को
- * फिर से select करने के लिए कहेंगे। असली production में IndexedDB cache रखना बेहतर है।
- */
-function resendMediaToPeer(peerId, mediaId, messageId) {
-  // सरल fallback: यूज़र को बताओ कि फ़ाइल दोबारा select करें
-  // (IndexedDB में store नहीं कर रहे, जिससे memory safe रहे)
-  toast(currentLang === 'hi'
-    ? '⚠️ सामने वाले को दोबारा भेजने के लिए फ़ाइल दोबारा select करें'
-    : '⚠️ Please re-select the file to resend');
-}
-
-// ===================================================
-// 🆕 VOICE NOTE DOCK (voice message recorder)
+// VOICE NOTE DOCK
 // ===================================================
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
@@ -2558,11 +3076,7 @@ function sendVoiceDock() {
         const voiceLabel = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
 
         latestChatSnippets[currentChatTargetId] = {
-          text: voiceLabel,
-          time: Date.now(),
-          senderId: myUserId,
-          read: false,
-          delivered: targetOnline
+          text: voiceLabel, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
         };
         localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
         renderContacts();
@@ -2601,24 +3115,8 @@ $('dockSendBtn').onclick = sendVoiceDock;
 // ===================================================
 // ===================================================
 // 📄 app.js — Part 3 of 3 (Final)
-// Patches, Call, Quiz, Whiteboard, TTT, Controls, Init
+// Call, Quiz, Whiteboard, TTT, Controls, Init
 // ===================================================
-
-// ===================================================
-// 🔧 PART 2 PATCH #1: media control message handler fix
-// (पिछले code में const function reassign नहीं हो सकता — यहाँ cleanup)
-// ===================================================
-// ⚠️ नोट: ऊपर Part 2 में handleMediaControlMessage का original defined है।
-// हम 'media-request' handling को inline integrate कर रहे हैं।
-
-function handleMediaRequest(peerId, msg) {
-  // Sender की तरफ: receiver ने file request की है
-  // चूँकि हम IndexedDB cache नहीं रख रहे (memory-safety के लिए), 
-  // हम user से दोबारा file select करने के लिए कहते हैं
-  toast(currentLang === 'hi'
-    ? '⚠️ सामने वाले को दोबारा भेजने के लिए फ़ाइल select करें'
-    : '⚠️ Re-select the file to resend');
-}
 
 // ===================================================
 // CALL LOGIC
@@ -2661,7 +3159,6 @@ function listenForIncoming() {
     } else if (data.status === 'cancelled' || data.status === 'ended') {
       clearOngoingCallNotification();
       if (!isCallConnected && currentCallType === 'incoming') {
-        // Missed call — log बनाओ
         recordCallLog({
           callId: activeCallId,
           targetId: currentCallTargetId,
@@ -2672,7 +3169,6 @@ function listenForIncoming() {
           time: Date.now()
         });
 
-        // 🆕 JS-side missed call notification (जब ऐप foreground में हो)
         if (!document.hidden) {
           triggerMissedCallNotification(currentCallTargetName, 1);
         }
@@ -2686,10 +3182,6 @@ function listenForIncoming() {
   });
 }
 
-/**
- * 🆕 JS-side missed call notification (Web Notification API के ज़रिए)
- * (जब ऐप foreground में हो, तब Android native service notification नहीं भेजती)
- */
 function triggerMissedCallNotification(callerName, count) {
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
@@ -2851,7 +3343,6 @@ $('btnReject').onclick = async () => {
   await update(ref(db, `user_inbox/${myUserId}`), { status: 'rejected' }).catch(()=>{});
   setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
 
-  // Lock screen fix
   const wasLocked = isDeviceLocked();
   if (!wasLocked) {
     activeCallId = null;
@@ -3577,7 +4068,7 @@ function cleanupKidsModules() {
 }
 
 // ===================================================
-// JOIN CALL SESSION (Main)
+// JOIN CALL SESSION
 // ===================================================
 async function joinCallSession() {
   clearTimeout(callTimeoutTimer);
@@ -3960,7 +4451,6 @@ async function hangup(silent = false) {
     Object.keys(peerConnections).forEach(id => closePeer(id));
     peerConnections = {};
 
-    // Media data channels भी बंद करो
     Object.keys(mediaDataChannels).forEach(pid => {
       try { mediaDataChannels[pid].close(); } catch(e) {}
     });
@@ -4034,6 +4524,7 @@ function setupHardwareBackButton() {
     for (const m of openModals) {
       if (!m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     }
+    if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
@@ -4045,6 +4536,7 @@ function setupHardwareBackButton() {
     }
     if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!voiceDock.hidden) { discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('replyPreviewBox')) { cancelReply(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!chatScreen.hidden) { closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!outgoingDialog.hidden) { $('btnCancelCall').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
@@ -4058,6 +4550,7 @@ function setupHardwareBackButton() {
     if (Date.now() < ignoreBackUntil) return;
     const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
+    if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
     if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); return; }
     if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
@@ -4069,6 +4562,7 @@ function setupHardwareBackButton() {
     }
     if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
     if (!voiceDock.hidden) { discardRecording(); return; }
+    if ($('replyPreviewBox')) { cancelReply(); return; }
     if (!chatScreen.hidden) { closeChat(); return; }
     if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); return; }
     if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
@@ -4232,15 +4726,26 @@ async function initApp() {
     applyLanguage(currentLang);
     setupHardwareBackButton();
     setupNativePushListeners();
+
+    // 🆕 नया flow:
+    // - अगर नाम नहीं है → Name Modal
+    // - नाम है पर permissions नहीं → Permission Modal
+    // - सब है → Lobby
     checkUser();
-    await triggerAutoPermissionGate();
+
     handleDeepLinks();
     checkNativeLaunchIntent();
   } catch (err) {
     console.error('UI init error:', err);
+    hideSplashScreen();
   }
 
-  setTimeout(() => checkWebOtaUpdate(false), 2500);
+  // Fallback: 5 सेकंड बाद splash ज़रूर हटे
+  setTimeout(() => {
+    hideSplashScreen();
+  }, 5000);
+
+  setTimeout(() => checkWebOtaUpdate(false), 3000);
 }
 
 if (document.readyState === 'loading') {
