@@ -1,5 +1,6 @@
 // ===================================================
-// 📄 app.js — Part 1 of 3 (FCM Token Fix)
+// 📄 app.js — Part 1 of 3 (Version 1.21.0)
+// Config, State, Native Bridge, Ringtone Fix & Presence
 // ===================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -8,10 +9,18 @@ import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push
 const CURRENT_APP_VERSION = "1.21.0";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
+// पुराना OTA कैश साफ़ करें ताकि नया 1.21.0 कोड ही चले
+try {
+  const cachedVer = localStorage.getItem('ota_active_ver');
+  if (cachedVer !== CURRENT_APP_VERSION) {
+    localStorage.removeItem('ota_cached_js');
+    localStorage.removeItem('ota_cached_css');
+    localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION);
+  }
+} catch(e) {}
+
 // ===================================================
-// 🆕 DYNAMIC CAPACITOR GETTERS (FIX)
-// पहले static consts थे जो load के समय null मिल जाते थे।
-// अब हर बार fresh check होगा।
+// DYNAMIC CAPACITOR GETTERS
 // ===================================================
 function getCapacitor() {
   return window.Capacitor || null;
@@ -34,7 +43,7 @@ function isNativeApp() {
 }
 
 // ===================================================
-// FIREBASE INIT
+// FIREBASE & WEBRTC CONFIG
 // ===================================================
 const firebaseConfig = {
   apiKey: "AIzaSyBg1VC0cd1FmGiXTkMvFFG-eSL46FmgtZU",
@@ -107,7 +116,7 @@ const translations = {
 function applyLanguage(lang) {
   currentLang = lang;
   localStorage.setItem('vc_lang', lang);
-  $('langSelect').value = lang;
+  if ($('langSelect')) $('langSelect').value = lang;
   const t = translations[lang];
   $('pageTitle').textContent = t.pageTitle;
   $('txtWelcome').textContent = t.welcome;
@@ -134,10 +143,10 @@ function applyLanguage(lang) {
   $('lblHang').textContent = t.hang;
   renderContacts();
 }
-$('langSelect').onchange = (e) => applyLanguage(e.target.value);
+if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.value);
 
 // ===================================================
-// USER STATE
+// USER & CALL STATES
 // ===================================================
 let myUserId = localStorage.getItem('vc_user_id') || '';
 let myUserName = localStorage.getItem('vc_user_name') || '';
@@ -160,9 +169,6 @@ if (myUserName) {
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
 
-// ===================================================
-// CALL STATE
-// ===================================================
 let localStream = null, activeCallId = null, currentChatTargetId = null, currentChatTargetName = null;
 let isCaller = false, callStartTime = 0, timerTimer = null, facingMode = 'user';
 let micEnabled = true, camEnabled = true, speakerEnabled = true, isCallConnected = false;
@@ -177,7 +183,7 @@ let ignoreBackUntil = 0;
 let callJoinedViaDirectAccept = false;
 
 // ===================================================
-// MEDIA TRANSFER STATE
+// P2P MEDIA TRANSFER STATES
 // ===================================================
 let activeTransfers = {};
 let mediaDataChannels = {};
@@ -189,15 +195,12 @@ const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024;
 const BUFFER_HIGH_THRESHOLD = 8 * 1024 * 1024;
 const BUFFER_LOW_THRESHOLD = 1 * 1024 * 1024;
 
-// ===================================================
-// PERMISSION STATE
-// ===================================================
 let permissionCallbackCounter = 0;
 let permissionCallbacks = {};
 let splashHidden = false;
 
 // ===================================================
-// SPLASH SCREEN
+// SPLASH & NATIVE BRIDGE HELPERS
 // ===================================================
 function hideSplashScreen() {
   if (splashHidden) return;
@@ -210,9 +213,6 @@ function hideSplashScreen() {
   }, 500);
 }
 
-// ===================================================
-// NATIVE BRIDGE HELPERS
-// ===================================================
 function stopNativeRinging() {
   if (window.AndroidAudio && typeof window.AndroidAudio.stopNativeRinging === 'function') {
     try { window.AndroidAudio.stopNativeRinging(); } catch(e) {}
@@ -249,17 +249,20 @@ function isDeviceLocked() {
 
 function saveMediaViaNative(base64Data, fileName, mimeType) {
   if (window.AndroidAudio && typeof window.AndroidAudio.saveMediaToDownloads === 'function') {
-    try {
-      return window.AndroidAudio.saveMediaToDownloads(base64Data, fileName, mimeType);
-    } catch(e) { return ''; }
+    try { return window.AndroidAudio.saveMediaToDownloads(base64Data, fileName, mimeType); } catch(e) { return ''; }
   }
   return '';
 }
 
-function shareMediaViaNative(fileUri) {
-  if (window.AndroidAudio && typeof window.AndroidAudio.shareMediaUri === 'function') {
-    try { window.AndroidAudio.shareMediaUri(fileUri); } catch(e) {}
+// # FIX BUG 8: Native Contacts VCF Save Bridge
+function openContactVcfNative(base64Vcf, fileName) {
+  if (window.AndroidAudio && typeof window.AndroidAudio.openContactVcf === 'function') {
+    try {
+      window.AndroidAudio.openContactVcf(base64Vcf, fileName);
+      return true;
+    } catch(e) { return false; }
   }
+  return false;
 }
 
 // ===================================================
@@ -300,40 +303,17 @@ window.__onPermissionResult = function(callbackId, allGranted, deniedList) {
 
 async function requestAllPermissionsWeb() {
   const denied = [];
-
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     stream.getTracks().forEach(t => t.stop());
-  } catch(e) {
-    denied.push('camera_or_mic');
-  }
+  } catch(e) { denied.push('camera_or_mic'); }
 
   try {
     if ('Notification' in window && Notification.permission !== 'granted') {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') denied.push('notification');
     }
-  } catch(e) {
-    denied.push('notification');
-  }
-
-  try {
-    if ('geolocation' in navigator) {
-      await new Promise((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          () => resolve(),
-          () => { denied.push('location'); resolve(); },
-          { timeout: 3000 }
-        );
-      });
-    }
-  } catch(e) {
-    denied.push('location');
-  }
-
-  try {
-    await requestNotificationPermission();
-  } catch(e) {}
+  } catch(e) { denied.push('notification'); }
 
   return { allGranted: denied.length === 0, denied };
 }
@@ -354,7 +334,7 @@ function openAppSettingsNative() {
 }
 
 // ===================================================
-// 🆕 FCM TOKEN MANAGEMENT (FIXED)
+// FCM TOKEN MANAGEMENT
 // ===================================================
 async function waitForPushPlugin(maxAttempts = 20) {
   for (let i = 0; i < maxAttempts; i++) {
@@ -373,9 +353,6 @@ async function saveFcmTokenToFirebase(token) {
     const uid = myUserId || localStorage.getItem('vc_user_id');
     if (uid) {
       await update(ref(db, `users/${uid}`), { fcmToken: token });
-      console.log('✅ FCM token saved to Firebase:', token.substring(0, 30) + '...');
-    } else {
-      console.log('⏳ FCM token received but user not logged in yet. Will save on presence init.');
     }
   } catch(e) {
     console.warn('FCM token save error:', e);
@@ -383,28 +360,16 @@ async function saveFcmTokenToFirebase(token) {
 }
 
 async function setupNativePushListeners() {
-  if (!isNativeApp()) {
-    console.log('Not native — skipping native push setup');
-    return;
-  }
+  if (!isNativeApp()) return;
 
   const push = await waitForPushPlugin();
-  if (!push) {
-    console.warn('❌ PushNotifications plugin never became available');
-    return;
-  }
-  console.log('✅ PushNotifications plugin ready');
+  if (!push) return;
 
   if (window.__pushListenersRegistered) return;
   window.__pushListenersRegistered = true;
 
   push.addListener('registration', async (token) => {
-    console.log('📱 Registration event received');
     await saveFcmTokenToFirebase(token.value);
-  });
-
-  push.addListener('registrationError', (err) => {
-    console.error('❌ Push registration error:', JSON.stringify(err));
   });
 
   push.addListener('pushNotificationReceived', (notification) => {
@@ -438,16 +403,12 @@ async function setupNativePushListeners() {
   if (cachedToken && myUserId) {
     await saveFcmTokenToFirebase(cachedToken);
   }
-
-  console.log('✅ Native push listeners installed');
 }
 
 // ===================================================
-// RINGTONES & SOUND EFFECTS
+// SOUNDS & RINGTONE CONTROLS (# FIX BUG 2)
 // ===================================================
-const ringtoneAudio = new Audio('ringtone.mp3');
-ringtoneAudio.loop = true;
-let audioCtx = null, outgoingRingTimer = null, incomingRingRetryTimer = null;
+let audioCtx = null, outgoingRingTimer = null;
 
 function ensureAudioContext() {
   try {
@@ -520,7 +481,7 @@ function playBeepTone() {
     osc.frequency.setValueAtTime(440, ctx.currentTime); osc.type = 'sine';
     gain.gain.setValueAtTime(0.35, ctx.currentTime);
     gain.gain.setValueAtTime(0.35, ctx.currentTime + 1.0);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+    gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(); osc.stop(ctx.currentTime + 1.2);
   } catch(e) {}
@@ -532,45 +493,21 @@ function startOutgoingCallTone() {
 }
 function stopOutgoingCallTone() { if (outgoingRingTimer) { clearInterval(outgoingRingTimer); outgoingRingTimer = null; } }
 
-async function startIncomingRingtone() {
-  stopOutgoingCallTone(); startVibration();
-  try {
-    ensureAudioContext(); ringtoneAudio.currentTime = 0; await ringtoneAudio.play();
-    if (incomingRingRetryTimer) { clearInterval(incomingRingRetryTimer); incomingRingRetryTimer = null; }
-  } catch(e) {
-    playBeepTone();
-    if (!incomingRingRetryTimer) {
-      incomingRingRetryTimer = setInterval(() => {
-        if ($('incomingDialog').hidden) { stopIncomingRingtone(); return; }
-        ringtoneAudio.play().then(() => { clearInterval(incomingRingRetryTimer); incomingRingRetryTimer = null; }).catch(() => playBeepTone());
-      }, 1200);
-    }
-  }
+// # FIX BUG 2: इन-ऐप वेब ऑडियो रिंगटोन को खाली किया — हमेशा सिर्फ Android Native Ringtone बजेगी
+function startIncomingRingtone() {
+  // In-app web ringtone intentionally disabled to prevent double ringing
 }
 
+// # FIX BUG 2: कॉल कटने या उठने पर केवल नेटिव रिंगटोन बंद होगी
 function stopIncomingRingtone() {
-  stopVibration(); ringtoneAudio.pause(); ringtoneAudio.currentTime = 0;
-  if (incomingRingRetryTimer) { clearInterval(incomingRingRetryTimer); incomingRingRetryTimer = null; }
   stopNativeRinging();
 }
-function stopAllCallTones() { stopOutgoingCallTone(); stopIncomingRingtone(); stopNativeRinging(); }
-document.addEventListener('pointerdown', () => { ensureAudioContext(); }, {passive:true});
 
-function startVibration() {
-  if ('vibrate' in navigator) {
-    navigator.vibrate([500, 300, 500, 300, 800]);
-    if (!vibrationInterval) {
-      vibrationInterval = setInterval(() => {
-        if ($('incomingDialog').hidden) { stopVibration(); return; }
-        navigator.vibrate([500, 300, 500, 300, 800]);
-      }, 2500);
-    }
-  }
+function stopAllCallTones() {
+  stopOutgoingCallTone();
+  stopNativeRinging();
 }
-function stopVibration() { 
-  if ('vibrate' in navigator) navigator.vibrate(0); 
-  if (vibrationInterval) { clearInterval(vibrationInterval); vibrationInterval = null; } 
-}
+document.addEventListener('pointerdown', () => { ensureAudioContext(); }, {passive:true});
 
 // ===================================================
 // UTILITIES
@@ -579,22 +516,10 @@ function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2600);
 }
-function safeName(n) { 
-  return String(n||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); 
-}
-function isNeerajBadola(n) { 
-  const s = (n||'').toLowerCase().replace(/\s+/g,' ').trim(); 
-  return (s.includes('neeraj')&&s.includes('badola'))||(s.includes('नीरज')&&s.includes('बडोला')); 
-}
-
-function formatClockTime(ts) {
-  if (!ts) return '';
-  return new Date(Number(ts)).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:true });
-}
-function formatLastSeen(ts) {
-  if (!ts) return '';
-  return `Last seen ${formatClockTime(ts)}`;
-}
+function safeName(n) { return String(n||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function isNeerajBadola(n) { const s = (n||'').toLowerCase().replace(/\s+/g,' ').trim(); return (s.includes('neeraj')&&s.includes('badola'))||(s.includes('नीरज')&&s.includes('बडोला')); }
+function formatClockTime(ts) { if (!ts) return ''; return new Date(Number(ts)).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:true }); }
+function formatLastSeen(ts) { if (!ts) return ''; return `Last seen ${formatClockTime(ts)}`; }
 function formatFileSize(bytes) {
   if (!bytes) return '0 B';
   if (bytes < 1024) return bytes + ' B';
@@ -602,7 +527,6 @@ function formatFileSize(bytes) {
   if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
-
 function getFileIcon(mimeType, fileName) {
   if (!mimeType) mimeType = '';
   if (mimeType.startsWith('image/')) return '🖼️';
@@ -612,7 +536,6 @@ function getFileIcon(mimeType, fileName) {
   if (mimeType.includes('word') || (fileName && fileName.endsWith('.doc'))) return '📘';
   if (mimeType.includes('excel') || (fileName && fileName.endsWith('.xls'))) return '📗';
   if (mimeType.includes('zip') || mimeType.includes('rar')) return '🗜️';
-  if (mimeType.startsWith('text/')) return '📄';
   return '📎';
 }
 
@@ -627,36 +550,6 @@ function clearOngoingCallNotification() {
       });
     }).catch(()=>{});
   }
-}
-
-// ===================================================
-// SHARE + APK DOWNLOAD
-// ===================================================
-const shareBtn = $('shareAppBtn');
-if (shareBtn) {
-  shareBtn.onclick = () => {
-    const shareText = "डायरेक्ट फुल एचडी कॉल (वीडियो/ऑडियो) के लिए यहाँ से ऐप डाउनलोड करें: 👇 \n\n" + GITHUB_APK_URL;
-    const waUrl = "whatsapp://send?text=" + encodeURIComponent(shareText);
-    const webWaUrl = "https://api.whatsapp.com/send?text=" + encodeURIComponent(shareText);
-    window.location.href = waUrl;
-    setTimeout(() => {
-      if (document.hidden) return;
-      window.open(webWaUrl, '_blank');
-    }, 1200);
-  };
-}
-
-const apkDlBtn = $('directApkDlBtn');
-if (apkDlBtn) {
-  apkDlBtn.onclick = () => {
-    toast(currentLang === 'hi' ? '📥 APK डाउनलोड शुरू हो रहा है...' : '📥 Downloading APK...');
-    const a = document.createElement('a');
-    a.href = GITHUB_APK_URL;
-    a.download = 'VideoCallApp.apk';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
 }
 
 // ===================================================
@@ -677,9 +570,7 @@ async function acquireCallMedia(audioOnly = false) {
     return localStream;
   }
   try {
-    const constraints = { 
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-    };
+    const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
     if (!audioOnly) {
       constraints.video = { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } };
     } else {
@@ -694,50 +585,18 @@ async function acquireCallMedia(audioOnly = false) {
   }
 }
 
-async function checkMediaPermissions(showNotice = false) {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    stream.getTracks().forEach(t => t.stop());
-    if (showNotice) toast(currentLang === 'hi' ? '✅ कैमरा एवं माइक तैयार हैं' : '✅ Camera & Mic are ready');
-    return true;
-  } catch(e) {
-    if (showNotice) toast(currentLang === 'hi' ? '⚠️ सेटिंग्स में जाकर कैमरा और माइक की अनुमति दें' : '⚠️ Grant camera/mic permissions in settings');
-    return false;
-  }
-}
-
-// 🆕 FIXED — isNativeApp() use करता है
 async function requestNotificationPermission() {
   if (isNativeApp()) {
     const push = await waitForPushPlugin(10);
-    if (!push) {
-      console.warn('Push plugin not available for permission request');
-      return;
-    }
-
+    if (!push) return;
     try {
       let perm = await push.checkPermissions();
-      console.log('Push permission state:', perm.receive);
-
-      if (perm.receive !== 'granted') {
-        perm = await push.requestPermissions();
-        console.log('After request, permission state:', perm.receive);
-      }
-
-      if (perm.receive === 'granted') {
-        console.log('✅ Permission granted — calling register()');
-        await push.register();
-        console.log('✅ register() called — waiting for token event');
-      } else {
-        console.warn('❌ Notification permission not granted');
-      }
-    } catch(e) {
-      console.error('Native Push Error:', e);
-    }
+      if (perm.receive !== 'granted') perm = await push.requestPermissions();
+      if (perm.receive === 'granted') await push.register();
+    } catch(e) {}
     return;
   }
 
-  // Web fallback
   try {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
     const perm = await Notification.requestPermission();
@@ -753,50 +612,18 @@ async function requestNotificationPermission() {
       const currentUid = myUserId || localStorage.getItem('vc_user_id');
       if (currentUid) await update(ref(db, `users/${currentUid}`), { fcmToken: token });
     }
-  } catch(err) {
-    console.warn("FCM Token Silent Error:", err);
-  }
+  } catch(err) {}
 }
 
-// ===================================================
-// FULL PERMISSION FLOW
-// ===================================================
 async function runFullPermissionFlow() {
-  toast(currentLang === 'hi' ? '🛡️ अनुमतियाँ माँगी जा रही हैं...' : '🛡️ Requesting permissions...');
-
+  toast(currentLang === 'hi' ? '🛡️ अनुमतियाँ जाँची जा रही हैं...' : '🛡️ Requesting permissions...');
   const result = await requestAllPermissionsNative();
-
-  try {
-    await requestNotificationPermission();
-  } catch(e) {}
-
-  if (result.allGranted) {
-    toast(currentLang === 'hi' ? '✅ सभी अनुमतियाँ मिल गईं' : '✅ All permissions granted');
-  } else {
-    const denied = result.denied || [];
-    console.warn('Denied permissions:', denied);
-
-    const importantDenied = denied.some(p =>
-      p.includes('CAMERA') || p.includes('RECORD_AUDIO') ||
-      p.includes('POST_NOTIFICATIONS')
-    );
-
-    if (importantDenied) {
-      const msg = currentLang === 'hi'
-        ? 'कुछ ज़रूरी अनुमतियाँ नहीं मिलीं। क्या आप सेटिंग्स खोलकर उन्हें दे सकते हैं?'
-        : 'Some important permissions were denied. Open settings to grant them?';
-      if (confirm(msg)) {
-        openAppSettingsNative();
-        return false;
-      }
-    }
-  }
-
+  try { await requestNotificationPermission(); } catch(e) {}
   return result.allGranted;
 }
 
 // ===================================================
-// INCOMING CALL HANDLER
+// INCOMING CALL & DIRECT ACCEPT
 // ===================================================
 function handleIncomingCallNotification(data, isFromForegroundListener = false) {
   if (!data || !data.callId) return;
@@ -812,23 +639,12 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   chatScreen.hidden = true;
   callScreen.hidden = true;
 
-  $('incomingName').textContent = currentCallTargetName + (
-    isAudioOnlyCall 
-      ? (currentLang === 'hi' ? ' (ऑडियो कॉल)...' : ' (Audio Call)...') 
-      : (currentLang === 'hi' ? ' (वीडियो कॉल)...' : ' (Video Call)...')
-  );
+  $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
   incomingDialog.hidden = false;
-
-  if (isFromForegroundListener && !incomingDialog.hidden) {
-    startIncomingRingtone();
-  }
 
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
 }
 
-// ===================================================
-// DIRECT ACCEPT
-// ===================================================
 async function handleDirectAcceptCall(callId) {
   try {
     stopAllCallTones();
@@ -862,9 +678,6 @@ async function handleDirectAcceptCall(callId) {
   }
 }
 
-// ===================================================
-// NATIVE LAUNCH INTENT
-// ===================================================
 function checkNativeLaunchIntent() {
   if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
     const action = window.AndroidAudio.getLaunchCallAction();
@@ -927,20 +740,8 @@ async function initPresence() {
     onlineSince: serverTimestamp(), lastSeen: serverTimestamp(), activeCallId: null
   });
 
-  // 🆕 अगर FCM token है तो save करो
   if (myFcmToken) {
     await update(userRef, { fcmToken: myFcmToken }).catch(()=>{});
-  }
-
-  // 🆕 अगर token नहीं है तो फिर से register try करो
-  if (!myFcmToken && isNativeApp()) {
-    setTimeout(() => {
-      requestNotificationPermission().catch(()=>{});
-    }, 1000);
-  }
-
-  if (!isNativeApp() && 'Notification' in window && Notification.permission === 'granted') {
-    requestNotificationPermission().catch(()=>{});
   }
 
   onValue(connectedRef, async snap => {
@@ -949,11 +750,6 @@ async function initPresence() {
       await onDisconnect(userRef).update({ online: false, lastSeen: serverTimestamp(), onlineSince: null, activeCallId: null, isBusy: false, typingTo: null }).catch(()=>{});
       await onDisconnect(inboxRef).remove().catch(()=>{});
       await update(userRef, { online: true, onlineSince: serverTimestamp() }).catch(()=>{});
-
-      // 🆕 हर reconnect पर अगर token नहीं है तो register try
-      if (!myFcmToken && isNativeApp()) {
-        requestNotificationPermission().catch(()=>{});
-      }
     } else {
       networkBanner.hidden = false;
     }
@@ -969,6 +765,11 @@ async function initPresence() {
   listenForIncoming();
   listenForLatestChatPreviews();
   listenForCallLogs();
+  
+  // P2P Media File Transfer के लिए ग्लोबल लिसनर (Part 2 में परिभाषित)
+  if (typeof listenForIncomingMediaSignals === 'function') {
+    listenForIncomingMediaSignals();
+  }
 }
 
 function listenSelfAccountStatus() {
@@ -980,14 +781,14 @@ function listenSelfAccountStatus() {
       myUserId = ''; myUserName = '';
       myHeaderName.textContent = '...';
       chatScreen.hidden = true; callScreen.hidden = true; lobbyScreen.hidden = true;
-      $('nameInput').value = ''; $('nameModal').hidden = false;
+      $('nameInput').value = '';$('nameModal').hidden = false;
       toast(currentLang === 'hi' ? '⚠️ आपकी आईडी रीसेट हो गई है।' : '⚠️ Your ID was reset.');
     }
   });
 }
 
 // ===================================================
-// USER CHECK + NAME SAVE
+// USER REGISTRATION & SETTINGS
 // ===================================================
 function checkUser() {
   lobbyScreen.hidden = true;
@@ -1015,20 +816,11 @@ function checkUser() {
   lobbyScreen.hidden = false;
   setTimeout(hideSplashScreen, 300);
   initPresence();
-
-  // 🆕 Lobby खुलने के बाद भी register try करो
-  if (isNativeApp()) {
-    setTimeout(() => {
-      requestNotificationPermission().catch(()=>{});
-    }, 1500);
-  }
 }
 
-// 🆕 नाम save होने पर permission modal खोलो + register try
 $('saveNameBtn').onclick = async () => {
   const val = $('nameInput').value.trim();
   if (!val) return;
-
   myUserName = val;
   myUserId = val.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Math.floor(100 + Math.random()*900);
   localStorage.setItem('vc_user_id', myUserId);
@@ -1036,47 +828,23 @@ $('saveNameBtn').onclick = async () => {
 
   $('nameModal').hidden = true;
   $('permNoticeModal').hidden = false;
-
-  // 🆕 पहले से token registration try करो (modal के साथ)
   setTimeout(async () => {
-    try {
-      await requestNotificationPermission();
-    } catch(e) {}
+    try { await requestNotificationPermission(); } catch(e) {}
   }, 500);
 };
 
-// 🆕 Grant Permissions button
-$('grantPermsBtn').onclick = async () => {
-  $('permNoticeModal').hidden = true;
-  const allGranted = await runFullPermissionFlow();
+$('grantPermsBtn').onclick = async () => {$('permNoticeModal').hidden = true;
+  await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
-
-  // 🆕 सुनिश्चित register call
-  setTimeout(async () => {
-    try {
-      await requestNotificationPermission();
-    } catch(e) {}
-  }, 500);
-
   lobbyScreen.hidden = false;
   initPresence();
-
-  if (!allGranted) {
-    setTimeout(() => {
-      toast(currentLang === 'hi' ? '⚠️ कुछ अनुमतियाँ बंद हैं — सेटिंग्स से चालू करें' : '⚠️ Some permissions denied — enable in settings');
-    }, 800);
-  }
 };
 
-// ===================================================
-// PROFILE MODAL
-// ===================================================
-$('profileBtn').onclick = () => {
-  $('nameEditArea').hidden = true;
+$('profileBtn').onclick = () => {$('nameEditArea').hidden = true;
   $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   $('profileModal').hidden = false;
 };
-$('closeProfileBtn').onclick = () => { $('profileModal').hidden = true; };
+$('closeProfileBtn').onclick = () => {$('profileModal').hidden = true; };
 
 $('toggleEditNameBtn').onclick = () => {
   const isH = $('nameEditArea').hidden;
@@ -1085,8 +853,7 @@ $('toggleEditNameBtn').onclick = () => {
     $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   } else {
     $('editNameInput').value = myUserName;
-    $('editNameInput').focus();
-    $('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
+    $('editNameInput').focus();$('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
   }
 };
 
@@ -1101,32 +868,20 @@ $('saveEditedNameBtn').onclick = async () => {
   toast(currentLang === 'hi' ? '✅ नाम सुरक्षित कर लिया गया' : '✅ Name saved');
 };
 
-$('recheckPermsBtn').onclick = async () => {
-  $('profileModal').hidden = true;
+$('recheckPermsBtn').onclick = async () => {$('profileModal').hidden = true;
   localStorage.removeItem('perms_done_v2');
   await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
-
-  setTimeout(async () => {
-    try {
-      await requestNotificationPermission();
-    } catch(e) {}
-  }, 500);
-
   toast(currentLang === 'hi' ? '✅ अनुमतियाँ जाँची गईं' : '✅ Permissions checked');
 };
 
 $('clearChatHistoryBtn').onclick = async () => {
-  const confirmMsg = currentLang === 'hi' 
-    ? 'क्या आप अपनी सभी चैट हिस्ट्री (लोकल और ऑनलाइन) साफ़ करना चाहते हैं?' 
-    : 'Do you want to permanently clear all chat history (local & online)?';
+  const confirmMsg = currentLang === 'hi' ? 'क्या आप अपनी सभी चैट हिस्ट्री साफ़ करना चाहते हैं?' : 'Clear all chats?';
   if (!confirm(confirmMsg)) return;
-
   try {
     localStorage.removeItem('cached_snippets');
     localStorage.removeItem('cached_unreads');
     latestChatSnippets = {}; unreadCounts = {};
-
     const chatsSnap = await get(ref(db, 'chats'));
     if (chatsSnap.exists()) {
       const allChats = chatsSnap.val() || {};
@@ -1136,14 +891,11 @@ $('clearChatHistoryBtn').onclick = async () => {
       });
       if (Object.keys(updates).length > 0) await update(ref(db), updates);
     }
-
     renderContacts();
     if (!chatScreen.hidden) $('chatBody').innerHTML = '';
     toast(currentLang === 'hi' ? '✅ सभी चैट साफ़ कर दी गई' : '✅ All chats cleared');
     $('profileModal').hidden = true;
-  } catch(e) {
-    toast('त्रुटि: चैट साफ नहीं हो सकी');
-  }
+  } catch(e) { toast('त्रुटि: चैट साफ नहीं हो सकी'); }
 };
 
 $('resetProfileBtn').onclick = async () => {
@@ -1155,10 +907,8 @@ $('resetProfileBtn').onclick = async () => {
 // ===================================================
 // ADMIN PANEL
 // ===================================================
-adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };
-$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };
-$('verifyPinBtn').onclick = () => {
-  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) { $('adminPinModal').hidden = true; openAdminPanel(); }
+adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };$('verifyPinBtn').onclick = () => {
+  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) {$('adminPinModal').hidden = true; openAdminPanel(); }
   else toast('गलत पिन!');
 };
 
@@ -1187,28 +937,21 @@ function openAdminPanel() {
   });
   $('adminPanelModal').hidden = false;
 }
-$('closeAdminPanelBtn').onclick = () => { $('adminPanelModal').hidden = true; };
+$('closeAdminPanelBtn').onclick = () => {$('adminPanelModal').hidden = true; };
 
 // ===================================================
-// TABS
+// TABS & CALL LOGS
 // ===================================================
-$('tabChatsBtn').onclick = () => {
-  $('tabChatsBtn').className = 'tab-btn active-chat';
-  $('tabCallsBtn').className = 'tab-btn';
-  $('tabChatsContent').hidden = false;
+$('tabChatsBtn').onclick = () => {$('tabChatsBtn').className = 'tab-btn active-chat';
+  $('tabCallsBtn').className = 'tab-btn';$('tabChatsContent').hidden = false;
   $('tabCallsContent').hidden = true;
 };
-$('tabCallsBtn').onclick = () => {
-  $('tabCallsBtn').className = 'tab-btn active-call';
-  $('tabChatsBtn').className = 'tab-btn';
-  $('tabCallsContent').hidden = false;
+$('tabCallsBtn').onclick = () => {$('tabCallsBtn').className = 'tab-btn active-call';
+  $('tabChatsBtn').className = 'tab-btn';$('tabCallsContent').hidden = false;
   $('tabChatsContent').hidden = true;
   renderCallLogs();
 };
 
-// ===================================================
-// CALL LOGS
-// ===================================================
 async function recordCallLog(entry) {
   try {
     const logId = entry.callId || `call_${Date.now()}`;
@@ -1232,23 +975,7 @@ async function recordCallLog(entry) {
       };
       await set(ref(db, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
     }
-
-    if (entry.targetId) {
-      const roomPath = `chats/${getChatRoomId(myUserId, entry.targetId)}/messages/${logId}`;
-      const isVoice = entry.callMode === 'audio';
-      const label = isVoice ? (currentLang === 'hi' ? 'ऑडियो कॉल' : 'Audio Call') : (currentLang === 'hi' ? 'वीडियो कॉल' : 'Video Call');
-      let callText = entry.type === 'missed' 
-        ? `${isVoice ? '📞' : '📹'} ${currentLang === 'hi' ? 'मिस्ड' : 'Missed'} ${label}` 
-        : `${isVoice ? '📞' : '📹'} ${label} (${entry.duration || '00:01'})`;
-
-      await set(ref(db, roomPath), {
-        senderId: myUserId, senderName: myUserName, type: 'system-call',
-        text: callText, time: Date.now(), delivered: true, read: false
-      }).catch(()=>{});
-    }
-  } catch(e) {
-    console.warn("Record call log error:", e);
-  }
+  } catch(e) {}
 }
 
 function listenForCallLogs() {
@@ -1298,7 +1025,7 @@ function renderCallLogs() {
 }
 
 // ===================================================
-// CHAT ROOM HELPERS
+// CONTACTS LIST & CHAT PREVIEWS
 // ===================================================
 const getChatRoomId = (a, b) => [a, b].sort().join('__');
 
@@ -1309,9 +1036,6 @@ function getTickBadge(snippet) {
   return '<span class="tick-mark tick-sent">✓</span>';
 }
 
-// ===================================================
-// LATEST CHAT PREVIEWS
-// ===================================================
 let isInitialLoad = true;
 function listenForLatestChatPreviews() {
   onValue(ref(db, 'chats'), snap => {
@@ -1365,10 +1089,9 @@ function listenForLatestChatPreviews() {
 
 function triggerSystemMessageNotification(sender, text, targetId) {
   playMessageBeep();
-  if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
   if ('Notification' in window && Notification.permission === 'granted') {
     navigator.serviceWorker?.ready.then(reg => {
-      reg.showNotification(sender, { body: text, icon: 'icon.png', badge: 'icon.png', vibrate: [100, 50, 100], data: { targetId, senderName: sender } });
+      reg.showNotification(sender, { body: text, icon: 'icon.png', badge: 'icon.png', data: { targetId, senderName: sender } });
     }).catch(() => { new Notification(sender, { body: text }); });
   } else {
     toast(`💬 ${sender}: ${text}`);
@@ -1382,9 +1105,6 @@ navigator.serviceWorker?.addEventListener('message', event => {
   }
 });
 
-// ===================================================
-// CONTACTS LIST RENDERING
-// ===================================================
 function renderContacts() {
   contactsList.innerHTML = '';
   const amIAdmin = isNeerajBadola(myUserName);
@@ -1435,17 +1155,13 @@ function renderContacts() {
 }
 searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
-
 // ===================================================
-// END OF PART 1
-// ===================================================
-// ===================================================
-// 📄 app.js — Part 2 of 3
-// Long-Press Menu, Media Transfer, Chat, Media Viewer
+// 📄 app.js — Part 2 of 3 (Version 1.21.0)
+// Long-Press Menu, P2P DataChannel Engine, Chat & Media
 // ===================================================
 
 // ===================================================
-// 🆕 CHAT MESSAGE LONG-PRESS MENU
+// 🆕 CHAT MESSAGE LONG-PRESS MENU (# FIX BUG 3, 4, 5)
 // ===================================================
 let longPressTimer = null;
 let longPressStartX = 0;
@@ -1456,15 +1172,10 @@ let currentLongPressMsgData = null;
 let replyToMessageId = null;
 let replyToMessageData = null;
 
-/**
- * Chat bubble पर long-press event setup करता है।
- * हर message element के लिए यह function call होता है।
- */
 function attachBubbleLongPress(el, msgId, m) {
-  const HOLD_TIME = 500; // ms
+  const HOLD_TIME = 500;
 
   const onStart = (e) => {
-    // अगर touch point image/video/doc bubble के ऊपर है, तो भी menu दिखाएँ
     longPressStartX = e.touches ? e.touches[0].clientX : e.clientX;
     longPressStartY = e.touches ? e.touches[0].clientY : e.clientY;
     longPressMoved = false;
@@ -1503,16 +1214,12 @@ function attachBubbleLongPress(el, msgId, m) {
   el.addEventListener('mouseup', onEnd);
   el.addEventListener('mouseleave', onEnd);
 
-  // Desktop के लिए right-click
   el.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     openMessageMenu(el, msgId, m);
   });
 }
 
-/**
- * Message पर long-press होने पर floating menu दिखाता है।
- */
 function openMessageMenu(el, msgId, m) {
   currentLongPressMsgId = msgId;
   currentLongPressMsgData = m;
@@ -1521,17 +1228,16 @@ function openMessageMenu(el, msgId, m) {
   const isDeleted = m.deleted === true;
   const isSystemCall = m.type === 'system-call';
 
-  // पहले से कोई menu है? हटाओ
   const existing = $('msgLongPressMenu');
   if (existing) existing.remove();
 
   const menu = document.createElement('div');
   menu.id = 'msgLongPressMenu';
   menu.className = 'msg-long-press-menu';
+  menu.style.zIndex = '99999';
 
   let itemsHtml = '';
 
-  // Reply (सिर्फ text/media messages के लिए)
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="reply">
@@ -1541,8 +1247,7 @@ function openMessageMenu(el, msgId, m) {
     `;
   }
 
-  // Copy (सिर्फ text messages के लिए)
-  if (!isSystemCall && !isDeleted && (m.type === undefined || m.type === null || m.type === 'text')) {
+  if (!isSystemCall && !isDeleted && (!m.type || m.type === 'text')) {
     itemsHtml += `
       <button class="menu-item" data-action="copy">
         <span class="menu-item-ic">📋</span>
@@ -1551,7 +1256,6 @@ function openMessageMenu(el, msgId, m) {
     `;
   }
 
-  // Forward (सिर्फ text/media messages के लिए)
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="forward">
@@ -1561,34 +1265,28 @@ function openMessageMenu(el, msgId, m) {
     `;
   }
 
-  // Star (सिर्फ text/media messages के लिए)
   if (!isSystemCall && !isDeleted) {
+    const starLabel = m.starred ? 'स्टार हटाएँ (Unstar)' : 'स्टार करें (Star)';
     itemsHtml += `
       <button class="menu-item" data-action="star">
         <span class="menu-item-ic">⭐</span>
-        <span>स्टार करें (Star)</span>
+        <span>${starLabel}</span>
       </button>
     `;
   }
 
-  // Delete (सबके लिए)
   if (!isDeleted) {
+    itemsHtml += `
+      <button class="menu-item" data-action="delete-me">
+        <span class="menu-item-ic">🗑️</span>
+        <span>मेरे लिए हटाएँ (Delete for me)</span>
+      </button>
+    `;
     if (isMine) {
       itemsHtml += `
-        <button class="menu-item" data-action="delete-me">
-          <span class="menu-item-ic">🗑️</span>
-          <span>मेरे लिए हटाएँ (Delete for me)</span>
-        </button>
         <button class="menu-item danger" data-action="delete-all">
           <span class="menu-item-ic">🗑️</span>
           <span>सबके लिए हटाएँ (Delete for everyone)</span>
-        </button>
-      `;
-    } else {
-      itemsHtml += `
-        <button class="menu-item" data-action="delete-me">
-          <span class="menu-item-ic">🗑️</span>
-          <span>मेरे लिए हटाएँ (Delete for me)</span>
         </button>
       `;
     }
@@ -1601,7 +1299,14 @@ function openMessageMenu(el, msgId, m) {
 
   document.body.appendChild(menu);
 
-  // Menu item click handlers
+  // # FIX BUG 3: टच और क्लिक इवेंट्स पर stopPropagation ताकि मेन्यू फ्लिकर न करे
+  const menuBox = menu.querySelector('.menu-box');
+  if (menuBox) {
+    ['touchstart', 'touchend', 'click'].forEach(evt => {
+      menuBox.addEventListener(evt, (e) => e.stopPropagation());
+    });
+  }
+
   menu.querySelectorAll('.menu-item').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -1611,13 +1316,12 @@ function openMessageMenu(el, msgId, m) {
     };
   });
 
-  // Backdrop click → close
-  menu.querySelector('.menu-backdrop').onclick = () => closeMessageMenu();
-
-  // Auto hide after 4 seconds of inactivity (optional)
-  setTimeout(() => {
-    if ($('msgLongPressMenu')) closeMessageMenu();
-  }, 6000);
+  // # FIX BUG 3: बैकड्रॉप पर टैप या क्लिक से ही मेन्यू बंद होगा (ऑटो टाइमआउट हटाया गया)
+  const backdrop = menu.querySelector('.menu-backdrop');
+  if (backdrop) {
+    backdrop.addEventListener('touchstart', (e) => { e.preventDefault(); closeMessageMenu(); });
+    backdrop.addEventListener('click', () => closeMessageMenu());
+  }
 }
 
 function closeMessageMenu() {
@@ -1627,9 +1331,6 @@ function closeMessageMenu() {
   currentLongPressMsgData = null;
 }
 
-/**
- * Menu action handle करता है।
- */
 async function handleMessageAction(action, msgId, m) {
   if (!currentChatTargetId || !msgId) return;
 
@@ -1642,7 +1343,6 @@ async function handleMessageAction(action, msgId, m) {
         await navigator.clipboard.writeText(m.text || '');
         toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied');
       } catch(e) {
-        // Fallback
         const ta = document.createElement('textarea');
         ta.value = m.text || '';
         document.body.appendChild(ta);
@@ -1661,7 +1361,7 @@ async function handleMessageAction(action, msgId, m) {
       break;
 
     case 'star':
-      await toggleStarMessage(roomPath, m);
+      await toggleStarMessage(roomPath, msgId, m);
       break;
 
     case 'delete-me':
@@ -1679,9 +1379,7 @@ async function handleMessageAction(action, msgId, m) {
   }
 }
 
-/**
- * Reply mode शुरू करता है — input के ऊपर preview दिखाता है।
- */
+// # FIX BUG 6: रिप्लाई प्रिव्यू बॉक्स
 function startReply(msgId, m) {
   replyToMessageId = msgId;
   replyToMessageData = m;
@@ -1728,13 +1426,16 @@ function cancelReply() {
   if (box) box.remove();
 }
 
-/**
- * Star message toggle।
- */
-async function toggleStarMessage(roomPath, m) {
+// # FIX BUG 4: स्टार का UI बिना रीस्टार्ट तुरंत अपडेट होगा
+async function toggleStarMessage(roomPath, msgId, m) {
   const newStar = !m.starred;
+  m.starred = newStar;
   try {
     await update(ref(db, roomPath), { starred: newStar });
+    const el = document.getElementById(`msg_${msgId}`);
+    if (el) {
+      el.classList.toggle('starred', newStar);
+    }
     toast(newStar
       ? (currentLang === 'hi' ? '⭐ स्टार किया' : '⭐ Starred')
       : (currentLang === 'hi' ? 'स्टार हटाया' : 'Unstarred'));
@@ -1743,14 +1444,10 @@ async function toggleStarMessage(roomPath, m) {
   }
 }
 
-/**
- * Message delete logic।
- * forEveryone=true → सबके लिए delete, वरना सिर्फ मेरे लिए।
- */
+// # FIX BUG 5: डिलीट फॉर एवरीवन का UI बिना रीस्टार्ट तुरंत अपडेट होगा
 async function deleteMessage(roomPath, msgId, forEveryone) {
   try {
     if (forEveryone) {
-      // सबके लिए delete — message को placeholder से replace करो
       await update(ref(db, roomPath), {
         deleted: true,
         deletedAt: Date.now(),
@@ -1759,8 +1456,16 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
         type: 'deleted',
         senderName: myUserName
       });
+
+      const el = document.getElementById(`msg_${msgId}`);
+      if (el) {
+        el.className = `chat-bubble is-deleted me`;
+        el.innerHTML = `
+          <div style="font-style:italic;color:#94a3b8">🚫 ${currentLang === 'hi' ? 'यह संदेश हटा दिया गया है' : 'This message was deleted'}</div>
+          <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>
+        `;
+      }
     } else {
-      // मेरे लिए delete — Firebase में नहीं, सिर्फ local UI से हटाओ
       const el = $(`msg_${msgId}`);
       if (el) {
         el.style.transition = 'opacity 0.3s, transform 0.3s';
@@ -1769,7 +1474,6 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
         setTimeout(() => el.remove(), 300);
       }
 
-      // localStorage में "deletedForMe" list update करो
       try {
         const key = `vc_deleted_${myUserId}_${getChatRoomId(myUserId, currentChatTargetId)}`;
         const list = JSON.parse(localStorage.getItem(key) || '[]');
@@ -1782,14 +1486,10 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       ? (currentLang === 'hi' ? '🗑️ सबके लिए हटाया' : '🗑️ Deleted for everyone')
       : (currentLang === 'hi' ? '🗑️ हटा दिया' : '🗑️ Deleted'));
   } catch(e) {
-    console.warn('Delete error:', e);
     toast(currentLang === 'hi' ? 'त्रुटि' : 'Error');
   }
 }
 
-/**
- * Message को "मेरे लिए delete" वाले list में से check करता है।
- */
 function isDeletedForMe(msgId) {
   try {
     const key = `vc_deleted_${myUserId}_${getChatRoomId(myUserId, currentChatTargetId)}`;
@@ -1800,9 +1500,6 @@ function isDeletedForMe(msgId) {
   }
 }
 
-/**
- * Forward dialog — simple prompt से contact चुनो।
- */
 function openForwardDialog(msgId, m) {
   const users = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
   if (!users.length) {
@@ -1822,8 +1519,6 @@ function openForwardDialog(msgId, m) {
 
   const targetId = users[idx];
   const targetName = allOnlineUsers[targetId].name;
-
-  // Forward message बनाओ
   forwardMessageTo(targetId, m, targetName);
 }
 
@@ -1834,8 +1529,6 @@ async function forwardMessageTo(targetId, m, targetName) {
     const targetOnline = !!allOnlineUsers[targetId]?.online;
 
     const newMsgRef = push(ref(db, roomPath));
-    const newMsgId = newMsgRef.key;
-
     const msgData = {
       senderId: myUserId,
       senderName: myUserName,
@@ -1865,13 +1558,13 @@ async function forwardMessageTo(targetId, m, targetName) {
     await set(newMsgRef, msgData);
     toast(`${targetName} ${currentLang === 'hi' ? 'को फॉरवर्ड कर दिया' : 'forwarded'}`);
   } catch(e) {
-    console.warn('Forward error:', e);
     toast(currentLang === 'hi' ? 'फॉरवर्ड फेल' : 'Forward failed');
   }
 }
 
 // ===================================================
-// MEDIA TRANSFER — WEBRTC DATA CHANNEL
+// P2P MEDIA TRANSFER — WEBRTC DATA CHANNEL ENGINE
+// (सेंडर हमेशा Offer बनाएगा + रिसीवर लिसनर शामिल)
 // ===================================================
 async function getOrCreateMediaDataChannel(peerId) {
   if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
@@ -1881,15 +1574,15 @@ async function getOrCreateMediaDataChannel(peerId) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
   mediaPeerConnections[peerId] = pc;
 
-  const myPath = `media_signals/${myUserId}__${peerId}`;
-  const peerPath = `media_signals/${peerId}__${myUserId}`;
+  const targetSignalsPath = `media_signals/${peerId}/${myUserId}`;
+  const mySignalsPath = `media_signals/${myUserId}/${peerId}`;
 
   pc.onicecandidate = e => {
-    if (e.candidate) push(ref(db, `${myPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
+    if (e.candidate) push(ref(db, `${targetSignalsPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
   };
 
   pc.pendingIce = [];
-  onChildAdded(ref(db, `${peerPath}/candidates`), async snap => {
+  onChildAdded(ref(db, `${mySignalsPath}/candidates`), async snap => {
     const c = snap.val(); if (!c) return;
     const cand = new RTCIceCandidate(c);
     if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
@@ -1901,60 +1594,91 @@ async function getOrCreateMediaDataChannel(peerId) {
     for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
   };
 
-  const iAmOfferer = myUserId < peerId;
-
   return new Promise(async (resolve, reject) => {
     const timeout = setTimeout(() => {
       try { pc.close(); } catch(e) {}
       delete mediaPeerConnections[peerId];
       reject(new Error("Media channel timeout"));
-    }, 20000);
+    }, 25000);
 
-    if (iAmOfferer) {
-      const dc = pc.createDataChannel('media', { ordered: true });
-      setupMediaDataChannel(peerId, dc);
+    // सेंडर हमेशा DataChannel बनाता है और Offer भेजता है
+    const dc = pc.createDataChannel('media', { ordered: true });
+    setupMediaDataChannel(peerId, dc);
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      await set(ref(db, `${myPath}/offer`), { sdp: offer.sdp, type: offer.type, ts: Date.now() });
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await set(ref(db, `${targetSignalsPath}/offer`), { sdp: offer.sdp, type: offer.type, ts: Date.now() });
 
-      const unsubAns = onValue(ref(db, `${peerPath}/answer`), async snap => {
-        const a = snap.val();
-        if (a && !pc.currentRemoteDescription) {
-          unsubAns();
-          await pc.setRemoteDescription(new RTCSessionDescription(a));
-          await pc.flushIce();
+    const unsubAns = onValue(ref(db, `${mySignalsPath}/answer`), async snap => {
+      const a = snap.val();
+      if (a && !pc.currentRemoteDescription) {
+        unsubAns();
+        await pc.setRemoteDescription(new RTCSessionDescription(a));
+        await pc.flushIce();
 
-          dc.onopen = () => {
-            clearTimeout(timeout);
-            mediaDataChannels[peerId] = dc;
-            resolve(dc);
-          };
-        }
-      });
-    } else {
-      pc.ondatachannel = (event) => {
-        const dc = event.channel;
-        setupMediaDataChannel(peerId, dc);
         dc.onopen = () => {
           clearTimeout(timeout);
           mediaDataChannels[peerId] = dc;
           resolve(dc);
         };
+      }
+    });
+  });
+}
+
+// 🆕 रिसीवर के लिए बैकग्राउंड लिसनर (Incoming P2P Media Offer)
+function listenForIncomingMediaSignals() {
+  const incomingMediaRef = ref(db, `media_signals/${myUserId}`);
+
+  onChildAdded(incomingMediaRef, async snap => {
+    const senderId = snap.key;
+    if (!senderId || senderId === myUserId) return;
+
+    onValue(ref(db, `media_signals/${myUserId}/${senderId}/offer`), async offerSnap => {
+      const o = offerSnap.val();
+      if (!o) return;
+
+      if (mediaPeerConnections[senderId] && mediaPeerConnections[senderId].connectionState === 'connected') {
+        return;
+      }
+
+      const pc = new RTCPeerConnection(ICE_SERVERS);
+      mediaPeerConnections[senderId] = pc;
+
+      const mySignalsPath = `media_signals/${myUserId}/${senderId}`;
+      const senderSignalsPath = `media_signals/${senderId}/${myUserId}`;
+
+      pc.onicecandidate = e => {
+        if (e.candidate) push(ref(db, `${senderSignalsPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
       };
 
-      const unsubOffer = onValue(ref(db, `${peerPath}/offer`), async snap => {
-        const o = snap.val();
-        if (o && !pc.currentRemoteDescription) {
-          unsubOffer();
-          await pc.setRemoteDescription(new RTCSessionDescription(o));
-          await pc.flushIce();
-          const ans = await pc.createAnswer();
-          await pc.setLocalDescription(ans);
-          await set(ref(db, `${myPath}/answer`), { sdp: ans.sdp, type: ans.type, ts: Date.now() });
-        }
+      pc.pendingIce = [];
+      onChildAdded(ref(db, `${mySignalsPath}/candidates`), async cSnap => {
+        const c = cSnap.val(); if (!c) return;
+        const cand = new RTCIceCandidate(c);
+        if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
+        else pc.pendingIce.push(cand);
       });
-    }
+
+      pc.flushIce = async () => {
+        const p = pc.pendingIce || []; pc.pendingIce = [];
+        for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
+      };
+
+      pc.ondatachannel = (event) => {
+        const dc = event.channel;
+        setupMediaDataChannel(senderId, dc);
+        dc.onopen = () => {
+          mediaDataChannels[senderId] = dc;
+        };
+      };
+
+      await pc.setRemoteDescription(new RTCSessionDescription(o));
+      await pc.flushIce();
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      await set(ref(db, `${senderSignalsPath}/answer`), { sdp: ans.sdp, type: ans.type, ts: Date.now() });
+    });
   });
 }
 
@@ -2013,12 +1737,10 @@ function handleMediaControlMessage(peerId, msg) {
           const base64Data = reader.result;
           updateChatMediaMessageWithData(mediaId, base64Data);
 
-          // छोटी फाइल auto-save
-          if (transfer && transfer.totalSize < SMALL_FILE_THRESHOLD) {
-            const base64Only = base64Data.split(',')[1] || base64Data;
-            const uri = saveMediaViaNative(base64Only, transfer.fileName, transfer.mimeType);
-            if (uri) toast(currentLang === 'hi' ? '✅ फाइल Downloads में सेव हो गई' : '✅ File saved to Downloads');
-          }
+          // फ़ाइल सीधे Android Downloads/VideoCallApp में सेव होती है (Firebase बाईपास)
+          const base64Only = base64Data.split(',')[1] || base64Data;
+          const uri = saveMediaViaNative(base64Only, transfer.fileName, transfer.mimeType);
+          if (uri) toast(currentLang === 'hi' ? '✅ फ़ाइल Downloads में सेव हो गई' : '✅ File saved to Downloads');
         };
         reader.readAsDataURL(blob);
 
@@ -2048,10 +1770,7 @@ function handleMediaControlMessage(peerId, msg) {
       break;
 
     case 'media-request':
-      // Sender: receiver file माँग रहा है — अभी simple fallback
-      toast(currentLang === 'hi'
-        ? '⚠️ सामने वाले को दोबारा भेजने के लिए फ़ाइल select करें'
-        : '⚠️ Re-select the file to resend');
+      toast(currentLang === 'hi' ? '⚠️ फ़ाइल दोबारा भेजने के लिए फ़ाइल चुनें' : '⚠️ Re-select the file to resend');
       break;
   }
 }
@@ -2082,7 +1801,7 @@ async function sendMediaFileOverDataChannel(peerId, file) {
   try {
     dc = await getOrCreateMediaDataChannel(peerId);
   } catch(e) {
-    toast(currentLang === 'hi' ? '❌ Receiver ऑफलाइन है' : '❌ Receiver is offline');
+    toast(currentLang === 'hi' ? '❌ रिसीवर ऑफ़लाइन है' : '❌ Receiver is offline');
     return null;
   }
 
@@ -2177,9 +1896,6 @@ function getMediaTypeFromMime(mime) {
   return 'doc';
 }
 
-// ===================================================
-// TRANSFER QUEUE UI
-// ===================================================
 function renderTransferQueue() {
   const queue = $('transferQueue');
   if (!queue) return;
@@ -2249,7 +1965,7 @@ function cancelTransfer(mediaId) {
 }
 
 // ===================================================
-// CHAT SCREEN OPEN/CLOSE
+// CHAT SCREEN OPEN/CLOSE & MESSAGES
 // ===================================================
 let chatUnsub = null;
 let activePlayingAudio = null;
@@ -2299,9 +2015,6 @@ $('chatBackBtn').onclick = closeChat;
 $('chatCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, false); };
 $('chatVoiceCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, true); };
 
-// ===================================================
-// VOICE NOTE BUBBLE
-// ===================================================
 function attachVoiceBubbleEvents(container) {
   const btn = container.querySelector('.voice-play-circle');
   const bg = container.querySelector('.voice-progress-bg');
@@ -2361,9 +2074,7 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
-// ===================================================
-// LOAD CHAT MESSAGES
-// ===================================================
+// # FIX BUG 4 & BUG 5: लोड चैट मैसेज में स्टार और डिलीट का रियल-टाइम रेंडर
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -2384,8 +2095,6 @@ function loadChatMessages() {
 
     sortedKeys.forEach(msgId => {
       const m = msgs[msgId];
-
-      // मेरे लिए delete किया हुआ? skip
       if (isDeletedForMe(msgId)) return;
 
       if (m.senderId !== myUserId && !m.read) {
@@ -2401,6 +2110,21 @@ function loadChatMessages() {
       }
 
       if (el) {
+        // # FIX BUG 4: स्टार क्लास अपडेट
+        el.classList.toggle('starred', !!m.starred);
+
+        // # FIX BUG 5: अगर मैसेज डिलीट हो गया है तो तुरंत अपडेट करें
+        if (m.deleted || m.type === 'deleted') {
+          if (!el.classList.contains('is-deleted')) {
+            el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
+            el.innerHTML = `
+              <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
+              <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
+            `;
+          }
+          return;
+        }
+
         const metaEl = el.querySelector('.chat-meta');
         if (metaEl && m.senderId === myUserId) {
           metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
@@ -2412,7 +2136,6 @@ function loadChatMessages() {
       el.id = `msg_${msgId}`;
       el.dataset.msgId = msgId;
 
-      // System call message
       if (m.type === 'system-call') {
         el.className = 'chat-bubble system-call';
         el.textContent = `${m.text} • ${formatClockTime(m.time)}`;
@@ -2421,9 +2144,8 @@ function loadChatMessages() {
         return;
       }
 
-      // Deleted message
       if (m.type === 'deleted' || m.deleted) {
-        el.className = `chat-bubble ${m.senderId === myUserId ? 'me' : 'them'}`;
+        el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
         el.innerHTML = `
           <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
           <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
@@ -2434,9 +2156,9 @@ function loadChatMessages() {
       }
 
       el.className = `chat-bubble ${m.senderId === myUserId ? 'me' : 'them'}`;
-      let contentHtml = '';
+      if (m.starred) el.classList.add('starred');
 
-      // Reply preview (अगर यह मैसेज किसी का reply है)
+      let contentHtml = '';
       if (m.replyTo) {
         contentHtml += `
           <div class="chat-reply-preview">
@@ -2507,9 +2229,7 @@ function loadChatMessages() {
         };
       }
 
-      // 🆕 Long-press menu attach करो
       attachBubbleLongPress(el, msgId, m);
-
       body.appendChild(el);
       shouldScroll = true;
     });
@@ -2550,9 +2270,6 @@ function buildDocBubbleHtml(msgId, m) {
   `;
 }
 
-// ===================================================
-// SEND CHAT MESSAGE
-// ===================================================
 function updateActionBtnState() {
   const hasText = chatInput.value.trim().length > 0;
   if (hasText) {
@@ -2639,7 +2356,6 @@ async function sendChatMessage() {
     read: false
   };
 
-  // 🆕 Reply support
   if (replyToMessageId && replyToMessageData) {
     let previewText = replyToMessageData.text || '';
     if (replyToMessageData.type === 'image') previewText = '📷 फ़ोटो';
@@ -2695,9 +2411,7 @@ chatInput.addEventListener('keydown', e => {
   }
 });
 
-// ===================================================
-// SEND MEDIA MESSAGE
-// ===================================================
+// P2P Media Send: Firebase RTDB 10 MB क्रैश बाईपास
 async function sendMediaMessage(file) {
   if (!file || !currentChatTargetId) return;
 
@@ -2705,7 +2419,7 @@ async function sendMediaMessage(file) {
   const targetOnline = !!allOnlineUsers[targetId]?.online;
 
   if (!targetOnline) {
-    toast(currentLang === 'hi' ? '⚠️ सामने वाला ऑफलाइन है — पहले चैट में आए' : '⚠️ Receiver is offline');
+    toast(currentLang === 'hi' ? '⚠️ सामने वाला ऑफ़लाइन है' : '⚠️ Receiver is offline');
     return;
   }
 
@@ -2728,6 +2442,7 @@ async function sendMediaMessage(file) {
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
 
+  // Firebase पर केवल मेटाडेटा जाएगा, भारी बाइनरी डेटा नहीं
   await set(newMsgRef, {
     senderId: myUserId,
     senderName: myUserName,
@@ -2750,7 +2465,7 @@ async function sendMediaMessage(file) {
     mimeType: file.type
   });
 
-  toast(currentLang === 'hi' ? '⏫ भेज रहे हैं...' : '⏫ Sending...');
+  toast(currentLang === 'hi' ? '⏫ P2P भेज रहे हैं...' : '⏫ Sending via P2P...');
   const sentMediaId = await sendMediaFileOverDataChannel(targetId, file);
 
   if (sentMediaId) {
@@ -2767,11 +2482,11 @@ async function requestMediaFromPeer(msgId, msg) {
 
   const targetOnline = !!allOnlineUsers[peerId]?.online;
   if (!targetOnline) {
-    toast(currentLang === 'hi' ? '⚠️ Sender अभी ऑफलाइन है' : '⚠️ Sender is offline now');
+    toast(currentLang === 'hi' ? '⚠️ सेंडर अभी ऑफ़लाइन है' : '⚠️ Sender is offline now');
     return;
   }
 
-  toast(currentLang === 'hi' ? '⏬ Sender से request भेजी...' : '⏬ Requested from sender...');
+  toast(currentLang === 'hi' ? '⏬ सेंडर से फ़ाइल माँगी जा रही है...' : '⏬ Requesting from sender...');
 
   let dc;
   try {
@@ -2789,34 +2504,48 @@ async function requestMediaFromPeer(msgId, msg) {
 }
 
 function updateChatMediaMessageWithData(mediaId, base64Data) {
-  if (!currentChatTargetId) return;
-  const roomId = getChatRoomId(myUserId, currentChatTargetId);
-  const roomPath = `chats/${roomId}/messages`;
-
-  get(ref(db, roomPath)).then(snap => {
-    const msgs = snap.val() || {};
-    Object.keys(msgs).forEach(k => {
-      const m = msgs[k];
-      if (m.mediaId === mediaId && !m.data) {
-        update(ref(db, `${roomPath}/${k}`), { data: base64Data }).catch(()=>{});
-
-        const el = document.getElementById(`msg_${k}`);
-        if (el) {
-          const overlay = el.querySelector('.media-download-overlay');
-          if (overlay) {
-            if (m.type === 'image') {
-              overlay.outerHTML = `<div class="media-bubble"><img src="${base64Data}" alt="image" data-media-id="${mediaId}"></div>`;
-            } else if (m.type === 'video') {
-              overlay.outerHTML = `<div class="media-bubble"><div class="media-video-thumb"><video src="${base64Data}" preload="metadata" playsinline></video><div class="media-play-overlay">▶</div></div></div>`;
-            }
-          }
-        }
-      }
-    });
-  });
+  const el = document.querySelector(`[data-media-id="${mediaId}"]`);
+  if (el) {
+    const overlay = el.closest('.media-download-overlay');
+    if (overlay) {
+      overlay.outerHTML = `<div class="media-bubble"><img src="${base64Data}" alt="image" data-media-id="${mediaId}"></div>`;
+    }
+  }
 }
 
+// # FIX BUG 7 & BUG 8: लोकेशन और कांटेक्ट VCF का सटीक एक्शन
 function handleDocDownload(msgId, m) {
+  // # FIX BUG 7: लोकेशन संदेश - Google Maps या लिंक कॉपी
+  if (m.data && (m.data.includes('maps.google.com') || m.fileName === 'लोकेशन')) {
+    const openMaps = confirm(currentLang === 'hi' 
+      ? '📍 लोकेशन विकल्प:\n\n[OK] = Google Maps में खोलें\n[Cancel] = लिंक कॉपी करें' 
+      : '📍 Location Options:\n\n[OK] = Open in Google Maps\n[Cancel] = Copy Link');
+    if (openMaps) {
+      window.open(m.data, '_blank');
+    } else {
+      navigator.clipboard.writeText(m.data).then(() => {
+        toast(currentLang === 'hi' ? '📋 लोकेशन लिंक कॉपी हो गया' : '📋 Location link copied');
+      });
+    }
+    return;
+  }
+
+  // # FIX BUG 8: कांटेक्ट VCF - नेटिव Contacts ऐप में खोलना
+  if (m.mimeType === 'text/vcard' || (m.fileName && m.fileName.endsWith('.vcf'))) {
+    const rawBase64 = m.data ? m.data.replace(/^data:text\/vcard;base64,/, '') : '';
+    const handled = openContactVcfNative(rawBase64, m.fileName || 'contact.vcf');
+    if (!handled && m.data) {
+      const a = document.createElement('a');
+      a.href = m.data;
+      a.download = m.fileName || 'contact.vcf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast(currentLang === 'hi' ? '👤 संपर्क VCF डाउनलोड हुआ' : '👤 Contact VCF downloaded');
+    }
+    return;
+  }
+
   if (m.data) {
     openMediaViewer(m.data, m.mimeType || 'application/octet-stream', m.fileName || 'document');
   } else {
@@ -2855,8 +2584,7 @@ function openMediaViewer(dataUrl, mimeType, fileName) {
   viewer.hidden = false;
 }
 
-$('closeMediaViewerBtn').onclick = () => {
-  $('mediaViewer').hidden = true;
+$('closeMediaViewerBtn').onclick = () => {$('mediaViewer').hidden = true;
   $('mediaViewerContent').innerHTML = '';
   mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
 };
@@ -2864,8 +2592,14 @@ $('closeMediaViewerBtn').onclick = () => {
 $('saveMediaBtn').onclick = () => {
   if (!mediaViewerState.dataUrl) return;
   const { dataUrl, mimeType, fileName } = mediaViewerState;
-  const base64Only = dataUrl.split(',')[1] || dataUrl;
 
+  // # FIX BUG 8: अगर VCF खोला गया है तो नेटिव इम्पोर्ट करें
+  if (mimeType === 'text/vcard' || (fileName && fileName.endsWith('.vcf'))) {
+    const rawBase64 = dataUrl.replace(/^data:text\/vcard;base64,/, '');
+    if (openContactVcfNative(rawBase64, fileName || 'contact.vcf')) return;
+  }
+
+  const base64Only = dataUrl.split(',')[1] || dataUrl;
   const uri = saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
   if (uri) {
     toast(currentLang === 'hi' ? '✅ Downloads में सेव हो गई' : '✅ Saved to Downloads');
@@ -2881,7 +2615,7 @@ $('saveMediaBtn').onclick = () => {
 };
 
 // ===================================================
-// ATTACH MENU
+// ATTACH MENU & PICKERS
 // ===================================================
 const attachBtn = $('attachBtn');
 const attachMenu = $('attachMenu');
@@ -2916,37 +2650,24 @@ attachMenu.querySelectorAll('.attach-menu-item').forEach(btn => {
   };
 });
 
-// ===================================================
-// FILE INPUT HANDLERS
-// ===================================================
 $('photoFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-$('videoFileInput').onchange = (e) => {
+$('videoFileInput').onchange = (e) => {   const file = e.target.files[0];   if (file) sendMediaMessage(file);   e.target.value = ''; };$('docFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-$('docFileInput').onchange = (e) => {
-  const file = e.target.files[0];
-  if (file) sendMediaMessage(file);
-  e.target.value = '';
-};
-$('anyFileInput').onchange = (e) => {
-  const file = e.target.files[0];
-  if (file) sendMediaMessage(file);
-  e.target.value = '';
-};
-$('cameraCaptureInput').onchange = (e) => {
+$('anyFileInput').onchange = (e) => {   const file = e.target.files[0];   if (file) sendMediaMessage(file);   e.target.value = ''; };$('cameraCaptureInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
 
 // ===================================================
-// LOCATION MESSAGE
+// LOCATION & CONTACT SENDERS
 // ===================================================
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
@@ -2956,7 +2677,7 @@ function sendLocationMessage() {
     return;
   }
 
-  toast(currentLang === 'hi' ? '📍 लोकेशन ले रहे हैं...' : '📍 Fetching location...');
+  toast(currentLang === 'hi' ? '📍 लोकेशन प्राप्त कर रहे हैं...' : '📍 Fetching location...');
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const lat = pos.coords.latitude;
@@ -2996,14 +2717,11 @@ function sendLocationMessage() {
     });
 
     toast(currentLang === 'hi' ? '✅ लोकेशन भेज दी' : '✅ Location sent');
-  }, (err) => {
+  }, () => {
     toast(currentLang === 'hi' ? 'लोकेशन प्राप्त नहीं हुई' : 'Could not get location');
   });
 }
 
-// ===================================================
-// CONTACT MESSAGE
-// ===================================================
 async function sendContactMessage() {
   if (!currentChatTargetId) return;
 
@@ -3067,8 +2785,8 @@ async function sendContactMessage() {
 // ===================================================
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
-const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn = $('dockPauseResumeBtn');
-const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot = $('dockBlinkDot');
+const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn =$('dockPauseResumeBtn');
+const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot =$('dockBlinkDot');
 const waveCanvas = $('waveCanvas'), waveCtx = waveCanvas.getContext('2d');
 
 async function openVoiceDock() {
@@ -3219,17 +2937,13 @@ function sendVoiceDock() {
   updateActionBtnState();
 }
 $('dockSendBtn').onclick = sendVoiceDock;
-
 // ===================================================
-// END OF PART 2
-// ===================================================
-// ===================================================
-// 📄 app.js — Part 3 of 3 (Final)
-// Call, Quiz, Whiteboard, TTT, Controls, Init
+// 📄 app.js — Part 3 of 3 (Version 1.21.0 - Final)
+// Call Logic, PeerConnection, Controls, Bug 1 Fix & Init
 // ===================================================
 
 // ===================================================
-// CALL LOGIC
+// CALL LOGIC & INCOMING LISTENERS
 // ===================================================
 let currentCallType = 'outgoing', currentCallTargetId = null, currentCallTargetName = null;
 
@@ -3293,8 +3007,7 @@ function listenForIncoming() {
 }
 
 function triggerMissedCallNotification(callerName, count) {
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
   const body = count === 1
     ? `आपको ${callerName} से 1 मिस्ड कॉल आई है`
@@ -3356,7 +3069,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
 
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
-
   await set(sessionRef, {
     callId: activeCallId,
     callerId: myUserId,
@@ -3453,6 +3165,7 @@ $('btnReject').onclick = async () => {
   await update(ref(db, `user_inbox/${myUserId}`), { status: 'rejected' }).catch(()=>{});
   setTimeout(() => remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{}), 2500);
 
+  // # FIX BUG 1: रिजेक्ट करने पर अगर डिवाइस लॉक है तो चैट या लॉबी कभी न दिखाएँ
   const wasLocked = isDeviceLocked();
   if (!wasLocked) {
     activeCallId = null;
@@ -3466,6 +3179,10 @@ $('btnReject').onclick = async () => {
     callScreen.hidden = true;
     chatScreen.hidden = true;
     lobbyScreen.hidden = false;
+  } else {
+    callScreen.hidden = true;
+    chatScreen.hidden = true;
+    lobbyScreen.hidden = true;
   }
 
   closeIfLocked();
@@ -3640,7 +3357,7 @@ function stopNetworkQualityMonitor() {
 }
 
 // ===================================================
-// FUN MODE TRAY
+// FUN MODE TRAY & MODULES
 // ===================================================
 $('funModeBtn').onclick = (e) => {
   e.stopPropagation();
@@ -3662,9 +3379,6 @@ $('funModeTray').onclick = (e) => {
   if (e.target === $('funModeTray')) $('funModeTray').hidden = true;
 };
 
-// ===================================================
-// QUIZ MODULE
-// ===================================================
 let allQuizQuestions = null;
 let quizSessionUnsub = null;
 let quizTimerInterval = null;
@@ -4178,7 +3892,7 @@ function cleanupKidsModules() {
 }
 
 // ===================================================
-// JOIN CALL SESSION
+// JOIN CALL & WEBRTC CALL ENGINE
 // ===================================================
 async function joinCallSession() {
   clearTimeout(callTimeoutTimer);
@@ -4379,10 +4093,10 @@ $('btnAddPerson').onclick = (e) => {
   }
   $('addParticipantModal').hidden = false;
 };
-$('closeAddModalBtn').onclick = () => { $('addParticipantModal').hidden = true; };
+$('closeAddModalBtn').onclick = () => {$('addParticipantModal').hidden = true; };
 
 // ===================================================
-// PIP SWAP HANDLERS
+// PIP WINDOW SWAP
 // ===================================================
 let pipTouchStartX = 0, pipTouchStartY = 0, pipMoved = false;
 
@@ -4436,7 +4150,7 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen) {
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden && !isTttOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -4452,7 +4166,7 @@ callScreen.addEventListener('click', e => {
 });
 
 // ===================================================
-// CONTROLS
+// IN-CALL CONTROLS & HANGUP (# FIX BUG 1)
 // ===================================================
 $('micBtn').onclick = async (e) => {
   e.stopPropagation();
@@ -4585,16 +4299,26 @@ async function hangup(silent = false) {
     pipRestoreBtn.hidden = true;
     pipWrap.style.opacity = '1';
     $('camBtn').classList.remove('off');
-    $('micBtn').classList.remove('off');
-    $('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea')) $('voiceCallArea').hidden = true;
+    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
 
-    callScreen.hidden = true;
-    incomingDialog.hidden = true;
-    outgoingDialog.hidden = true;
-    lobbyScreen.hidden = false;
+    // # FIX BUG 1: कॉल कटने पर अगर डिवाइस लॉक था, तो लॉबी या चैट कभी फ्लैश न हो
+    const wasLocked = isDeviceLocked();
+    if (!wasLocked) {
+      callScreen.hidden = true;
+      incomingDialog.hidden = true;
+      outgoingDialog.hidden = true;
+      chatScreen.hidden = true;
+      lobbyScreen.hidden = false;
+    } else {
+      callScreen.hidden = true;
+      incomingDialog.hidden = true;
+      outgoingDialog.hidden = true;
+      chatScreen.hidden = true;
+      lobbyScreen.hidden = true;
+    }
     isHangingUp = false;
 
     closeIfLocked();
@@ -4620,7 +4344,7 @@ async function requestWakeLock() {
 function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; } }
 
 // ===================================================
-// HARDWARE BACK BUTTON
+// HARDWARE BACK BUTTON HANDLER
 // ===================================================
 let backPressedOnce = false;
 function setupHardwareBackButton() {
@@ -4630,17 +4354,16 @@ function setupHardwareBackButton() {
       e.preventDefault();
       return;
     }
-    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) {
       if (!m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     }
     if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('kidsWhiteboardModal').hidden) {
-      $('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       history.pushState(null, '', window.location.href); e.preventDefault(); return;
     }
@@ -4655,19 +4378,18 @@ function setupHardwareBackButton() {
 
   history.pushState(null, '', window.location.href);
 
- const appPlugin = getAppPlugin();
-if (!isNativeApp() || !appPlugin) return;
-appPlugin.addListener('backButton', () => {
+  const appPlugin = getAppPlugin();
+  if (!isNativeApp() || !appPlugin) return;
+  appPlugin.addListener('backButton', () => {
     if (Date.now() < ignoreBackUntil) return;
-    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
     if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
-    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {
-      $('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       return;
     }
@@ -4689,7 +4411,7 @@ appPlugin.addListener('backButton', () => {
 }
 
 // ===================================================
-// VIEWPORT SYNC
+// VIEWPORT & KEYBOARD SYNC
 // ===================================================
 if (window.visualViewport) {
   const syncViewport = () => {
@@ -4765,8 +4487,7 @@ async function checkWebOtaUpdate(manual = false) {
   }
 }
 
-$('checkUpdateBtn').onclick = () => {
-  $('profileModal').hidden = true;
+$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
 
@@ -4808,8 +4529,8 @@ function handleDeepLinks() {
     }
 
     const appPlugin = getAppPlugin();
-if (isNativeApp() && appPlugin) {
-  appPlugin.addListener('appUrlOpen', async (event) => {
+    if (isNativeApp() && appPlugin) {
+      appPlugin.addListener('appUrlOpen', async (event) => {
         try {
           const url = new URL(event.url);
           const chatTgtId = url.searchParams.get('chatTargetId');
@@ -4821,10 +4542,10 @@ if (isNativeApp() && appPlugin) {
         } catch(e) {}
       });
 
-       appPlugin.addListener('appStateChange', (state) => {
-    if (state.isActive) checkNativeLaunchIntent();
-  });
-}
+      appPlugin.addListener('appStateChange', (state) => {
+        if (state.isActive) checkNativeLaunchIntent();
+      });
+    }
   } catch (e) {
     console.warn('Deep link error:', e);
   }
@@ -4838,13 +4559,7 @@ async function initApp() {
     applyLanguage(currentLang);
     setupHardwareBackButton();
     setupNativePushListeners();
-
-    // 🆕 नया flow:
-    // - अगर नाम नहीं है → Name Modal
-    // - नाम है पर permissions नहीं → Permission Modal
-    // - सब है → Lobby
     checkUser();
-
     handleDeepLinks();
     checkNativeLaunchIntent();
   } catch (err) {
@@ -4852,11 +4567,7 @@ async function initApp() {
     hideSplashScreen();
   }
 
-  // Fallback: 5 सेकंड बाद splash ज़रूर हटे
-  setTimeout(() => {
-    hideSplashScreen();
-  }, 5000);
-
+  setTimeout(() => { hideSplashScreen(); }, 4000);
   setTimeout(() => checkWebOtaUpdate(false), 3000);
 }
 
@@ -4867,5 +4578,5 @@ if (document.readyState === 'loading') {
 }
 
 // ===================================================
-// END OF PART 3 — FULL app.js COMPLETE
+// END OF app.js (All 3 Parts Complete)
 // ===================================================
