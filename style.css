@@ -1427,3 +1427,84 @@ html, body {
   .contact-name { font-size: 14px; }
   .pc-name { font-size: 13px; }
 }
+/* ===================================================
+   🔥 APK-BUNDLED-CSS OVERRIDE
+   क्यों: APK में पुरानी style.css पहले से bundled है जिसमें 
+   height: calc(...) !important जैसे rules हैं। OTA CSS (यह file)
+   उन्हें तभी हरा सकती है जब उसमें भी !important लगा हो।
+   =================================================== */
+
+.header,
+.chat-header {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: calc(12px + env(safe-area-inset-top, 24px)) 14px 12px !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: #11171f !important;
+  border-bottom: 1px solid var(--line) !important;
+  flex-shrink: 0 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.chat-header {
+  position: relative !important;
+  z-index: 10 !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35) !important;
+}
+
+/* Header के अंदर सारा content force visible */
+.header .user-title,
+.chat-header #chatTargetName {
+  color: var(--c-user) !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+.chat-header #chatTargetStatus {
+  color: var(--text-muted) !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.chat-header > div {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  align-items: center !important;
+}
+
+.chat-header .contact-avatar {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.chat-header-actions {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  align-items: center !important;
+}
+
+/* Light theme में भी header content visible */
+:root[data-theme="light"] .header,
+:root[data-theme="light"] .chat-header {
+  background: #ffffff !important;
+}
+:root[data-theme="light"] .header .user-title,
+:root[data-theme="light"] .chat-header #chatTargetName {
+  color: #0f172a !important;
+}
+:root[data-theme="light"] .chat-header #chatTargetStatus {
+  color: #64748b !important;
+}
