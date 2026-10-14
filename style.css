@@ -1,6 +1,7 @@
 /* ===================================================
    🎨 style.css — Complete Design & Components (v1.21.0)
    Includes Safe-Area Notch Fix, Hidden Fix, Bug 3, 4, 6
+   Keyboard-Hold Fix (position: fixed removed from body)
    =================================================== */
 
 :root {
@@ -34,16 +35,16 @@
   display: none !important;
 }
 
+/* # FIX: position: fixed हटाया गया ताकि कीबोर्ड खुलने पर इनपुट हवा में न लटके */
 html, body {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   background-color: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow: hidden;
-  position: fixed;
-  top: 0;
-  left: 0;
+  overscroll-behavior: none;
 }
 
 /* ===================================================
@@ -111,7 +112,10 @@ html, body {
    =================================================== */
 .screen {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
   background: var(--bg);
@@ -474,7 +478,6 @@ html, body {
   text-align: center;
 }
 
-/* # FIX BUG 4: Star message UI indicator badge */
 .chat-bubble.starred::after {
   content: '⭐';
   font-size: 10px;
@@ -512,7 +515,7 @@ html, body {
 .chat-reply-text { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ===================================================
-   # FIX BUG 6: CHAT FOOTER & REPLY PREVIEW ROW
+   # FIX: CHAT FOOTER & KEYBOARD-HOLD DOCKING
    =================================================== */
 .chat-footer {
   display: flex;
@@ -523,6 +526,11 @@ html, body {
   position: relative;
   z-index: 50;
   flex-shrink: 0;
+}
+
+/* कीबोर्ड खुलते ही नीचे का एक्स्ट्रा स्पेस हटाकर इनपुट को कीबोर्ड से चिपकाए रखता है */
+.chat-footer:focus-within {
+  padding-bottom: 8px !important;
 }
 
 .reply-preview-box {

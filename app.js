@@ -1,6 +1,6 @@
 /* =========================================================================
    >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
-   कॉन्फ़िगरेशन, स्टेट, नेटिव ब्रिज, रिंगटोन (BUG 2 फ़िक्स), प्रेजेंस व संपर्क
+   कॉन्फ़िगरेशन, स्टेट, नेटिव ब्रिज, ऑटो-डाउनलोड कोर, प्रेजेंस व संपर्क
    ========================================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -43,7 +43,7 @@ function isNativeApp() {
 }
 
 // ===================================================
-// FIREBASE & WEBRTC CONFIG
+// FIREBASE & WEBRTC CONFIG (CLEAN URLs)
 // ===================================================
 const firebaseConfig = {
   apiKey: "AIzaSyBg1VC0cd1FmGiXTkMvFFG-eSL46FmgtZU",
@@ -94,9 +94,9 @@ const translations = {
     reject: "काटें", accept: "उठाएँ", cancelCall: "रद्द करें", mic: "माइक", cam: "कैमरा", speaker: "स्पीकर", flip: "पलटें",
     hang: "काटें", online: "ऑनलाइन", offline: "ऑफलाइन", typing: "लिख रहे हैं...",
     netOnline: "हाई", netMedium: "मीडियम",
-    sending: "भेज रहे हैं...", receiving: "प्राप्त कर रहे हैं...", waiting: "इंतज़ार...",
-    tapToDownload: "टैप करें डाउनलोड", downloading: "डाउनलोड हो रहा है", cancel: "रद्द करें",
-    fileTooBig: "फाइल बहुत बड़ी है", notConnected: "प्राप्तकर्ता ऑफलाइन है", transferComplete: "ट्रांसफर पूरा"
+    sending: "भेज रहे हैं...", receiving: "डाउनलोड हो रहा है...", waiting: "इंतज़ार...",
+    tapToDownload: "सहेजा गया", downloading: "डाउनलोड हो रहा है", cancel: "रद्द करें",
+    fileTooBig: "फाइल बहुत बड़ी है", notConnected: "प्राप्तकर्ता ऑफलाइन है", transferComplete: "डाउनलोड पूरा हुआ"
   },
   en: {
     pageTitle: "VideoCallApp", welcome: "Welcome!", enterName: "Enter your name to start calling and chatting",
@@ -107,9 +107,9 @@ const translations = {
     reject: "Decline", accept: "Answer", cancelCall: "Cancel", mic: "Mic", cam: "Camera", speaker: "Speaker", flip: "Flip",
     hang: "End", online: "Online", offline: "Offline", typing: "typing...",
     netOnline: "High", netMedium: "Medium",
-    sending: "Sending...", receiving: "Receiving...", waiting: "Waiting...",
-    tapToDownload: "Tap to download", downloading: "Downloading", cancel: "Cancel",
-    fileTooBig: "File too big", notConnected: "Receiver is offline", transferComplete: "Transfer complete"
+    sending: "Sending...", receiving: "Downloading...", waiting: "Waiting...",
+    tapToDownload: "Saved", downloading: "Downloading", cancel: "Cancel",
+    fileTooBig: "File too big", notConnected: "Receiver is offline", transferComplete: "Download complete"
   }
 };
 
@@ -146,7 +146,7 @@ function applyLanguage(lang) {
 if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.value);
 
 // ===================================================
-// USER & CALL STATES
+// USER & CALL STATES (सभी वेरिएबल सिंगल डिक्लेरेशन में)
 // ===================================================
 let myUserId = localStorage.getItem('vc_user_id') || '';
 let myUserName = localStorage.getItem('vc_user_name') || '';
@@ -180,21 +180,22 @@ let autoHideTimer = null, peerConnections = {}, unsubs = [];
 let callSessionUnsub = null, callTimeoutTimer = null, selfStatusUnsub = null;
 let targetStatusUnsub = null;
 const MAX_CALL_MEMBERS = 4;
-let qualityLevel = 'high', qualityTimer = null, wakeLock = null, vibrationInterval = null;
+let qualityLevel = 'high', qualityTimer = null, wakeLock = null;
 let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
 let callJoinedViaDirectAccept = false;
 
 // ===================================================
-// P2P MEDIA TRANSFER STATES
+// P2P & AUTO-DOWNLOAD MEDIA TRANSFER STATES
 // ===================================================
 let activeTransfers = {};
 let mediaDataChannels = {};
 let mediaPeerConnections = {};
 let incomingChunks = {};
+let localFileMemoryCache = {};
 let mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
 const CHUNK_SIZE = 16 * 1024;
-const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024;
+const DIRECT_SEND_MAX_SIZE = 3.5 * 1024 * 1024; // 3.5 MB तक डायरेक्ट फास्ट डिलीवरी
 const BUFFER_HIGH_THRESHOLD = 8 * 1024 * 1024;
 const BUFFER_LOW_THRESHOLD = 1 * 1024 * 1024;
 
@@ -250,6 +251,29 @@ function isDeviceLocked() {
   return false;
 }
 
+// 🆕 ऑटो-डाउनलोड हेल्पर: फ़ाइल मिलते ही बिना क्लिक किए सीधे Downloads में सहेजना
+function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
+  if (!base64Data || !msgId) return;
+  const cacheKey = 'auto_saved_' + msgId;
+  if (localStorage.getItem(cacheKey)) return;
+  localStorage.setItem(cacheKey, 'true');
+
+  const base64Only = base64Data.split(',')[1] || base64Data;
+  const uri = saveMediaViaNative(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
+  if (uri) {
+    toast(currentLang === 'hi' ? '📥 फ़ाइल Downloads में स्वतः सेव हो गई' : '📥 File auto-saved to Downloads');
+  } else if (!isNativeApp()) {
+    try {
+      const a = document.createElement('a');
+      a.href = base64Data;
+      a.download = fileName || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch(e) {}
+  }
+}
+
 function saveMediaViaNative(base64Data, fileName, mimeType) {
   if (window.AndroidAudio && typeof window.AndroidAudio.saveMediaToDownloads === 'function') {
     try { return window.AndroidAudio.saveMediaToDownloads(base64Data, fileName, mimeType); } catch(e) { return ''; }
@@ -284,7 +308,6 @@ function requestAllPermissionsNative() {
     try {
       window.AndroidAudio.requestAllPermissions(cbId);
     } catch(e) {
-      console.warn('requestAllPermissions error:', e);
       delete permissionCallbacks[cbId];
       resolve({ allGranted: false, denied: ['unknown'] });
     }
@@ -299,9 +322,7 @@ window.__onPermissionResult = function(callbackId, allGranted, deniedList) {
       const denied = deniedList ? deniedList.split(',').filter(Boolean) : [];
       cb({ allGranted, denied });
     }
-  } catch(e) {
-    console.warn('Permission callback error:', e);
-  }
+  } catch(e) {}
 };
 
 async function requestAllPermissionsWeb() {
@@ -357,9 +378,7 @@ async function saveFcmTokenToFirebase(token) {
     if (uid) {
       await update(ref(db, `users/${uid}`), { fcmToken: token });
     }
-  } catch(e) {
-    console.warn('FCM token save error:', e);
-  }
+  } catch(e) {}
 }
 
 async function setupNativePushListeners() {
@@ -495,19 +514,9 @@ function startOutgoingCallTone() {
   playBeepTone(); outgoingRingTimer = setInterval(playBeepTone, 3000);
 }
 function stopOutgoingCallTone() { if (outgoingRingTimer) { clearInterval(outgoingRingTimer); outgoingRingTimer = null; } }
-
-function startIncomingRingtone() {
-  // In-app web ringtone intentionally disabled to prevent double ringing conflict
-}
-
-function stopIncomingRingtone() {
-  stopNativeRinging();
-}
-
-function stopAllCallTones() {
-  stopOutgoingCallTone();
-  stopNativeRinging();
-}
+function startIncomingRingtone() {}
+function stopIncomingRingtone() { stopNativeRinging(); }
+function stopAllCallTones() { stopOutgoingCallTone(); stopNativeRinging(); }
 document.addEventListener('pointerdown', () => { ensureAudioContext(); }, {passive:true});
 
 // ===================================================
@@ -674,9 +683,7 @@ async function handleDirectAcceptCall(callId) {
         joinCallSession();
       }
     }, 300);
-  } catch(e) {
-    console.warn("Direct accept error:", e);
-  }
+  } catch(e) {}
 }
 
 function checkNativeLaunchIntent() {
@@ -722,7 +729,7 @@ function updateHeaderTitle() {
 }
 
 // ===================================================
-// PRESENCE
+// PRESENCE & REAL-TIME PREVIEW SYNC (# FIX: लॉबी अपडेट)
 // ===================================================
 async function initPresence() {
   updateHeaderTitle();
@@ -833,20 +840,18 @@ $('saveNameBtn').onclick = async () => {
   }, 500);
 };
 
-$('grantPermsBtn').onclick = async () => {
-  $('permNoticeModal').hidden = true;
+$('grantPermsBtn').onclick = async () => {$('permNoticeModal').hidden = true;
   await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
   lobbyScreen.hidden = false;
   initPresence();
 };
 
-$('profileBtn').onclick = () => {
-  $('nameEditArea').hidden = true;
+$('profileBtn').onclick = () => {$('nameEditArea').hidden = true;
   $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   $('profileModal').hidden = false;
 };
-$('closeProfileBtn').onclick = () => { $('profileModal').hidden = true; };
+$('closeProfileBtn').onclick = () => {$('profileModal').hidden = true; };
 
 $('toggleEditNameBtn').onclick = () => {
   const isH = $('nameEditArea').hidden;
@@ -855,8 +860,7 @@ $('toggleEditNameBtn').onclick = () => {
     $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   } else {
     $('editNameInput').value = myUserName;
-    $('editNameInput').focus();
-    $('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
+    $('editNameInput').focus();$('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
   }
 };
 
@@ -871,8 +875,7 @@ $('saveEditedNameBtn').onclick = async () => {
   toast(currentLang === 'hi' ? '✅ नाम सुरक्षित कर लिया गया' : '✅ Name saved');
 };
 
-$('recheckPermsBtn').onclick = async () => {
-  $('profileModal').hidden = true;
+$('recheckPermsBtn').onclick = async () => {$('profileModal').hidden = true;
   localStorage.removeItem('perms_done_v2');
   await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
@@ -911,10 +914,8 @@ $('resetProfileBtn').onclick = async () => {
 // ===================================================
 // ADMIN PANEL
 // ===================================================
-adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };
-$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };
-$('verifyPinBtn').onclick = () => {
-  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) { $('adminPinModal').hidden = true; openAdminPanel(); }
+adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };$('verifyPinBtn').onclick = () => {
+  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) {$('adminPinModal').hidden = true; openAdminPanel(); }
   else toast('गलत पिन!');
 };
 
@@ -943,21 +944,17 @@ function openAdminPanel() {
   });
   $('adminPanelModal').hidden = false;
 }
-$('closeAdminPanelBtn').onclick = () => { $('adminPanelModal').hidden = true; };
+$('closeAdminPanelBtn').onclick = () => {$('adminPanelModal').hidden = true; };
 
 // ===================================================
 // TABS & CALL LOGS
 // ===================================================
-$('tabChatsBtn').onclick = () => {
-  $('tabChatsBtn').className = 'tab-btn active-chat';
-  $('tabCallsBtn').className = 'tab-btn';
-  $('tabChatsContent').hidden = false;
+$('tabChatsBtn').onclick = () => {$('tabChatsBtn').className = 'tab-btn active-chat';
+  $('tabCallsBtn').className = 'tab-btn';$('tabChatsContent').hidden = false;
   $('tabCallsContent').hidden = true;
 };
-$('tabCallsBtn').onclick = () => {
-  $('tabCallsBtn').className = 'tab-btn active-call';
-  $('tabChatsBtn').className = 'tab-btn';
-  $('tabCallsContent').hidden = false;
+$('tabCallsBtn').onclick = () => {$('tabCallsBtn').className = 'tab-btn active-call';
+  $('tabChatsBtn').className = 'tab-btn';$('tabCallsContent').hidden = false;
   $('tabChatsContent').hidden = true;
   renderCallLogs();
 };
@@ -1035,7 +1032,7 @@ function renderCallLogs() {
 }
 
 // ===================================================
-// CONTACTS LIST & CHAT PREVIEWS
+// CONTACTS LIST & CHAT PREVIEWS (# FIX: लॉबी लास्ट मैसेज अपडेट)
 // ===================================================
 const getChatRoomId = (a, b) => [a, b].sort().join('__');
 
@@ -1067,7 +1064,6 @@ function listenForLatestChatPreviews() {
       keys.forEach(k => {
         const m = msgs[k];
         if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) unread++;
-        if (m.senderId !== myUserId && !m.delivered) update(ref(db, `chats/${key}/messages/${k}`), { delivered: true }).catch(()=>{});
       });
       unreadCounts[targetId] = unread;
 
@@ -1184,7 +1180,7 @@ setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).lengt
    ========================================================================= */
 /* =========================================================================
    >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
-   लॉन्ग-प्रेस मेन्यू, P2P फ़ाइल शेयरिंग डेटा चैनल, चैट और मीडिया हैंडलर्स
+   लॉन्ग-प्रेस मेन्यू, ऑटो-डाउनलोड मीडिया इंजन, चैट हैंडलर, वॉयस डॉक व अटैचमेंट
    ========================================================================= */
 
 // ===================================================
@@ -1326,7 +1322,6 @@ function openMessageMenu(el, msgId, m) {
 
   document.body.appendChild(menu);
 
-  // # FIX BUG 3: टच और क्लिक इवेंट्स पर stopPropagation ताकि मेन्यू फ्लिकर न करे
   const menuBox = menu.querySelector('.menu-box');
   if (menuBox) {
     ['touchstart', 'touchend', 'click'].forEach(evt => {
@@ -1343,7 +1338,6 @@ function openMessageMenu(el, msgId, m) {
     };
   });
 
-  // # FIX BUG 3: बैकड्रॉप पर टैप या क्लिक से ही मेन्यू बंद होगा
   const backdrop = menu.querySelector('.menu-backdrop');
   if (backdrop) {
     backdrop.addEventListener('touchstart', (e) => { e.preventDefault(); closeMessageMenu(); });
@@ -1453,32 +1447,26 @@ function cancelReply() {
   if (box) box.remove();
 }
 
-// # FIX BUG 4: स्टार का UI बिना रीस्टार्ट तुरंत अपडेट होगा
 async function toggleStarMessage(roomPath, msgId, m) {
   const newStar = !m.starred;
   m.starred = newStar;
   try {
     await update(ref(db, roomPath), { starred: newStar });
     const el = document.getElementById(`msg_${msgId}`);
-    if (el) {
-      el.classList.toggle('starred', newStar);
-    }
-    toast(newStar
-      ? (currentLang === 'hi' ? '⭐ स्टार किया' : '⭐ Starred')
-      : (currentLang === 'hi' ? 'स्टार हटाया' : 'Unstarred'));
+    if (el) el.classList.toggle('starred', newStar);
+    toast(newStar ? '⭐ स्टार किया' : 'स्टार हटाया');
   } catch(e) {
-    toast(currentLang === 'hi' ? 'त्रुटि' : 'Error');
+    toast('त्रुटि');
   }
 }
 
-// # FIX BUG 5: डिलीट फॉर एवरीवन का UI बिना रीस्टार्ट तुरंत अपडेट होगा
 async function deleteMessage(roomPath, msgId, forEveryone) {
   try {
     if (forEveryone) {
       await update(ref(db, roomPath), {
         deleted: true,
         deletedAt: Date.now(),
-        text: '🚫 ' + (currentLang === 'hi' ? 'यह संदेश हटा दिया गया है' : 'This message was deleted'),
+        text: '🚫 यह संदेश हटा दिया गया है',
         data: null,
         type: 'deleted',
         senderName: myUserName
@@ -1488,7 +1476,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       if (el) {
         el.className = `chat-bubble is-deleted me`;
         el.innerHTML = `
-          <div style="font-style:italic;color:#94a3b8">🚫 ${currentLang === 'hi' ? 'यह संदेश हटा दिया गया है' : 'This message was deleted'}</div>
+          <div style="font-style:italic;color:#94a3b8">🚫 यह संदेश हटा दिया गया है</div>
           <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>
         `;
       }
@@ -1509,11 +1497,9 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       } catch(e) {}
     }
 
-    toast(forEveryone
-      ? (currentLang === 'hi' ? '🗑️ सबके लिए हटाया' : '🗑️ Deleted for everyone')
-      : (currentLang === 'hi' ? '🗑️ हटा दिया' : '🗑️ Deleted'));
+    toast(forEveryone ? '🗑️ सबके लिए हटाया' : '🗑️ हटा दिया');
   } catch(e) {
-    toast(currentLang === 'hi' ? 'त्रुटि' : 'Error');
+    toast('त्रुटि');
   }
 }
 
@@ -1530,17 +1516,17 @@ function isDeletedForMe(msgId) {
 function openForwardDialog(msgId, m) {
   const users = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
   if (!users.length) {
-    toast(currentLang === 'hi' ? 'कोई संपर्क नहीं' : 'No contacts');
+    toast('कोई संपर्क नहीं');
     return;
   }
 
   const names = users.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt((currentLang === 'hi' ? 'किसे फॉरवर्ड करें? (नंबर लिखें)\n\n' : 'Forward to? (enter number)\n\n') + names);
+  const input = prompt('किसे फॉरवर्ड करें? (नंबर लिखें)\n\n' + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
   if (isNaN(idx) || idx < 0 || idx >= users.length) {
-    toast(currentLang === 'hi' ? 'गलत नंबर' : 'Invalid');
+    toast('गलत नंबर');
     return;
   }
 
@@ -1583,428 +1569,10 @@ async function forwardMessageTo(targetId, m, targetName) {
     }
 
     await set(newMsgRef, msgData);
-    toast(`${targetName} ${currentLang === 'hi' ? 'को फॉरवर्ड कर दिया' : 'forwarded'}`);
+    toast(`${targetName} को फॉरवर्ड कर दिया`);
   } catch(e) {
-    toast(currentLang === 'hi' ? 'फॉरवर्ड फेल' : 'Forward failed');
+    toast('फॉरवर्ड फेल');
   }
-}
-
-// ===================================================
-// P2P MEDIA TRANSFER — WEBRTC DATA CHANNEL ENGINE
-// (प्रॉमिस हैंग व सिग्नलिंग फ़िक्स के साथ)
-// ===================================================
-async function getOrCreateMediaDataChannel(peerId) {
-  if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
-    return mediaDataChannels[peerId];
-  }
-
-  const pc = new RTCPeerConnection(ICE_SERVERS);
-  mediaPeerConnections[peerId] = pc;
-
-  const targetSignalsPath = `media_signals/${peerId}/${myUserId}`;
-  const mySignalsPath = `media_signals/${myUserId}/${peerId}`;
-
-  // पुराने अटके सिग्नल्स को साफ़ करें ताकि नया कनेक्शन फ्रेश बने
-  await remove(ref(db, targetSignalsPath)).catch(()=>{});
-  await remove(ref(db, mySignalsPath)).catch(()=>{});
-
-  pc.onicecandidate = e => {
-    if (e.candidate) push(ref(db, `${targetSignalsPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
-  };
-
-  pc.pendingIce = [];
-  onChildAdded(ref(db, `${mySignalsPath}/candidates`), async snap => {
-    const c = snap.val(); if (!c) return;
-    const cand = new RTCIceCandidate(c);
-    if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
-    else pc.pendingIce.push(cand);
-  });
-
-  pc.flushIce = async () => {
-    const p = pc.pendingIce || []; pc.pendingIce = [];
-    for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
-  };
-
-  return new Promise(async (resolve, reject) => {
-    const timeout = setTimeout(() => {
-      try { pc.close(); } catch(e) {}
-      delete mediaPeerConnections[peerId];
-      reject(new Error("Media channel timeout"));
-    }, 25000);
-
-    const dc = pc.createDataChannel('media', { ordered: true });
-    setupMediaDataChannel(peerId, dc);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await set(ref(db, `${targetSignalsPath}/offer`), { sdp: offer.sdp, type: offer.type, ts: Date.now() });
-
-    const unsubAns = onValue(ref(db, `${mySignalsPath}/answer`), async snap => {
-      const a = snap.val();
-      if (a && !pc.currentRemoteDescription) {
-        unsubAns();
-        await pc.setRemoteDescription(new RTCSessionDescription(a));
-        await pc.flushIce();
-
-        // प्रॉमिस हैंग फ़िक्स: अगर डेटा चैनल पहले ही खुल चुका है तो तुरंत रिज़ॉल्व करें
-        if (dc.readyState === 'open') {
-          clearTimeout(timeout);
-          mediaDataChannels[peerId] = dc;
-          resolve(dc);
-        } else {
-          dc.onopen = () => {
-            clearTimeout(timeout);
-            mediaDataChannels[peerId] = dc;
-            resolve(dc);
-          };
-        }
-      }
-    });
-  });
-}
-
-// 🆕 सुधरा हुआ रिसीवर लिसनर (onValue से हर नए ट्रांसफ़र का ऑफ़र पकड़ेगा)
-function listenForIncomingMediaSignals() {
-  const incomingMediaRef = ref(db, `media_signals/${myUserId}`);
-
-  onValue(incomingMediaRef, async snap => {
-    const allSenders = snap.val() || {};
-    for (const senderId of Object.keys(allSenders)) {
-      if (!senderId || senderId === myUserId) continue;
-
-      const signalData = allSenders[senderId];
-      if (!signalData || !signalData.offer || signalData.answered) continue;
-
-      if (mediaPeerConnections[senderId] && mediaPeerConnections[senderId].connectionState === 'connected') {
-        continue;
-      }
-
-      const pc = new RTCPeerConnection(ICE_SERVERS);
-      mediaPeerConnections[senderId] = pc;
-
-      const mySignalsPath = `media_signals/${myUserId}/${senderId}`;
-      const senderSignalsPath = `media_signals/${senderId}/${myUserId}`;
-
-      pc.onicecandidate = e => {
-        if (e.candidate) push(ref(db, `${senderSignalsPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
-      };
-
-      pc.pendingIce = [];
-      onChildAdded(ref(db, `${mySignalsPath}/candidates`), async cSnap => {
-        const c = cSnap.val(); if (!c) return;
-        const cand = new RTCIceCandidate(c);
-        if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
-        else pc.pendingIce.push(cand);
-      });
-
-      pc.flushIce = async () => {
-        const p = pc.pendingIce || []; pc.pendingIce = [];
-        for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
-      };
-
-      pc.ondatachannel = (event) => {
-        const dc = event.channel;
-        setupMediaDataChannel(senderId, dc);
-        if (dc.readyState === 'open') {
-          mediaDataChannels[senderId] = dc;
-        } else {
-          dc.onopen = () => {
-            mediaDataChannels[senderId] = dc;
-          };
-        }
-      };
-
-      await pc.setRemoteDescription(new RTCSessionDescription(signalData.offer));
-      await pc.flushIce();
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      
-      await set(ref(db, `${senderSignalsPath}/answer`), { sdp: ans.sdp, type: ans.type, ts: Date.now() });
-      await update(ref(db, `${mySignalsPath}`), { answered: true }).catch(()=>{});
-    }
-  });
-}
-
-function setupMediaDataChannel(peerId, dc) {
-  dc.binaryType = 'arraybuffer';
-
-  dc.onmessage = (event) => {
-    const data = event.data;
-    if (typeof data === 'string') {
-      try {
-        const msg = JSON.parse(data);
-        handleMediaControlMessage(peerId, msg);
-      } catch(e) {}
-      return;
-    }
-    if (data instanceof ArrayBuffer) {
-      handleIncomingChunk(peerId, data);
-    }
-  };
-
-  dc.onclose = () => { delete mediaDataChannels[peerId]; };
-  dc.onerror = (err) => { console.warn('Data channel error:', err); };
-}
-
-function handleMediaControlMessage(peerId, msg) {
-  const mediaId = msg.mediaId;
-  if (!mediaId) return;
-
-  switch (msg.type) {
-    case 'media-start':
-      incomingChunks[mediaId] = [];
-      activeTransfers[mediaId] = {
-        mediaId, peerId,
-        direction: 'receive',
-        fileName: msg.fileName || 'file',
-        mimeType: msg.mimeType || 'application/octet-stream',
-        mediaType: msg.mediaType || 'doc',
-        totalSize: msg.totalSize || 0,
-        totalChunks: msg.totalChunks || 0,
-        receivedChunks: 0,
-        receivedBytes: 0,
-        startedAt: Date.now(),
-        status: 'receiving'
-      };
-      renderTransferQueue();
-      break;
-
-    case 'media-end':
-      if (incomingChunks[mediaId]) {
-        const transfer = activeTransfers[mediaId];
-        const chunks = incomingChunks[mediaId];
-        const blob = new Blob(chunks, { type: transfer?.mimeType || 'application/octet-stream' });
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Data = reader.result;
-          updateChatMediaMessageWithData(mediaId, base64Data, transfer?.mimeType, transfer?.fileName);
-
-          // फ़ाइल सीधे Android Downloads/VideoCallApp में सुरक्षित सेव होती है
-          const base64Only = base64Data.split(',')[1] || base64Data;
-          const uri = saveMediaViaNative(base64Only, transfer.fileName, transfer.mimeType);
-          if (uri) toast(currentLang === 'hi' ? '✅ फ़ाइल Downloads में सेव हो गई' : '✅ File saved to Downloads');
-        };
-        reader.readAsDataURL(blob);
-
-        if (activeTransfers[mediaId]) {
-          activeTransfers[mediaId].status = 'complete';
-          activeTransfers[mediaId].completedAt = Date.now();
-          renderTransferQueue();
-          setTimeout(() => {
-            delete activeTransfers[mediaId];
-            renderTransferQueue();
-          }, 2500);
-        }
-        delete incomingChunks[mediaId];
-      }
-      break;
-
-    case 'media-cancel':
-      if (activeTransfers[mediaId]) {
-        activeTransfers[mediaId].status = 'cancelled';
-        renderTransferQueue();
-        setTimeout(() => {
-          delete activeTransfers[mediaId];
-          renderTransferQueue();
-        }, 2000);
-      }
-      delete incomingChunks[mediaId];
-      break;
-
-    case 'media-request':
-      toast(currentLang === 'hi' ? '⚠️ फ़ाइल दोबारा भेजने के लिए फ़ाइल चुनें' : '⚠️ Re-select the file to resend');
-      break;
-  }
-}
-
-function handleIncomingChunk(peerId, arrayBuffer) {
-  const activeMediaIds = Object.keys(activeTransfers).filter(id => {
-    const t = activeTransfers[id];
-    return t.peerId === peerId && t.direction === 'receive' && t.status === 'receiving';
-  });
-
-  if (activeMediaIds.length === 0) return;
-  const mediaId = activeMediaIds[0];
-
-  if (!incomingChunks[mediaId]) incomingChunks[mediaId] = [];
-  incomingChunks[mediaId].push(arrayBuffer);
-
-  const transfer = activeTransfers[mediaId];
-  transfer.receivedChunks = (transfer.receivedChunks || 0) + 1;
-  transfer.receivedBytes = (transfer.receivedBytes || 0) + arrayBuffer.byteLength;
-
-  if (transfer.receivedChunks % 10 === 0 || transfer.receivedBytes >= transfer.totalSize) {
-    renderTransferQueue();
-  }
-}
-
-async function sendMediaFileOverDataChannel(peerId, file) {
-  let dc;
-  try {
-    dc = await getOrCreateMediaDataChannel(peerId);
-  } catch(e) {
-    toast(currentLang === 'hi' ? '❌ रिसीवर ऑफ़लाइन है' : '❌ Receiver is offline');
-    return null;
-  }
-
-  const mediaId = `media_${Date.now()}_${Math.floor(Math.random()*10000)}`;
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-  activeTransfers[mediaId] = {
-    mediaId, peerId,
-    direction: 'send',
-    fileName: file.name || 'file',
-    mimeType: file.type || 'application/octet-stream',
-    mediaType: getMediaTypeFromMime(file.type),
-    totalSize: file.size,
-    totalChunks,
-    sentChunks: 0,
-    sentBytes: 0,
-    startedAt: Date.now(),
-    status: 'sending'
-  };
-  renderTransferQueue();
-
-  dc.send(JSON.stringify({
-    type: 'media-start',
-    mediaId,
-    fileName: file.name,
-    mimeType: file.type,
-    mediaType: getMediaTypeFromMime(file.type),
-    totalSize: file.size,
-    totalChunks
-  }));
-
-  await new Promise(r => setTimeout(r, 100));
-
-  const arrayBuffer = await file.arrayBuffer();
-  let offset = 0;
-
-  while (offset < file.size) {
-    if (dc.readyState !== 'open') {
-      activeTransfers[mediaId].status = 'failed';
-      renderTransferQueue();
-      toast(currentLang === 'hi' ? '❌ कनेक्शन टूट गया' : '❌ Connection lost');
-      return null;
-    }
-
-    if (dc.bufferedAmount > BUFFER_HIGH_THRESHOLD) {
-      await waitForBufferDrain(dc);
-    }
-
-    const end = Math.min(offset + CHUNK_SIZE, file.size);
-    const chunk = arrayBuffer.slice(offset, end);
-    dc.send(chunk);
-
-    offset = end;
-    activeTransfers[mediaId].sentChunks++;
-    activeTransfers[mediaId].sentBytes = offset;
-
-    if (activeTransfers[mediaId].sentChunks % 10 === 0 || offset >= file.size) {
-      renderTransferQueue();
-    }
-  }
-
-  dc.send(JSON.stringify({ type: 'media-end', mediaId }));
-
-  activeTransfers[mediaId].status = 'complete';
-  activeTransfers[mediaId].completedAt = Date.now();
-  renderTransferQueue();
-
-  setTimeout(() => {
-    delete activeTransfers[mediaId];
-    renderTransferQueue();
-  }, 2500);
-
-  return mediaId;
-}
-
-function waitForBufferDrain(dc) {
-  return new Promise(resolve => {
-    const checkInterval = setInterval(() => {
-      if (dc.bufferedAmount < BUFFER_LOW_THRESHOLD || dc.readyState !== 'open') {
-        clearInterval(checkInterval);
-        resolve();
-      }
-    }, 50);
-  });
-}
-
-function getMediaTypeFromMime(mime) {
-  if (!mime) return 'doc';
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('video/')) return 'video';
-  if (mime.startsWith('audio/')) return 'audio';
-  return 'doc';
-}
-
-function renderTransferQueue() {
-  const queue = $('transferQueue');
-  if (!queue) return;
-  const transfers = Object.values(activeTransfers);
-
-  if (transfers.length === 0) { queue.innerHTML = ''; return; }
-
-  queue.innerHTML = transfers.map(t => {
-    const isSend = t.direction === 'send';
-    const done = t.status === 'complete' || t.status === 'cancelled';
-    const current = isSend ? (t.sentBytes || 0) : (t.receivedBytes || 0);
-    const pct = t.totalSize > 0 ? Math.min(100, Math.round(current * 100 / t.totalSize)) : 0;
-
-    let statusText;
-    if (t.status === 'sending') statusText = translations[currentLang].sending;
-    else if (t.status === 'receiving') statusText = translations[currentLang].receiving;
-    else if (t.status === 'complete') statusText = currentLang === 'hi' ? '✅ पूरा' : '✅ Done';
-    else if (t.status === 'cancelled') statusText = currentLang === 'hi' ? '❌ रद्द' : '❌ Cancelled';
-    else if (t.status === 'failed') statusText = currentLang === 'hi' ? '⚠️ विफल' : '⚠️ Failed';
-    else statusText = '...';
-
-    const arrow = isSend ? '⬆' : '⬇';
-    const icon = getFileIcon(t.mimeType, t.fileName);
-
-    return `
-      <div class="transfer-item" data-media-id="${t.mediaId}">
-        <div class="transfer-item-title">
-          <span class="transfer-item-name">${arrow} ${icon} ${safeName(t.fileName)}</span>
-          <span class="transfer-item-pct">${pct}%</span>
-        </div>
-        <div class="transfer-item-bar">
-          <div class="transfer-item-fill" style="width:${pct}%"></div>
-        </div>
-        <div class="transfer-item-status">
-          <span>${statusText} • ${formatFileSize(current)} / ${formatFileSize(t.totalSize)}</span>
-          ${!done && isSend ? `<button class="transfer-item-cancel" data-cancel-id="${t.mediaId}">${translations[currentLang].cancel}</button>` : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  queue.querySelectorAll('.transfer-item-cancel').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      cancelTransfer(btn.dataset.cancelId);
-    };
-  });
-}
-
-function cancelTransfer(mediaId) {
-  const t = activeTransfers[mediaId];
-  if (!t) return;
-
-  t.status = 'cancelled';
-  renderTransferQueue();
-
-  const dc = mediaDataChannels[t.peerId];
-  if (dc && dc.readyState === 'open') {
-    try { dc.send(JSON.stringify({ type: 'media-cancel', mediaId })); } catch(e) {}
-  }
-
-  delete incomingChunks[mediaId];
-  setTimeout(() => {
-    delete activeTransfers[mediaId];
-    renderTransferQueue();
-  }, 1500);
 }
 
 // ===================================================
@@ -2015,7 +1583,7 @@ let activePlayingAudio = null;
 let activePlayingBtn = null;
 let isInitialChatOpen = true;
 
-function openChat(tId, tName, isOnline) {
+function openChat(tId, tName) {
   currentChatTargetId = tId;
   currentChatTargetName = tName;
   unreadCounts[tId] = 0;
@@ -2118,7 +1686,9 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
-// # FIX BUG 4 & BUG 5: लोड चैट मैसेज में स्टार और डिलीट का रियल-टाइम रेंडर
+// ===================================================
+// LOAD MESSAGES & ZERO-TAP AUTO DOWNLOAD
+// ===================================================
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -2145,6 +1715,11 @@ function loadChatMessages() {
         update(ref(db, `${roomPath}/${msgId}`), { read: true, delivered: true, readAt: Date.now() }).catch(()=>{});
       }
 
+      // 🚀 # FIX: बिना किसी बटन को दबाए सीधे Downloads/VideoCallApp में ऑटो-सेव होना
+      if (m.data && m.senderId !== myUserId) {
+        autoSaveMediaToDownloads(msgId, m.data, m.fileName, m.mimeType);
+      }
+
       let el = document.getElementById(`msg_${msgId}`);
       let tickHtml = '';
       if (m.senderId === myUserId) {
@@ -2154,16 +1729,14 @@ function loadChatMessages() {
       }
 
       if (el) {
-        // # FIX BUG 4: स्टार क्लास अपडेट
         el.classList.toggle('starred', !!m.starred);
 
-        // # FIX BUG 5: अगर मैसेज डिलीट हो गया है तो तुरंत अपडेट करें
         if (m.deleted || m.type === 'deleted') {
           if (!el.classList.contains('is-deleted')) {
             el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
             el.innerHTML = `
               <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
-              <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>
+              <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
             `;
           }
           return;
@@ -2215,6 +1788,7 @@ function loadChatMessages() {
         `;
       }
 
+      // 🖼️ # FIX: मीडिया तुरंत दिखेगा
       if (m.type === 'image') {
         if (m.data) {
           contentHtml += `<div class="media-bubble"><img src="${m.data}" alt="image" data-media-id="${m.mediaId || msgId}"></div>`;
@@ -2265,13 +1839,6 @@ function loadChatMessages() {
         const docBubble = el.querySelector('.media-doc-bubble');
         if (docBubble) docBubble.onclick = () => handleDocDownload(msgId, m);
       }
-      const dlBtn = el.querySelector('.media-download-btn');
-      if (dlBtn) {
-        dlBtn.onclick = (e) => {
-          e.stopPropagation();
-          requestMediaFromPeer(msgId, m);
-        };
-      }
 
       attachBubbleLongPress(el, msgId, m);
       body.appendChild(el);
@@ -2295,7 +1862,7 @@ function buildMediaPlaceholderHtml(msgId, m) {
       <div class="media-download-icon">${icon}</div>
       <div class="media-file-name">${safeName(m.fileName || label)}</div>
       <div class="media-file-size">${sizeText}</div>
-      <button class="media-download-btn">⬇ ${translations[currentLang].tapToDownload}</button>
+      <button class="media-download-btn">⬇ स्वतः डाउनलोड हो रहा है...</button>
     </div>
   `;
 }
@@ -2308,7 +1875,7 @@ function buildDocBubbleHtml(msgId, m) {
       <div class="media-doc-icon">${icon}</div>
       <div class="media-doc-info">
         <div class="media-doc-name">${safeName(m.fileName || 'document')}</div>
-        <div class="media-doc-size">${size}</div>
+        <div class="media-doc-size">${size} • सहेजा गया</div>
       </div>
     </div>
   `;
@@ -2327,6 +1894,7 @@ function updateActionBtnState() {
   }
 }
 
+// ⌨️ # FIX: कीबोर्ड खुलने पर टाइपिंग इनपुट होल्ड रहेगा
 chatInput.addEventListener('input', () => {
   chatInput.style.height = '44px';
   chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
@@ -2455,41 +2023,66 @@ chatInput.addEventListener('keydown', e => {
   }
 });
 
-// P2P Media Send: Firebase RTDB 10 MB क्रैश बाईपास
+// ===================================================
+// 🚀 HYBRID MEDIA SENDER (DIRECT + P2P CHUNKED)
+// ===================================================
 async function sendMediaMessage(file) {
   if (!file || !currentChatTargetId) return;
 
   const targetId = currentChatTargetId;
-  const targetOnline = !!allOnlineUsers[targetId]?.online;
-
-  if (!targetOnline) {
-    toast(currentLang === 'hi' ? '⚠️ सामने वाला ऑफ़लाइन है' : '⚠️ Receiver is offline');
-    return;
-  }
-
   const roomId = getChatRoomId(myUserId, targetId);
   const roomPath = `chats/${roomId}/messages`;
   const mediaType = getMediaTypeFromMime(file.type);
   const mediaId = `media_${Date.now()}_${Math.floor(Math.random()*10000)}`;
-  const newMsgRef = push(ref(db, roomPath));
-  const newMsgId = newMsgRef.key;
-
   const label = mediaType === 'image' ? '📷 फ़ोटो' : (mediaType === 'video' ? '🎥 वीडियो' : (mediaType === 'audio' ? '🎙 वॉयस नोट' : '📄 दस्तावेज़'));
 
-  latestChatSnippets[targetId] = {
-    text: label,
-    time: Date.now(),
-    senderId: myUserId,
-    read: false,
-    delivered: false
-  };
+  localFileMemoryCache[mediaId] = file;
+
+  latestChatSnippets[targetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: false };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
+
+  // 1. यदि फ़ाइल 3.5 MB तक है तो सीधे बेस64 से भेजें
+  if (file.size <= DIRECT_SEND_MAX_SIZE) {
+    toast(currentLang === 'hi' ? '📤 फ़ाइल भेजी जा रही है...' : '📤 Sending file...');
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Data = reader.result;
+      const newMsgRef = push(ref(db, roomPath));
+      const newMsgId = newMsgRef.key;
+
+      await set(newMsgRef, {
+        senderId: myUserId,
+        senderName: myUserName,
+        type: mediaType,
+        text: label,
+        data: base64Data,
+        fileName: file.name,
+        mimeType: file.type,
+        fileSize: file.size,
+        mediaId,
+        time: Date.now(),
+        delivered: true,
+        read: false
+      });
+
+      sendChatMessagePush(targetId, label, roomId, newMsgId, {
+        mediaType, mediaSize: file.size, mediaId, fileName: file.name, mimeType: file.type
+      });
+      toast(currentLang === 'hi' ? '✅ फ़ाइल सफलतापूर्वक भेज दी गई' : '✅ File sent successfully');
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+
+  // 2. यदि फ़ाइल 3.5 MB से बड़ी है तो P2P डेटा-चैनल से भेजें
+  const newMsgRef = push(ref(db, roomPath));
+  const newMsgId = newMsgRef.key;
 
   await set(newMsgRef, {
     senderId: myUserId,
     senderName: myUserName,
-    type: mediaType === 'audio' ? 'audio' : (mediaType === 'image' ? 'image' : (mediaType === 'video' ? 'video' : 'doc')),
+    type: mediaType,
     text: label,
     fileName: file.name,
     mimeType: file.type,
@@ -2501,56 +2094,343 @@ async function sendMediaMessage(file) {
   });
 
   sendChatMessagePush(targetId, label, roomId, newMsgId, {
-    mediaType,
-    mediaSize: file.size,
-    mediaId,
-    fileName: file.name,
-    mimeType: file.type
+    mediaType, mediaSize: file.size, mediaId, fileName: file.name, mimeType: file.type
   });
 
-  toast(currentLang === 'hi' ? '⏫ P2P भेज रहे हैं...' : '⏫ Sending via P2P...');
+  toast(currentLang === 'hi' ? '⏫ बड़ी फ़ाइल P2P से भेजी जा रही है...' : '⏫ Sending large file via P2P...');
   const sentMediaId = await sendMediaFileOverDataChannel(targetId, file);
-
   if (sentMediaId) {
     update(ref(db, `${roomPath}/${newMsgId}`), { delivered: true }).catch(()=>{});
     toast(currentLang === 'hi' ? '✅ भेज दिया' : '✅ Sent');
   } else {
-    toast(currentLang === 'hi' ? '❌ भेजने में समस्या' : '❌ Failed to send');
+    toast(currentLang === 'hi' ? '❌ भेजने में समस्या आई' : '❌ Failed to send');
   }
 }
 
-async function requestMediaFromPeer(msgId, msg) {
-  const peerId = msg.senderId;
-  if (!peerId) return;
-
-  const targetOnline = !!allOnlineUsers[peerId]?.online;
-  if (!targetOnline) {
-    toast(currentLang === 'hi' ? '⚠️ सेंडर अभी ऑफ़लाइन है' : '⚠️ Sender is offline now');
-    return;
+// ===================================================
+// P2P WEBRTC DATA CHANNEL FALLBACK ENGINE
+// ===================================================
+async function getOrCreateMediaDataChannel(peerId) {
+  if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
+    return mediaDataChannels[peerId];
   }
 
-  toast(currentLang === 'hi' ? '⏬ सेंडर से फ़ाइल माँगी जा रही है...' : '⏬ Requesting from sender...');
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  mediaPeerConnections[peerId] = pc;
 
+  const targetSignalsPath = `media_signals/${peerId}/${myUserId}`;
+  const mySignalsPath = `media_signals/${myUserId}/${peerId}`;
+
+  pc.onicecandidate = e => {
+    if (e.candidate) push(ref(db, `${targetSignalsPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
+  };
+
+  pc.pendingIce = [];
+  onChildAdded(ref(db, `${mySignalsPath}/candidates`), async snap => {
+    const c = snap.val(); if (!c) return;
+    const cand = new RTCIceCandidate(c);
+    if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
+    else pc.pendingIce.push(cand);
+  });
+
+  pc.flushIce = async () => {
+    const p = pc.pendingIce || []; pc.pendingIce = [];
+    for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
+  };
+
+  return new Promise(async (resolve, reject) => {
+    const timeout = setTimeout(() => {
+      try { pc.close(); } catch(e) {}
+      delete mediaPeerConnections[peerId];
+      reject(new Error("Media channel timeout"));
+    }, 25000);
+
+    const dc = pc.createDataChannel('media', { ordered: true });
+    setupMediaDataChannel(peerId, dc);
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await set(ref(db, `${targetSignalsPath}/offer`), { sdp: offer.sdp, type: offer.type, ts: Date.now() });
+
+    const unsubAns = onValue(ref(db, `${mySignalsPath}/answer`), async snap => {
+      const a = snap.val();
+      if (a && !pc.currentRemoteDescription) {
+        unsubAns();
+        await pc.setRemoteDescription(new RTCSessionDescription(a));
+        await pc.flushIce();
+
+        if (dc.readyState === 'open') {
+          clearTimeout(timeout);
+          mediaDataChannels[peerId] = dc;
+          resolve(dc);
+        } else {
+          dc.onopen = () => {
+            clearTimeout(timeout);
+            mediaDataChannels[peerId] = dc;
+            resolve(dc);
+          };
+        }
+      }
+    });
+  });
+}
+
+function listenForIncomingMediaSignals() {
+  const incomingMediaRef = ref(db, `media_signals/${myUserId}`);
+
+  onValue(incomingMediaRef, async snap => {
+    const allSenders = snap.val() || {};
+    for (const senderId of Object.keys(allSenders)) {
+      if (!senderId || senderId === myUserId) continue;
+
+      const signalData = allSenders[senderId];
+      if (!signalData || !signalData.offer || signalData.answered) continue;
+
+      if (mediaPeerConnections[senderId] && mediaPeerConnections[senderId].connectionState === 'connected') {
+        continue;
+      }
+
+      const pc = new RTCPeerConnection(ICE_SERVERS);
+      mediaPeerConnections[senderId] = pc;
+
+      const senderSignalsPath = `media_signals/${senderId}/${myUserId}`;
+
+      pc.onicecandidate = e => {
+        if (e.candidate) push(ref(db, `${senderSignalsPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
+      };
+
+      pc.pendingIce = [];
+      onChildAdded(ref(db, `media_signals/${myUserId}/${senderId}/candidates`), async cSnap => {
+        const c = cSnap.val(); if (!c) return;
+        const cand = new RTCIceCandidate(c);
+        if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
+        else pc.pendingIce.push(cand);
+      });
+
+      pc.flushIce = async () => {
+        const p = pc.pendingIce || []; pc.pendingIce = [];
+        for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
+      };
+
+      pc.ondatachannel = (event) => {
+        const dc = event.channel;
+        setupMediaDataChannel(senderId, dc);
+        if (dc.readyState === 'open') {
+          mediaDataChannels[senderId] = dc;
+        } else {
+          dc.onopen = () => { mediaDataChannels[senderId] = dc; };
+        }
+      };
+
+      await pc.setRemoteDescription(new RTCSessionDescription(signalData.offer));
+      await pc.flushIce();
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      
+      await set(ref(db, `${senderSignalsPath}/answer`), { sdp: ans.sdp, type: ans.type, ts: Date.now() });
+      await update(ref(db, `media_signals/${myUserId}/${senderId}`), { answered: true }).catch(()=>{});
+    }
+  });
+}
+
+function setupMediaDataChannel(peerId, dc) {
+  dc.binaryType = 'arraybuffer';
+
+  dc.onmessage = (event) => {
+    const data = event.data;
+    if (typeof data === 'string') {
+      try {
+        const msg = JSON.parse(data);
+        handleMediaControlMessage(peerId, msg);
+      } catch(e) {}
+      return;
+    }
+    if (data instanceof ArrayBuffer) {
+      handleIncomingChunk(peerId, data);
+    }
+  };
+
+  dc.onclose = () => { delete mediaDataChannels[peerId]; };
+  dc.onerror = (err) => { console.warn('Data channel error:', err); };
+}
+
+function handleMediaControlMessage(peerId, msg) {
+  const mediaId = msg.mediaId;
+  if (!mediaId) return;
+
+  switch (msg.type) {
+    case 'media-start':
+      incomingChunks[mediaId] = [];
+      activeTransfers[mediaId] = {
+        mediaId, peerId, direction: 'receive',
+        fileName: msg.fileName || 'file', mimeType: msg.mimeType || 'application/octet-stream',
+        totalSize: msg.totalSize || 0, totalChunks: msg.totalChunks || 0,
+        receivedChunks: 0, receivedBytes: 0, startedAt: Date.now(), status: 'receiving'
+      };
+      renderTransferQueue();
+      break;
+
+    case 'media-end':
+      if (incomingChunks[mediaId]) {
+        const transfer = activeTransfers[mediaId];
+        const chunks = incomingChunks[mediaId];
+        const blob = new Blob(chunks, { type: transfer?.mimeType || 'application/octet-stream' });
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Data = reader.result;
+          updateChatMediaMessageWithData(mediaId, base64Data, transfer?.mimeType, transfer?.fileName);
+          autoSaveMediaToDownloads(mediaId, base64Data, transfer.fileName, transfer.mimeType);
+        };
+        reader.readAsDataURL(blob);
+
+        if (activeTransfers[mediaId]) {
+          activeTransfers[mediaId].status = 'complete';
+          renderTransferQueue();
+          setTimeout(() => { delete activeTransfers[mediaId]; renderTransferQueue(); }, 2000);
+        }
+        delete incomingChunks[mediaId];
+      }
+      break;
+
+    case 'media-request':
+      if (localFileMemoryCache[mediaId]) {
+        sendMediaFileOverDataChannel(peerId, localFileMemoryCache[mediaId]);
+      }
+      break;
+  }
+}
+
+function handleIncomingChunk(peerId, arrayBuffer) {
+  const activeMediaIds = Object.keys(activeTransfers).filter(id => {
+    const t = activeTransfers[id];
+    return t.peerId === peerId && t.direction === 'receive' && t.status === 'receiving';
+  });
+
+  if (activeMediaIds.length === 0) return;
+  const mediaId = activeMediaIds[0];
+
+  if (!incomingChunks[mediaId]) incomingChunks[mediaId] = [];
+  incomingChunks[mediaId].push(arrayBuffer);
+
+  const transfer = activeTransfers[mediaId];
+  transfer.receivedChunks = (transfer.receivedChunks || 0) + 1;
+  transfer.receivedBytes = (transfer.receivedBytes || 0) + arrayBuffer.byteLength;
+
+  if (transfer.receivedChunks % 10 === 0 || transfer.receivedBytes >= transfer.totalSize) {
+    renderTransferQueue();
+  }
+}
+
+async function sendMediaFileOverDataChannel(peerId, file) {
   let dc;
   try {
     dc = await getOrCreateMediaDataChannel(peerId);
   } catch(e) {
-    toast(currentLang === 'hi' ? '❌ कनेक्ट नहीं हो पाए' : '❌ Could not connect');
-    return;
+    return null;
   }
 
+  const mediaId = `media_${Date.now()}_${Math.floor(Math.random()*10000)}`;
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+  activeTransfers[mediaId] = {
+    mediaId, peerId, direction: 'send', fileName: file.name || 'file',
+    mimeType: file.type || 'application/octet-stream', totalSize: file.size,
+    totalChunks, sentChunks: 0, sentBytes: 0, startedAt: Date.now(), status: 'sending'
+  };
+  renderTransferQueue();
+
   dc.send(JSON.stringify({
-    type: 'media-request',
-    mediaId: msg.mediaId,
-    messageId: msgId
+    type: 'media-start', mediaId, fileName: file.name, mimeType: file.type,
+    totalSize: file.size, totalChunks
   }));
+
+  await new Promise(r => setTimeout(r, 100));
+
+  const arrayBuffer = await file.arrayBuffer();
+  let offset = 0;
+
+  while (offset < file.size) {
+    if (dc.readyState !== 'open') {
+      activeTransfers[mediaId].status = 'failed';
+      renderTransferQueue();
+      return null;
+    }
+
+    if (dc.bufferedAmount > BUFFER_HIGH_THRESHOLD) {
+      await waitForBufferDrain(dc);
+    }
+
+    const end = Math.min(offset + CHUNK_SIZE, file.size);
+    const chunk = arrayBuffer.slice(offset, end);
+    dc.send(chunk);
+
+    offset = end;
+    activeTransfers[mediaId].sentChunks++;
+    activeTransfers[mediaId].sentBytes = offset;
+
+    if (activeTransfers[mediaId].sentChunks % 10 === 0 || offset >= file.size) {
+      renderTransferQueue();
+    }
+  }
+
+  dc.send(JSON.stringify({ type: 'media-end', mediaId }));
+  activeTransfers[mediaId].status = 'complete';
+  renderTransferQueue();
+  setTimeout(() => { delete activeTransfers[mediaId]; renderTransferQueue(); }, 2000);
+
+  return mediaId;
 }
 
-// 🆕 वीडियो और इमेज दोनों के लिए सटीक UI रेंडरिंग और क्लिक हैंडलर फ़िक्स
+function waitForBufferDrain(dc) {
+  return new Promise(resolve => {
+    const checkInterval = setInterval(() => {
+      if (dc.bufferedAmount < BUFFER_LOW_THRESHOLD || dc.readyState !== 'open') {
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 50);
+  });
+}
+
+function getMediaTypeFromMime(mime) {
+  if (!mime) return 'doc';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'doc';
+}
+
+function renderTransferQueue() {
+  const queue = $('transferQueue');
+  if (!queue) return;
+  const transfers = Object.values(activeTransfers);
+
+  if (transfers.length === 0) { queue.innerHTML = ''; return; }
+
+  queue.innerHTML = transfers.map(t => {
+    const isSend = t.direction === 'send';
+    const current = isSend ? (t.sentBytes || 0) : (t.receivedBytes || 0);
+    const pct = t.totalSize > 0 ? Math.min(100, Math.round(current * 100 / t.totalSize)) : 0;
+    const arrow = isSend ? '⬆' : '⬇';
+    const icon = getFileIcon(t.mimeType, t.fileName);
+
+    return `
+      <div class="transfer-item" data-media-id="${t.mediaId}">
+        <div class="transfer-item-title">
+          <span class="transfer-item-name">${arrow} ${icon} ${safeName(t.fileName)}</span>
+          <span class="transfer-item-pct">${pct}%</span>
+        </div>
+        <div class="transfer-item-bar"><div class="transfer-item-fill" style="width:${pct}%"></div></div>
+      </div>
+    `;
+  }).join('');
+}
+
 function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', fileName = '') {
   const overlay = document.querySelector(`.media-download-overlay[data-media-id="${mediaId}"]`);
   if (overlay) {
-    const isVideo = (mimeType && mimeType.startsWith('video/')) || base64Data.startsWith('data:video') || overlay.querySelector('.media-download-icon')?.textContent.includes('🎥');
+    const isVideo = (mimeType && mimeType.startsWith('video/')) || base64Data.startsWith('data:video');
     const parent = overlay.parentNode;
     if (isVideo) {
       overlay.outerHTML = `
@@ -2570,19 +2450,14 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
   }
 }
 
-// # FIX BUG 7 & BUG 8: लोकेशन और कांटेक्ट VCF का सटीक एक्शन
+// ===================================================
+// DOWNLOAD & MEDIA VIEWER
+// ===================================================
 function handleDocDownload(msgId, m) {
   if (m.data && (m.data.includes('maps.google.com') || m.fileName === 'लोकेशन')) {
-    const openMaps = confirm(currentLang === 'hi' 
-      ? '📍 लोकेशन विकल्प:\n\n[OK] = Google Maps में खोलें\n[Cancel] = लिंक कॉपी करें' 
-      : '📍 Location Options:\n\n[OK] = Open in Google Maps\n[Cancel] = Copy Link');
-    if (openMaps) {
-      window.open(m.data, '_blank');
-    } else {
-      navigator.clipboard.writeText(m.data).then(() => {
-        toast(currentLang === 'hi' ? '📋 लोकेशन लिंक कॉपी हो गया' : '📋 Location link copied');
-      });
-    }
+    const openMaps = confirm('📍 लोकेशन Google Maps में खोलें?');
+    if (openMaps) window.open(m.data, '_blank');
+    else navigator.clipboard.writeText(m.data).then(() => toast('📋 लिंक कॉपी हो गया'));
     return;
   }
 
@@ -2590,30 +2465,19 @@ function handleDocDownload(msgId, m) {
     const rawBase64 = m.data ? m.data.replace(/^data:text\/vcard;base64,/, '') : '';
     const handled = openContactVcfNative(rawBase64, m.fileName || 'contact.vcf');
     if (!handled && m.data) {
-      const a = document.createElement('a');
-      a.href = m.data;
-      a.download = m.fileName || 'contact.vcf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      toast(currentLang === 'hi' ? '👤 संपर्क VCF डाउनलोड हुआ' : '👤 Contact VCF downloaded');
+      saveMediaViaNative(rawBase64, m.fileName || 'contact.vcf', 'text/x-vcard');
+      toast('👤 संपर्क VCF डाउनलोड हुआ');
     }
     return;
   }
 
   if (m.data) {
     openMediaViewer(m.data, m.mimeType || 'application/octet-stream', m.fileName || 'document');
-  } else {
-    requestMediaFromPeer(msgId, m);
   }
 }
 
-// ===================================================
-// MEDIA VIEWER
-// ===================================================
 function openMediaViewer(dataUrl, mimeType, fileName) {
   mediaViewerState = { dataUrl, mimeType, fileName };
-
   const viewer = $('mediaViewer');
   const content = $('mediaViewerContent');
   content.innerHTML = '';
@@ -2625,9 +2489,7 @@ function openMediaViewer(dataUrl, mimeType, fileName) {
   } else if (mimeType.startsWith('video/')) {
     const vid = document.createElement('video');
     vid.src = dataUrl;
-    vid.controls = true;
-    vid.autoplay = true;
-    vid.playsInline = true;
+    vid.controls = true; vid.autoplay = true; vid.playsInline = true;
     content.appendChild(vid);
   } else {
     const iframe = document.createElement('iframe');
@@ -2639,8 +2501,7 @@ function openMediaViewer(dataUrl, mimeType, fileName) {
   viewer.hidden = false;
 }
 
-$('closeMediaViewerBtn').onclick = () => {
-  $('mediaViewer').hidden = true;
+$('closeMediaViewerBtn').onclick = () => {$('mediaViewer').hidden = true;
   $('mediaViewerContent').innerHTML = '';
   mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
 };
@@ -2648,29 +2509,13 @@ $('closeMediaViewerBtn').onclick = () => {
 $('saveMediaBtn').onclick = () => {
   if (!mediaViewerState.dataUrl) return;
   const { dataUrl, mimeType, fileName } = mediaViewerState;
-
-  if (mimeType === 'text/vcard' || (fileName && fileName.endsWith('.vcf'))) {
-    const rawBase64 = dataUrl.replace(/^data:text\/vcard;base64,/, '');
-    if (openContactVcfNative(rawBase64, fileName || 'contact.vcf')) return;
-  }
-
   const base64Only = dataUrl.split(',')[1] || dataUrl;
-  const uri = saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
-  if (uri) {
-    toast(currentLang === 'hi' ? '✅ Downloads में सेव हो गई' : '✅ Saved to Downloads');
-  } else {
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = fileName || 'media';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    toast(currentLang === 'hi' ? '📥 डाउनलोड शुरू' : '📥 Download started');
-  }
+  saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
+  toast('✅ Downloads में सहेज दिया गया');
 };
 
 // ===================================================
-// ATTACH MENU & PICKERS
+// ATTACH MENU & INPUTS
 // ===================================================
 const attachBtn = $('attachBtn');
 const attachMenu = $('attachMenu');
@@ -2691,158 +2536,82 @@ attachMenu.querySelectorAll('.attach-menu-item').forEach(btn => {
     const action = btn.dataset.action;
     attachMenu.hidden = true;
 
-    if (action === 'camera') {
-      $('cameraCaptureInput').click();
-    } else if (action === 'image') {
-      $('photoFileInput').click();
-    } else if (action === 'doc') {
-      $('docFileInput').click();
-    } else if (action === 'location') {
-      sendLocationMessage();
-    } else if (action === 'contact') {
-      sendContactMessage();
-    }
+    if (action === 'camera') $('cameraCaptureInput').click();
+    else if (action === 'image') $('photoFileInput').click();
+    else if (action === 'doc') $('docFileInput').click();
+    else if (action === 'location') sendLocationMessage();
+    else if (action === 'contact') sendContactMessage();
   };
 });
 
-$('photoFileInput').onchange = (e) => {
-  const file = e.target.files[0];
-  if (file) sendMediaMessage(file);
-  e.target.value = '';
-};
-$('videoFileInput').onchange = (e) => { 
-  const file = e.target.files[0]; 
-  if (file) sendMediaMessage(file); 
-  e.target.value = ''; 
-};
-$('docFileInput').onchange = (e) => {
-  const file = e.target.files[0];
-  if (file) sendMediaMessage(file);
-  e.target.value = '';
-};
-$('anyFileInput').onchange = (e) => { 
-  const file = e.target.files[0]; 
-  if (file) sendMediaMessage(file); 
-  e.target.value = ''; 
-};
-$('cameraCaptureInput').onchange = (e) => {
-  const file = e.target.files[0];
-  if (file) sendMediaMessage(file);
-  e.target.value = '';
-};
+$('photoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('videoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };$('docFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('anyFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };$('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
 
 // ===================================================
 // LOCATION & CONTACT SENDERS
 // ===================================================
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
-
-  if (!navigator.geolocation) {
-    toast(currentLang === 'hi' ? 'लोकेशन सपोर्ट नहीं है' : 'Location not supported');
-    return;
-  }
-
-  toast(currentLang === 'hi' ? '📍 लोकेशन प्राप्त कर रहे हैं...' : '📍 Fetching location...');
+  if (!navigator.geolocation) { toast('लोकेशन सपोर्ट नहीं है'); return; }
+  toast('📍 लोकेशन प्राप्त कर रहे हैं...');
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
     const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
-
     const roomId = getChatRoomId(myUserId, currentChatTargetId);
     const roomPath = `chats/${roomId}/messages`;
     const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
     const newMsgRef = push(ref(db, roomPath));
-    const newMsgId = newMsgRef.key;
-
     const label = '📍 लोकेशन';
 
-    latestChatSnippets[currentChatTargetId] = {
-      text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
-    };
+    latestChatSnippets[currentChatTargetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
     localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
     renderContacts();
 
     await set(newMsgRef, {
-      senderId: myUserId,
-      senderName: myUserName,
-      type: 'doc',
-      text: label,
-      fileName: 'लोकेशन',
-      mimeType: 'text/plain',
-      fileSize: mapsUrl.length,
-      data: mapsUrl,
-      time: Date.now(),
-      delivered: targetOnline,
-      read: false
+      senderId: myUserId, senderName: myUserName, type: 'doc', text: label,
+      fileName: 'लोकेशन', mimeType: 'text/plain', fileSize: mapsUrl.length,
+      data: mapsUrl, time: Date.now(), delivered: targetOnline, read: false
     });
 
-    sendChatMessagePush(currentChatTargetId, label, roomId, newMsgId, {
-      mediaType: 'doc', fileName: 'लोकेशन'
-    });
-
-    toast(currentLang === 'hi' ? '✅ लोकेशन भेज दी' : '✅ Location sent');
-  }, () => {
-    toast(currentLang === 'hi' ? 'लोकेशन प्राप्त नहीं हुई' : 'Could not get location');
-  });
+    sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: 'लोकेशन' });
+    toast('✅ लोकेशन भेज दी गई');
+  }, () => { toast('लोकेशन प्राप्त नहीं हुई'); });
 }
 
 async function sendContactMessage() {
   if (!currentChatTargetId) return;
-
   const list = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
-  if (!list.length) {
-    toast(currentLang === 'hi' ? 'कोई संपर्क नहीं' : 'No contacts');
-    return;
-  }
+  if (!list.length) { toast('कोई संपर्क नहीं'); return; }
 
   const names = list.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt((currentLang === 'hi' ? 'कौन सा संपर्क भेजें? (नंबर लिखें)\n\n' : 'Which contact to send? (enter number)\n\n') + names);
+  const input = prompt('कौन सा संपर्क भेजें? (नंबर लिखें)\n\n' + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= list.length) {
-    toast(currentLang === 'hi' ? 'गलत नंबर' : 'Invalid');
-    return;
-  }
+  if (isNaN(idx) || idx < 0 || idx >= list.length) { toast('गलत नंबर'); return; }
 
-  const contactId = list[idx];
-  const contact = allOnlineUsers[contactId];
-  const vcfData = `BEGIN:VCARD\nVERSION:3.0\nFN:${contact.name}\nUID:${contactId}\nEND:VCARD`;
-
+  const contact = allOnlineUsers[list[idx]];
+  const vcfData = `BEGIN:VCARD\nVERSION:3.0\nFN:${contact.name}\nUID:${list[idx]}\nEND:VCARD`;
   const roomId = getChatRoomId(myUserId, currentChatTargetId);
   const roomPath = `chats/${roomId}/messages`;
   const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
   const newMsgRef = push(ref(db, roomPath));
-  const newMsgId = newMsgRef.key;
-
   const label = `👤 ${contact.name}`;
 
-  latestChatSnippets[currentChatTargetId] = {
-    text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
-  };
+  latestChatSnippets[currentChatTargetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
 
   await set(newMsgRef, {
-    senderId: myUserId,
-    senderName: myUserName,
-    type: 'doc',
-    text: label,
-    fileName: contact.name + '.vcf',
-    mimeType: 'text/vcard',
-    fileSize: vcfData.length,
-    data: 'data:text/vcard;base64,' + btoa(vcfData),
-    time: Date.now(),
-    delivered: targetOnline,
-    read: false
+    senderId: myUserId, senderName: myUserName, type: 'doc', text: label,
+    fileName: contact.name + '.vcf', mimeType: 'text/vcard', fileSize: vcfData.length,
+    data: 'data:text/vcard;base64,' + btoa(vcfData), time: Date.now(), delivered: targetOnline, read: false
   });
 
-  sendChatMessagePush(currentChatTargetId, label, roomId, newMsgId, {
-    mediaType: 'doc', fileName: contact.name + '.vcf', mimeType: 'text/vcard'
-  });
-
-  toast(currentLang === 'hi' ? '✅ संपर्क भेज दिया' : '✅ Contact sent');
+  sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: contact.name + '.vcf', mimeType: 'text/vcard' });
+  toast('✅ संपर्क भेज दिया गया');
 }
 
 // ===================================================
@@ -2850,8 +2619,8 @@ async function sendContactMessage() {
 // ===================================================
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
-const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn = $('dockPauseResumeBtn');
-const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot = $('dockBlinkDot');
+const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn =$('dockPauseResumeBtn');
+const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot =$('dockBlinkDot');
 const waveCanvas = $('waveCanvas'), waveCtx = waveCanvas.getContext('2d');
 
 async function openVoiceDock() {
@@ -2861,8 +2630,7 @@ async function openVoiceDock() {
     dockMediaRecorder = new MediaRecorder(dockStream);
     dockMediaRecorder.ondataavailable = e => { if (e.data.size > 0) dockAudioChunks.push(e.data); };
     dockMediaRecorder.start(100);
-    isDockPaused = false;
-    dockSeconds = 0;
+    isDockPaused = false; dockSeconds = 0;
     dockTimerText.textContent = '0:00';
     dockPauseIco.textContent = '⏸';
     dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
@@ -2919,16 +2687,12 @@ function stopWaveformVisualizer() {
 dockPauseResumeBtn.onclick = () => {
   if (!dockMediaRecorder) return;
   if (!isDockPaused) {
-    dockMediaRecorder.pause();
-    isDockPaused = true;
-    dockPauseIco.textContent = '🎙';
-    dockPauseText.textContent = currentLang === 'hi' ? 'जारी रखें' : 'Resume';
+    dockMediaRecorder.pause(); isDockPaused = true;
+    dockPauseIco.textContent = '🎙'; dockPauseText.textContent = currentLang === 'hi' ? 'जारी रखें' : 'Resume';
     dockBlinkDot.style.animationPlayState = 'paused';
   } else {
-    dockMediaRecorder.resume();
-    isDockPaused = false;
-    dockPauseIco.textContent = '⏸';
-    dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
+    dockMediaRecorder.resume(); isDockPaused = false;
+    dockPauseIco.textContent = '⏸'; dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
     dockBlinkDot.style.animationPlayState = 'running';
   }
 };
@@ -2947,8 +2711,7 @@ $('dockTrashBtn').onclick = discardRecording;
 function sendVoiceDock() {
   if (!dockMediaRecorder) return;
   const durSec = Math.max(dockSeconds, 1);
-  clearInterval(dockTimer);
-  dockTimer = null;
+  clearInterval(dockTimer); dockTimer = null;
   stopWaveformVisualizer();
 
   dockMediaRecorder.onstop = async () => {
@@ -2964,33 +2727,20 @@ function sendVoiceDock() {
         const durStr = `${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}`;
         const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
         const newMsgRef = push(ref(db, roomPath));
-        const newMsgId = newMsgRef.key;
-
         const voiceLabel = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
 
-        latestChatSnippets[currentChatTargetId] = {
-          text: voiceLabel, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
-        };
+        latestChatSnippets[currentChatTargetId] = { text: voiceLabel, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
         localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
         renderContacts();
 
         await set(newMsgRef, {
-          senderId: myUserId,
-          senderName: myUserName,
-          type: 'audio',
-          data: base64Audio,
-          duration: durStr,
-          durationSec: durSec,
-          time: Date.now(),
-          delivered: targetOnline,
-          read: false
+          senderId: myUserId, senderName: myUserName, type: 'audio',
+          data: base64Audio, duration: durStr, durationSec: durSec,
+          time: Date.now(), delivered: targetOnline, read: false
         });
 
-        sendChatMessagePush(currentChatTargetId, voiceLabel, roomId, newMsgId, {
-          mediaType: 'audio',
-          mediaSize: audioBlob.size,
-          fileName: 'voice_note.webm',
-          mimeType: 'audio/webm'
+        sendChatMessagePush(currentChatTargetId, voiceLabel, roomId, newMsgRef.key, {
+          mediaType: 'audio', mediaSize: audioBlob.size, fileName: 'voice_note.webm', mimeType: 'audio/webm'
         });
       };
       reader.readAsDataURL(audioBlob);
@@ -3008,9 +2758,13 @@ $('dockSendBtn').onclick = sendVoiceDock;
    ========================================================================= */
 /* =========================================================================
    >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
-   P2P कॉल लॉजिक, पीयर कनेक्शन, कंट्रोल्स, BUG 1 फ़िक्स व ऐप इनिशियलाइज़ेशन
+   P2P कॉल लॉजिक, पीयर कनेक्शन, कंट्रोल्स, फन मोड, BUG 1 फ़िक्स व ऐप इनिशियलाइज़ेशन
    ========================================================================= */
 
+// ===================================================
+// CALL LOGIC & INCOMING LISTENERS
+// (currentCallType, currentCallTargetId Part 1 में घोषित हैं, यहाँ पुनः let नहीं लगाया गया है)
+// ===================================================
 currentCallType = 'outgoing';
 
 function listenForIncoming() {
@@ -3457,9 +3211,7 @@ async function fetchQuizQuestions() {
       allQuizQuestions = await res.json();
       return allQuizQuestions;
     }
-  } catch(e) {
-    console.warn("Quiz questions load error:", e);
-  }
+  } catch(e) {}
   return null;
 }
 
@@ -3929,7 +3681,7 @@ async function resetTictactoeGame() {
   const cur = snap.val();
   if (!cur) return;
   await update(tttRef, { board: Array(9).fill(""), currentTurn: "X", winner: null, winPattern: [], updatedAt: Date.now() });
-  toast(currentLang === 'hi' ? 'नया खेल शुरू हुआ!' : 'New game started!');
+  toast('नया खेल शुरू हुआ!');
 }
 
 async function closeTictactoeGame() {
@@ -4159,7 +3911,7 @@ $('btnAddPerson').onclick = (e) => {
   }
   $('addParticipantModal').hidden = false;
 };
-$('closeAddModalBtn').onclick = () => { $('addParticipantModal').hidden = true; };
+$('closeAddModalBtn').onclick = () => {$('addParticipantModal').hidden = true; };
 
 // ===================================================
 // PIP WINDOW SWAP
@@ -4216,7 +3968,7 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen) {
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden && !isTttOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -4365,9 +4117,8 @@ async function hangup(silent = false) {
     pipRestoreBtn.hidden = true;
     pipWrap.style.opacity = '1';
     $('camBtn').classList.remove('off');
-    $('micBtn').classList.remove('off');
-    $('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea')) $('voiceCallArea').hidden = true;
+    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
 
@@ -4421,17 +4172,16 @@ function setupHardwareBackButton() {
       e.preventDefault();
       return;
     }
-    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) {
       if (!m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     }
     if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('kidsWhiteboardModal').hidden) {
-      $('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       history.pushState(null, '', window.location.href); e.preventDefault(); return;
     }
@@ -4450,15 +4200,14 @@ function setupHardwareBackButton() {
   if (!isNativeApp() || !appPlugin) return;
   appPlugin.addListener('backButton', () => {
     if (Date.now() < ignoreBackUntil) return;
-    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
     if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
-    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {
-      $('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       return;
     }
@@ -4480,35 +4229,15 @@ function setupHardwareBackButton() {
 }
 
 // ===================================================
-// VIEWPORT & KEYBOARD SYNC
+// VIEWPORT & KEYBOARD SYNC (# FIX: DOUBLE RESIZE CONFLICT REMOVED)
 // ===================================================
-if (window.visualViewport) {
-  const syncViewport = () => {
-    if (!chatScreen.hidden) {
-      window.scrollTo(0, 0);
-      chatScreen.style.height = `${window.visualViewport.height}px`;
-      const body = $('chatBody');
-      if (body) body.scrollTop = body.scrollHeight;
-    }
-  };
-  window.visualViewport.addEventListener('resize', syncViewport);
-  window.visualViewport.addEventListener('scroll', () => {
-    if (!chatScreen.hidden) window.scrollTo(0, 0);
-  });
-}
-
+// जावास्क्रिप्ट का visualViewport लिसनर हटा दिया गया है
+// ब्राउज़र की डिफ़ॉल्ट interactive-widget=resizes-content अब इनपुट बार को कीबोर्ड के ऊपर सुचारू रूप से रखेगी
 chatInput.addEventListener('focus', () => {
   setTimeout(() => {
-    window.scrollTo(0, 0);
     const body = $('chatBody');
     if (body) body.scrollTop = body.scrollHeight;
-  }, 150);
-});
-chatInput.addEventListener('blur', () => {
-  if (!chatScreen.hidden) {
-    chatScreen.style.height = '100%';
-    window.scrollTo(0, 0);
-  }
+  }, 200);
 });
 
 // ===================================================
@@ -4556,8 +4285,7 @@ async function checkWebOtaUpdate(manual = false) {
   }
 }
 
-$('checkUpdateBtn').onclick = () => {
-  $('profileModal').hidden = true;
+$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
 
