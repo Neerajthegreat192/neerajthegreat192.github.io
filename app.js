@@ -9,14 +9,21 @@ import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push
 const CURRENT_APP_VERSION = "1.23.6";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
-// पुराना OTA कैश साफ़ करें ताकि नया कोड लोड हो सके
+// ✅ FIX: हर launch पर cache clear नहीं करो।
+// सिर्फ तब clear करो जब cache files अधूरी/corrupt हों।
 try {
+  const cachedJs = localStorage.getItem('ota_cached_js');
+  const cachedCss = localStorage.getItem('ota_cached_css');
   const cachedVer = localStorage.getItem('ota_active_ver');
-  if (cachedVer !== CURRENT_APP_VERSION) {
+
+  // अगर version टैग है पर JS/CSS files missing/empty हैं → तो clear करो
+  if (cachedVer && (!cachedJs || !cachedCss || cachedJs.trim() === '' || cachedCss.trim() === '')) {
+    console.warn('[OTA] Cache incomplete — clearing for re-download');
     localStorage.removeItem('ota_cached_js');
     localStorage.removeItem('ota_cached_css');
-    localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION);
+    localStorage.removeItem('ota_active_ver');
   }
+  // वरना कुछ मत करो — cached JS/CSS को रहने दो
 } catch(e) {}
 
 // ===================================================
