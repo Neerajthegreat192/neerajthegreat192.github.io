@@ -916,3 +916,44 @@ html, body {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* ===================================================
+   ✅ KEYBOARD HEADER FIX (Lock Header to Top Always)
+   =================================================== */
+
+/* 1. स्क्रीन को 100% पर लॉक करें ताकि पूरा पेज ऊपर न खिसके */
+#chatScreen.screen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  height: 100dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* 2. हेडर को टॉप पर फिक्स और इमूवेबल बनाएं */
+.chat-header {
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  flex-shrink: 0 !important; /* कीबोर्ड खुलने पर हेडर कभी नहीं दबेगा */
+  z-index: 100 !important; /* हमेशा चैट बॉडी के ऊपर रहेगा */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* 3. चैट बॉडी को सिकुड़ने की पूरी छूट दें */
+.chat-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important; /* सबसे महत्वपूर्ण: यह बॉडी को कीबोर्ड स्पेस में ही सिकोड़ता है */
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 4. फुटर अपनी जगह पर नीचे रहे */
+.chat-footer {
+  flex-shrink: 0 !important;
+}
