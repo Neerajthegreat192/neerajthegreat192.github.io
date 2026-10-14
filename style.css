@@ -1407,23 +1407,39 @@ html, body {
   .contact-name { font-size: 14px; }
   .pc-name { font-size: 13px; }
 }
-/* ===================================================
-   ✅ Fix: Chat header stays fixed when keyboard opens
-   =================================================== */
-.chat-header {
-  position: sticky !important;
+/* ✅ v1.23.2 — Chat keyboard-safe layout (grid based) */
+#chatScreen {
+  position: absolute !important;
   top: 0 !important;
-  z-index: 100 !important;
-  flex-shrink: 0 !important;
-}
-.screen {
-  position: fixed !important;
-  inset: 0 !important;
-}
-html, body {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: grid !important;
+  grid-template-rows: auto 1fr auto !important;
   overflow: hidden !important;
 }
-.chat-body {
-  overscroll-behavior: contain;
+
+#chatScreen .chat-header {
+  grid-row: 1 !important;
+  position: relative !important;
+  top: auto !important;
+  flex-shrink: 0 !important;
+}
+
+#chatScreen .chat-body {
+  grid-row: 2 !important;
+  position: relative !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  min-height: 0 !important;
+  overscroll-behavior: contain !important;
   -webkit-overflow-scrolling: touch;
+}
+
+#chatScreen .chat-footer {
+  grid-row: 3 !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
 }

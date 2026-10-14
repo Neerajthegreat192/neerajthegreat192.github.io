@@ -3921,28 +3921,12 @@ function setupHardwareBackButton() {
 }
 
 // ✅ Keyboard खुलने पर header को top पर fixed रखें (scroll reset)
-function resetViewportScroll() {
-  window.scrollTo(0, 0);
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
-}
-
+// ✅ v1.23.2 — Simple keyboard handling
 chatInput.addEventListener('focus', () => {
-  requestAnimationFrame(resetViewportScroll);
   setTimeout(() => {
-    resetViewportScroll();
     const body = $('chatBody');
     if (body) body.scrollTop = body.scrollHeight;
-  }, 250);
-  setTimeout(() => {
-    resetViewportScroll();
-    const body = $('chatBody');
-    if (body) body.scrollTop = body.scrollHeight;
-  }, 450);
-});
-
-chatInput.addEventListener('blur', () => {
-  resetViewportScroll();
+  }, 300);
 });
 
 // ===================================================
