@@ -4442,29 +4442,20 @@ function setupHardwareBackButton() {
 }
 
 // ===================================================
-// 🟢 FIX: VIEWPORT SYNC & FIXED KEYBOARD LOCK
+// ✅ SIMPLE SCROLL FIX (NATIVE ADJUST-RESIZE COMPATIBLE)
 // ===================================================
-if (window.visualViewport) {
-  const syncViewport = () => {
-    if (!chatScreen.hidden) {
-      window.scrollTo(0, 0);
-      document.body.scrollTop = 0;
-      
-      const vh = window.visualViewport.height;
-      const vt = window.visualViewport.offsetTop;
-      
-      chatScreen.style.position = 'fixed';
-      chatScreen.style.top = `${vt}px`;
-      chatScreen.style.height = `${vh}px`;
-      chatScreen.style.width = '100%';
-      chatScreen.style.overflow = 'hidden';
-
-      const body = $('chatBody');
-      if (body) {
-        body.scrollTop = body.scrollHeight;
-      }
+chatInput.addEventListener('focus', () => {
+  // कीबोर्ड खुलने का समय देकर सिर्फ चैट को नीचे स्क्रॉल करें
+  setTimeout(() => {
+    const body = $('chatBody');
+    if (body) {
+      body.scrollTop = body.scrollHeight;
     }
-  };
+  }, 250);
+});
+
+// नोट: visualViewport और blur इवेंट्स हटा दिए गए हैं क्योंकि नेटिव ऐप खुद इसे हैंडल कर लेगा।
+
 
   window.visualViewport.addEventListener('resize', syncViewport);
   window.visualViewport.addEventListener('scroll', () => {
