@@ -1,8 +1,7 @@
 /* ===================================================
-   🎨 style.css — v1.23.8 FIXED
-   ✅ Header bug fix (APK-only) — trailing !important override
-   ✅ Keyboard and Input Bar Viewport Lock Fix
-   ✅ All Phase 1+2 UI preserved
+   🎨 style.css — v1.23.9 (FINAL KEYBOARD & LAYOUT FIX)
+   ✅ Native adjustResize Compatibility added
+   ✅ Body Scroll & Float Bugs Fixed
    =================================================== */
 
 :root {
@@ -31,12 +30,24 @@
   user-select: none;
 }
 
-[hidden] { display: none !important; }
+/* 🟢 ABSOLUTE HIDDEN OVERRIDE (Screen Stuck Fix) */
+#lobby[hidden], 
+#chatScreen[hidden], 
+#call[hidden], 
+[hidden] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+}
 
 html, body {
   width: 100%;
-  height: 100%;
-  height: 100dvh;
+  height: 100%; /* 100dvh हटा दिया गया है ताकि Android adjustResize सही से काम करे */
+  position: fixed; /* पूरी स्क्रीन को लॉक करेगा, कुछ भी ऊपर स्लाइड नहीं होगा */
+  top: 0;
+  left: 0;
   background-color: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -138,7 +149,7 @@ html, body {
 }
 
 /* ===================================================
-   ✅ HEADER — restored to old working style
+   HEADER
    =================================================== */
 .header {
   padding: calc(12px + env(safe-area-inset-top, 24px)) 14px 12px;
@@ -194,7 +205,7 @@ html, body {
 }
 
 /* ===================================================
-   🆕 ONLINE STRIP
+   ONLINE STRIP
    =================================================== */
 .online-strip {
   display: flex;
@@ -241,7 +252,7 @@ html, body {
 }
 
 /* ===================================================
-   SEARCH
+   SEARCH & TABS
    =================================================== */
 .search-wrap {
   display: flex; align-items: center;
@@ -258,10 +269,6 @@ html, body {
   background: none; border: none;
   color: var(--text); font-size: 14px; outline: none;
 }
-
-/* ===================================================
-   TABS
-   =================================================== */
 .lobby-tabs {
   display: flex; padding: 4px 14px 6px;
   gap: 10px; flex-shrink: 0;
@@ -383,39 +390,22 @@ html, body {
 .call-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* ===================================================
-   ✅ CHAT SCREEN & KEYBOARD VIEWPORT FIX (UPDATED)
+   ✅ CHAT SCREEN (STRICT VIEWPORT KEYBOARD FIX)
    =================================================== */
-
-/* ===================================================
-   ✅ CHAT SCREEN & KEYBOARD VIEWPORT FIX (FINAL)
-   =================================================== */
-
 #chatScreen:not([hidden]) {
-  position: fixed;
+  position: absolute !important;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
   touch-action: none;
   background-color: var(--bg, #090d10);
   z-index: 50;
-}
-
-/* 🟢 ABSOLUTE HIDDEN OVERRIDE */
-#lobby[hidden], 
-#chatScreen[hidden], 
-#call[hidden], 
-[hidden] {
-  display: none !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  z-index: -1 !important;
 }
 
 .chat-header {
@@ -442,14 +432,13 @@ html, body {
 .wp-call-btn svg { width: 18px; height: 18px; fill: var(--text); }
 
 .chat-body {
-  flex: 1 1 auto !important;
+  flex: 1 1 0% !important; /* Perfect flexbox shrink during adjustResize */
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y !important;
-  padding: 12px 14px;
-  min-height: 0 !important;
-  padding-bottom: 20px;
-  display: flex; flex-direction: column;
+  padding: 12px 14px 20px;
+  display: flex; 
+  flex-direction: column;
   gap: 6px;
   scroll-behavior: smooth;
 }
@@ -478,7 +467,6 @@ html, body {
   color: #fff;
   border-bottom-left-radius: 3px;
 }
-/* WhatsApp-style tail */
 .chat-bubble.me::after {
   content: ''; position: absolute;
   right: -7px; bottom: 0;
