@@ -6,17 +6,33 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const CURRENT_APP_VERSION = "1.23.0";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
+// ✅ Fixed version (native APK का baseline — silent update इसे बदल सकता है)
+// यह सिर्फ पहली बार initial value set करने के लिए है
+const CURRENT_APP_VERSION = "1.23.0";
+
 try {
+  // अगर OTA cache कभी corrupt हो जाए तो recover करने के लिए safety net
+  // ⚠️ Version mismatch पर cache clear मत करो — silent update handle करेगा
   const cachedVer = localStorage.getItem('ota_active_ver');
-  if (cachedVer !== CURRENT_APP_VERSION) {
-    localStorage.removeItem('ota_cached_js');
-    localStorage.removeItem('ota_cached_css');
+  const cachedJs = localStorage.getItem('ota_cached_js');
+  const cachedCss = localStorage.getItem('ota_cached_css');
+
+  // Case 1: ota_active_ver मौजूद नहीं है → पहली बार install, सेट कर दो
+  if (!cachedVer) {
     localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION);
   }
-} catch(e) {}
+
+  // Case 2: Version है पर cache files अधूरी हैं → वो version clear करो
+  if (cachedVer && (!cachedJs || !cachedCss || cachedJs.trim() === '' || cachedCss.trim() === '')) {
+    localStorage.removeItem('ota_active_ver');
+    localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION);
+  }
+} catch(e) {
+  // कुछ भी fail हो तो safe default
+  try { localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION); } catch(e2) {}
+}
 
 // ===================================================
 // DYNAMIC CAPACITOR GETTERS
@@ -1868,7 +1884,7 @@ function loadChatMessages() {
     const visibleCount = sortedKeys.filter(k => !isDeletedForMe(k)).length;
     const existingCount = body.querySelectorAll('[data-msg-id]').length;
 
-    if (existingCount !== visibleCount) {
+        if (existingCount !== visibleCount) {
       body.innerHTML = '';
       sortedKeys.forEach(msgId => {
         const m = msgs[msgId];
@@ -1880,11 +1896,34 @@ function loadChatMessages() {
         const m = msgs[msgId];
         const el = document.getElementById(`msg_${msgId}`);
         if (!el) return;
+
+        // ✅ Real-time DELETE update (no reload needed)
+        if (m.deleted || m.type === 'deleted') {
+          if (!el.classList.contains('is-deleted')) {
+            el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
+            el.innerHTML = `<div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div><div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>`;
+          }
+          return;
+        }
+
+        // ✅ Real-time REACTIONS update
         const reactEl = el.querySelector('.bubble-reactions');
         const newReactHtml = renderReactionsHtml(m, msgId);
         if (reactEl && !newReactHtml) reactEl.remove();
         else if (newReactHtml && reactEl) reactEl.outerHTML = newReactHtml;
         else if (newReactHtml && !reactEl) el.insertAdjacentHTML('beforeend', newReactHtml);
+
+        // ✅ Real-time TICK (✓ → ✓✓ grey → ✓✓ blue) update
+        if (m.senderId === myUserId) {
+          const metaEl = el.querySelector('.chat-meta');
+          if (metaEl) {
+            let tickHtml = '';
+            if (m.read) tickHtml = '<span class="tick-mark tick-read">✓✓</span>';
+            else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered">✓✓</span>';
+            else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
+            metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
+          }
+        }
       });
     }
 
@@ -3881,8 +3920,29 @@ function setupHardwareBackButton() {
   });
 }
 
+// ✅ Keyboard खुलने पर header को top पर fixed रखें (scroll reset)
+function resetViewportScroll() {
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+}
+
 chatInput.addEventListener('focus', () => {
-  setTimeout(() => { const body = $('chatBody'); if (body) body.scrollTop = body.scrollHeight; }, 200);
+  requestAnimationFrame(resetViewportScroll);
+  setTimeout(() => {
+    resetViewportScroll();
+    const body = $('chatBody');
+    if (body) body.scrollTop = body.scrollHeight;
+  }, 250);
+  setTimeout(() => {
+    resetViewportScroll();
+    const body = $('chatBody');
+    if (body) body.scrollTop = body.scrollHeight;
+  }, 450);
+});
+
+chatInput.addEventListener('blur', () => {
+  resetViewportScroll();
 });
 
 // ===================================================

@@ -1407,3 +1407,23 @@ html, body {
   .contact-name { font-size: 14px; }
   .pc-name { font-size: 13px; }
 }
+/* ===================================================
+   ✅ Fix: Chat header stays fixed when keyboard opens
+   =================================================== */
+.chat-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 100 !important;
+  flex-shrink: 0 !important;
+}
+.screen {
+  position: fixed !important;
+  inset: 0 !important;
+}
+html, body {
+  overflow: hidden !important;
+}
+.chat-body {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
