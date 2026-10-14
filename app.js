@@ -146,7 +146,7 @@ function applyLanguage(lang) {
 if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.value);
 
 // ===================================================
-// USER & CALL STATES (सभी ग्लोबल वेरिएबल सिर्फ एक बार डिक्लेयर हैं)
+// USER & CALL STATES
 // ===================================================
 let myUserId = localStorage.getItem('vc_user_id') || '';
 let myUserName = localStorage.getItem('vc_user_name') || '';
@@ -496,12 +496,10 @@ function startOutgoingCallTone() {
 }
 function stopOutgoingCallTone() { if (outgoingRingTimer) { clearInterval(outgoingRingTimer); outgoingRingTimer = null; } }
 
-// # FIX BUG 2: इन-ऐप वेब ऑडियो रिंगटोन को खाली किया — हमेशा सिर्फ Android Native Ringtone बजेगी
 function startIncomingRingtone() {
   // In-app web ringtone intentionally disabled to prevent double ringing conflict
 }
 
-// # FIX BUG 2: कॉल कटने या उठने पर केवल नेटिव रिंगटोन बंद होगी
 function stopIncomingRingtone() {
   stopNativeRinging();
 }
@@ -835,18 +833,20 @@ $('saveNameBtn').onclick = async () => {
   }, 500);
 };
 
-$('grantPermsBtn').onclick = async () => {$('permNoticeModal').hidden = true;
+$('grantPermsBtn').onclick = async () => {
+  $('permNoticeModal').hidden = true;
   await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
   lobbyScreen.hidden = false;
   initPresence();
 };
 
-$('profileBtn').onclick = () => {$('nameEditArea').hidden = true;
+$('profileBtn').onclick = () => {
+  $('nameEditArea').hidden = true;
   $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   $('profileModal').hidden = false;
 };
-$('closeProfileBtn').onclick = () => {$('profileModal').hidden = true; };
+$('closeProfileBtn').onclick = () => { $('profileModal').hidden = true; };
 
 $('toggleEditNameBtn').onclick = () => {
   const isH = $('nameEditArea').hidden;
@@ -855,7 +855,8 @@ $('toggleEditNameBtn').onclick = () => {
     $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   } else {
     $('editNameInput').value = myUserName;
-    $('editNameInput').focus();$('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
+    $('editNameInput').focus();
+    $('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
   }
 };
 
@@ -870,7 +871,8 @@ $('saveEditedNameBtn').onclick = async () => {
   toast(currentLang === 'hi' ? '✅ नाम सुरक्षित कर लिया गया' : '✅ Name saved');
 };
 
-$('recheckPermsBtn').onclick = async () => {$('profileModal').hidden = true;
+$('recheckPermsBtn').onclick = async () => {
+  $('profileModal').hidden = true;
   localStorage.removeItem('perms_done_v2');
   await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
@@ -909,8 +911,10 @@ $('resetProfileBtn').onclick = async () => {
 // ===================================================
 // ADMIN PANEL
 // ===================================================
-adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };$('verifyPinBtn').onclick = () => {
-  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) {$('adminPinModal').hidden = true; openAdminPanel(); }
+adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };
+$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };
+$('verifyPinBtn').onclick = () => {
+  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) { $('adminPinModal').hidden = true; openAdminPanel(); }
   else toast('गलत पिन!');
 };
 
@@ -939,17 +943,21 @@ function openAdminPanel() {
   });
   $('adminPanelModal').hidden = false;
 }
-$('closeAdminPanelBtn').onclick = () => {$('adminPanelModal').hidden = true; };
+$('closeAdminPanelBtn').onclick = () => { $('adminPanelModal').hidden = true; };
 
 // ===================================================
 // TABS & CALL LOGS
 // ===================================================
-$('tabChatsBtn').onclick = () => {$('tabChatsBtn').className = 'tab-btn active-chat';
-  $('tabCallsBtn').className = 'tab-btn';$('tabChatsContent').hidden = false;
+$('tabChatsBtn').onclick = () => {
+  $('tabChatsBtn').className = 'tab-btn active-chat';
+  $('tabCallsBtn').className = 'tab-btn';
+  $('tabChatsContent').hidden = false;
   $('tabCallsContent').hidden = true;
 };
-$('tabCallsBtn').onclick = () => {$('tabCallsBtn').className = 'tab-btn active-call';
-  $('tabChatsBtn').className = 'tab-btn';$('tabCallsContent').hidden = false;
+$('tabCallsBtn').onclick = () => {
+  $('tabCallsBtn').className = 'tab-btn active-call';
+  $('tabChatsBtn').className = 'tab-btn';
+  $('tabCallsContent').hidden = false;
   $('tabChatsContent').hidden = true;
   renderCallLogs();
 };
@@ -1066,16 +1074,29 @@ function listenForLatestChatPreviews() {
       const prevTime = latestChatSnippets[targetId]?.time || 0;
       const isNew = !isInitialLoad && lastMsg.time > prevTime && lastMsg.senderId !== myUserId && currentChatTargetId !== targetId;
 
-      let msgText = lastMsg.text;
-      if (lastMsg.type === 'image') msgText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
-      else if (lastMsg.type === 'video') msgText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
-      else if (lastMsg.type === 'audio') msgText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
-      else if (lastMsg.type === 'doc') msgText = '📄 ' + (currentLang==='hi'?'दस्तावेज़':'Document');
-      else if (lastMsg.type === 'system-call') msgText = lastMsg.text;
+      let msgText = lastMsg.text || '';
+      if (lastMsg.deleted || lastMsg.type === 'deleted') {
+        msgText = '🚫 यह संदेश हटा दिया गया है';
+      } else if (lastMsg.type === 'image') {
+        msgText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
+      } else if (lastMsg.type === 'video') {
+        msgText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
+      } else if (lastMsg.type === 'audio') {
+        msgText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
+      } else if (lastMsg.type === 'doc') {
+        msgText = '📄 ' + (lastMsg.fileName || (currentLang==='hi'?'दस्तावेज़':'Document'));
+      }
 
-      latestChatSnippets[targetId] = { text: msgText, time: lastMsg.time, senderId: lastMsg.senderId, read: !!lastMsg.read, delivered: !!lastMsg.delivered };
+      latestChatSnippets[targetId] = { 
+        text: msgText, 
+        time: lastMsg.time || Date.now(), 
+        senderId: lastMsg.senderId, 
+        read: !!lastMsg.read, 
+        delivered: !!lastMsg.delivered 
+      };
       hasUpdates = true;
-      if (isNew) triggerSystemMessageNotification(lastMsg.senderName || 'New message', latestChatSnippets[targetId].text, targetId);
+
+      if (isNew) triggerSystemMessageNotification(lastMsg.senderName || 'New message', msgText, targetId);
     });
 
     isInitialLoad = false;
@@ -1161,13 +1182,13 @@ setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).lengt
 /* =========================================================================
    <<<<<<<<<<<<<<<<<<<< [PART 1 OF 3 समाप्त: app.js] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
-   /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 : app.js] >>>>>>>>>>>>>>>>>>>>
-   - , P2P    ,    
+/* =========================================================================
+   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
+   लॉन्ग-प्रेस मेन्यू, P2P फ़ाइल शेयरिंग डेटा चैनल, चैट और मीडिया हैंडलर्स
    ========================================================================= */
 
 // ===================================================
-//  CHAT MESSAGE LONG-PRESS MENU (# FIX BUG 3, 4, 5)
+// 🆕 CHAT MESSAGE LONG-PRESS MENU (# FIX BUG 3, 4, 5)
 // ===================================================
 let longPressTimer = null;
 let longPressStartX = 0;
@@ -1247,8 +1268,8 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="reply">
-        <span class="menu-item-ic"></span>
-        <span>  (Reply)</span>
+        <span class="menu-item-ic">↩️</span>
+        <span>जवाब दें (Reply)</span>
       </button>
     `;
   }
@@ -1256,8 +1277,8 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted && (!m.type || m.type === 'text')) {
     itemsHtml += `
       <button class="menu-item" data-action="copy">
-        <span class="menu-item-ic"></span>
-        <span>  (Copy)</span>
+        <span class="menu-item-ic">📋</span>
+        <span>कॉपी करें (Copy)</span>
       </button>
     `;
   }
@@ -1265,17 +1286,17 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="forward">
-        <span class="menu-item-ic"></span>
-        <span>  (Forward)</span>
+        <span class="menu-item-ic">➡️</span>
+        <span>फॉरवर्ड करें (Forward)</span>
       </button>
     `;
   }
 
   if (!isSystemCall && !isDeleted) {
-    const starLabel = m.starred ? '  (Unstar)' : '  (Star)';
+    const starLabel = m.starred ? 'स्टार हटाएँ (Unstar)' : 'स्टार करें (Star)';
     itemsHtml += `
       <button class="menu-item" data-action="star">
-        <span class="menu-item-ic"></span>
+        <span class="menu-item-ic">⭐</span>
         <span>${starLabel}</span>
       </button>
     `;
@@ -1284,15 +1305,15 @@ function openMessageMenu(el, msgId, m) {
   if (!isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="delete-me">
-        <span class="menu-item-ic"></span>
-        <span>   (Delete for me)</span>
+        <span class="menu-item-ic">🗑️</span>
+        <span>मेरे लिए हटाएँ (Delete for me)</span>
       </button>
     `;
     if (isMine) {
       itemsHtml += `
         <button class="menu-item danger" data-action="delete-all">
-          <span class="menu-item-ic"></span>
-          <span>   (Delete for everyone)</span>
+          <span class="menu-item-ic">🗑️</span>
+          <span>सबके लिए हटाएँ (Delete for everyone)</span>
         </button>
       `;
     }
@@ -1305,7 +1326,7 @@ function openMessageMenu(el, msgId, m) {
 
   document.body.appendChild(menu);
 
-  // # FIX BUG 3:      stopPropagation     
+  // # FIX BUG 3: टच और क्लिक इवेंट्स पर stopPropagation ताकि मेन्यू फ्लिकर न करे
   const menuBox = menu.querySelector('.menu-box');
   if (menuBox) {
     ['touchstart', 'touchend', 'click'].forEach(evt => {
@@ -1322,7 +1343,7 @@ function openMessageMenu(el, msgId, m) {
     };
   });
 
-  // # FIX BUG 3:          
+  // # FIX BUG 3: बैकड्रॉप पर टैप या क्लिक से ही मेन्यू बंद होगा
   const backdrop = menu.querySelector('.menu-backdrop');
   if (backdrop) {
     backdrop.addEventListener('touchstart', (e) => { e.preventDefault(); closeMessageMenu(); });
@@ -1347,13 +1368,13 @@ async function handleMessageAction(action, msgId, m) {
     case 'copy':
       try {
         await navigator.clipboard.writeText(m.text || '');
-        toast(currentLang === 'hi' ? '   ' : ' Copied');
+        toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied');
       } catch(e) {
         const ta = document.createElement('textarea');
         ta.value = m.text || '';
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); toast(currentLang === 'hi' ? '   ' : ' Copied'); } catch(e2) {}
+        try { document.execCommand('copy'); toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied'); } catch(e2) {}
         document.body.removeChild(ta);
       }
       break;
@@ -1376,7 +1397,7 @@ async function handleMessageAction(action, msgId, m) {
 
     case 'delete-all':
       const confirmMsg = currentLang === 'hi'
-        ? '        ?'
+        ? 'क्या आप सबके लिए यह मैसेज हटाना चाहते हैं?'
         : 'Delete this message for everyone?';
       if (confirm(confirmMsg)) {
         await deleteMessage(roomPath, msgId, true);
@@ -1385,18 +1406,18 @@ async function handleMessageAction(action, msgId, m) {
   }
 }
 
-// # FIX BUG 6:   
+// # FIX BUG 6: रिप्लाई प्रिव्यू बॉक्स
 function startReply(msgId, m) {
   replyToMessageId = msgId;
   replyToMessageData = m;
 
   let previewText = m.text || '';
-  if (m.type === 'image') previewText = ' ' + (currentLang==='hi'?'':'Photo');
-  else if (m.type === 'video') previewText = ' ' + (currentLang==='hi'?'':'Video');
-  else if (m.type === 'audio') previewText = ' ' + (currentLang==='hi'?' ':'Voice Note');
-  else if (m.type === 'doc') previewText = ' ' + (currentLang==='hi'?'':'Document');
+  if (m.type === 'image') previewText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
+  else if (m.type === 'video') previewText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
+  else if (m.type === 'audio') previewText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
+  else if (m.type === 'doc') previewText = '📄 ' + (currentLang==='hi'?'दस्तावेज़':'Document');
 
-  showReplyPreview(m.senderName || '', previewText);
+  showReplyPreview(m.senderName || 'उपयोगकर्ता', previewText);
   chatInput.focus();
 }
 
@@ -1410,10 +1431,10 @@ function showReplyPreview(senderName, text) {
   box.innerHTML = `
     <div class="reply-preview-bar"></div>
     <div class="reply-preview-content">
-      <div class="reply-preview-sender"> ${safeName(senderName)}</div>
+      <div class="reply-preview-sender">↩️ ${safeName(senderName)}</div>
       <div class="reply-preview-text">${safeName(text)}</div>
     </div>
-    <button class="reply-preview-close" id="closeReplyBtn"></button>
+    <button class="reply-preview-close" id="closeReplyBtn">✕</button>
   `;
 
   const footer = document.querySelector('.chat-footer');
@@ -1432,7 +1453,7 @@ function cancelReply() {
   if (box) box.remove();
 }
 
-// # FIX BUG 4:   UI     
+// # FIX BUG 4: स्टार का UI बिना रीस्टार्ट तुरंत अपडेट होगा
 async function toggleStarMessage(roomPath, msgId, m) {
   const newStar = !m.starred;
   m.starred = newStar;
@@ -1443,21 +1464,21 @@ async function toggleStarMessage(roomPath, msgId, m) {
       el.classList.toggle('starred', newStar);
     }
     toast(newStar
-      ? (currentLang === 'hi' ? '  ' : ' Starred')
-      : (currentLang === 'hi' ? ' ' : 'Unstarred'));
+      ? (currentLang === 'hi' ? '⭐ स्टार किया' : '⭐ Starred')
+      : (currentLang === 'hi' ? 'स्टार हटाया' : 'Unstarred'));
   } catch(e) {
-    toast(currentLang === 'hi' ? '' : 'Error');
+    toast(currentLang === 'hi' ? 'त्रुटि' : 'Error');
   }
 }
 
-// # FIX BUG 5:     UI     
+// # FIX BUG 5: डिलीट फॉर एवरीवन का UI बिना रीस्टार्ट तुरंत अपडेट होगा
 async function deleteMessage(roomPath, msgId, forEveryone) {
   try {
     if (forEveryone) {
       await update(ref(db, roomPath), {
         deleted: true,
         deletedAt: Date.now(),
-        text: ' ' + (currentLang === 'hi' ? '     ' : 'This message was deleted'),
+        text: '🚫 ' + (currentLang === 'hi' ? 'यह संदेश हटा दिया गया है' : 'This message was deleted'),
         data: null,
         type: 'deleted',
         senderName: myUserName
@@ -1467,7 +1488,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       if (el) {
         el.className = `chat-bubble is-deleted me`;
         el.innerHTML = `
-          <div style="font-style:italic;color:#94a3b8"> ${currentLang === 'hi' ? '     ' : 'This message was deleted'}</div>
+          <div style="font-style:italic;color:#94a3b8">🚫 ${currentLang === 'hi' ? 'यह संदेश हटा दिया गया है' : 'This message was deleted'}</div>
           <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>
         `;
       }
@@ -1489,10 +1510,10 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
     }
 
     toast(forEveryone
-      ? (currentLang === 'hi' ? '   ' : ' Deleted for everyone')
-      : (currentLang === 'hi' ? '  ' : ' Deleted'));
+      ? (currentLang === 'hi' ? '🗑️ सबके लिए हटाया' : '🗑️ Deleted for everyone')
+      : (currentLang === 'hi' ? '🗑️ हटा दिया' : '🗑️ Deleted'));
   } catch(e) {
-    toast(currentLang === 'hi' ? '' : 'Error');
+    toast(currentLang === 'hi' ? 'त्रुटि' : 'Error');
   }
 }
 
@@ -1509,17 +1530,17 @@ function isDeletedForMe(msgId) {
 function openForwardDialog(msgId, m) {
   const users = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
   if (!users.length) {
-    toast(currentLang === 'hi' ? '  ' : 'No contacts');
+    toast(currentLang === 'hi' ? 'कोई संपर्क नहीं' : 'No contacts');
     return;
   }
 
   const names = users.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt((currentLang === 'hi' ? '  ? ( )\n\n' : 'Forward to? (enter number)\n\n') + names);
+  const input = prompt((currentLang === 'hi' ? 'किसे फॉरवर्ड करें? (नंबर लिखें)\n\n' : 'Forward to? (enter number)\n\n') + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
   if (isNaN(idx) || idx < 0 || idx >= users.length) {
-    toast(currentLang === 'hi' ? ' ' : 'Invalid');
+    toast(currentLang === 'hi' ? 'गलत नंबर' : 'Invalid');
     return;
   }
 
@@ -1562,15 +1583,15 @@ async function forwardMessageTo(targetId, m, targetName) {
     }
 
     await set(newMsgRef, msgData);
-    toast(`${targetName} ${currentLang === 'hi' ? '   ' : 'forwarded'}`);
+    toast(`${targetName} ${currentLang === 'hi' ? 'को फॉरवर्ड कर दिया' : 'forwarded'}`);
   } catch(e) {
-    toast(currentLang === 'hi' ? ' ' : 'Forward failed');
+    toast(currentLang === 'hi' ? 'फॉरवर्ड फेल' : 'Forward failed');
   }
 }
 
 // ===================================================
-// P2P MEDIA TRANSFER  WEBRTC DATA CHANNEL ENGINE
-// (      )
+// P2P MEDIA TRANSFER — WEBRTC DATA CHANNEL ENGINE
+// (प्रॉमिस हैंग व सिग्नलिंग फ़िक्स के साथ)
 // ===================================================
 async function getOrCreateMediaDataChannel(peerId) {
   if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
@@ -1583,7 +1604,7 @@ async function getOrCreateMediaDataChannel(peerId) {
   const targetSignalsPath = `media_signals/${peerId}/${myUserId}`;
   const mySignalsPath = `media_signals/${myUserId}/${peerId}`;
 
-  //           
+  // पुराने अटके सिग्नल्स को साफ़ करें ताकि नया कनेक्शन फ्रेश बने
   await remove(ref(db, targetSignalsPath)).catch(()=>{});
   await remove(ref(db, mySignalsPath)).catch(()=>{});
 
@@ -1625,7 +1646,7 @@ async function getOrCreateMediaDataChannel(peerId) {
         await pc.setRemoteDescription(new RTCSessionDescription(a));
         await pc.flushIce();
 
-        //   :            
+        // प्रॉमिस हैंग फ़िक्स: अगर डेटा चैनल पहले ही खुल चुका है तो तुरंत रिज़ॉल्व करें
         if (dc.readyState === 'open') {
           clearTimeout(timeout);
           mediaDataChannels[peerId] = dc;
@@ -1642,7 +1663,7 @@ async function getOrCreateMediaDataChannel(peerId) {
   });
 }
 
-//      (onValue       )
+// 🆕 सुधरा हुआ रिसीवर लिसनर (onValue से हर नए ट्रांसफ़र का ऑफ़र पकड़ेगा)
 function listenForIncomingMediaSignals() {
   const incomingMediaRef = ref(db, `media_signals/${myUserId}`);
 
@@ -1759,10 +1780,10 @@ function handleMediaControlMessage(peerId, msg) {
           const base64Data = reader.result;
           updateChatMediaMessageWithData(mediaId, base64Data, transfer?.mimeType, transfer?.fileName);
 
-          //   Android Downloads/VideoCallApp     
+          // फ़ाइल सीधे Android Downloads/VideoCallApp में सुरक्षित सेव होती है
           const base64Only = base64Data.split(',')[1] || base64Data;
           const uri = saveMediaViaNative(base64Only, transfer.fileName, transfer.mimeType);
-          if (uri) toast(currentLang === 'hi' ? '  Downloads    ' : ' File saved to Downloads');
+          if (uri) toast(currentLang === 'hi' ? '✅ फ़ाइल Downloads में सेव हो गई' : '✅ File saved to Downloads');
         };
         reader.readAsDataURL(blob);
 
@@ -1792,7 +1813,7 @@ function handleMediaControlMessage(peerId, msg) {
       break;
 
     case 'media-request':
-      toast(currentLang === 'hi' ? '       ' : ' Re-select the file to resend');
+      toast(currentLang === 'hi' ? '⚠️ फ़ाइल दोबारा भेजने के लिए फ़ाइल चुनें' : '⚠️ Re-select the file to resend');
       break;
   }
 }
@@ -1823,7 +1844,7 @@ async function sendMediaFileOverDataChannel(peerId, file) {
   try {
     dc = await getOrCreateMediaDataChannel(peerId);
   } catch(e) {
-    toast(currentLang === 'hi' ? '   ' : ' Receiver is offline');
+    toast(currentLang === 'hi' ? '❌ रिसीवर ऑफ़लाइन है' : '❌ Receiver is offline');
     return null;
   }
 
@@ -1864,7 +1885,7 @@ async function sendMediaFileOverDataChannel(peerId, file) {
     if (dc.readyState !== 'open') {
       activeTransfers[mediaId].status = 'failed';
       renderTransferQueue();
-      toast(currentLang === 'hi' ? '   ' : ' Connection lost');
+      toast(currentLang === 'hi' ? '❌ कनेक्शन टूट गया' : '❌ Connection lost');
       return null;
     }
 
@@ -1934,12 +1955,12 @@ function renderTransferQueue() {
     let statusText;
     if (t.status === 'sending') statusText = translations[currentLang].sending;
     else if (t.status === 'receiving') statusText = translations[currentLang].receiving;
-    else if (t.status === 'complete') statusText = currentLang === 'hi' ? ' ' : ' Done';
-    else if (t.status === 'cancelled') statusText = currentLang === 'hi' ? ' ' : ' Cancelled';
-    else if (t.status === 'failed') statusText = currentLang === 'hi' ? ' ' : ' Failed';
+    else if (t.status === 'complete') statusText = currentLang === 'hi' ? '✅ पूरा' : '✅ Done';
+    else if (t.status === 'cancelled') statusText = currentLang === 'hi' ? '❌ रद्द' : '❌ Cancelled';
+    else if (t.status === 'failed') statusText = currentLang === 'hi' ? '⚠️ विफल' : '⚠️ Failed';
     else statusText = '...';
 
-    const arrow = isSend ? '' : '';
+    const arrow = isSend ? '⬆' : '⬇';
     const icon = getFileIcon(t.mimeType, t.fileName);
 
     return `
@@ -1952,7 +1973,7 @@ function renderTransferQueue() {
           <div class="transfer-item-fill" style="width:${pct}%"></div>
         </div>
         <div class="transfer-item-status">
-          <span>${statusText}  ${formatFileSize(current)} / ${formatFileSize(t.totalSize)}</span>
+          <span>${statusText} • ${formatFileSize(current)} / ${formatFileSize(t.totalSize)}</span>
           ${!done && isSend ? `<button class="transfer-item-cancel" data-cancel-id="${t.mediaId}">${translations[currentLang].cancel}</button>` : ''}
         </div>
       </div>
@@ -2022,7 +2043,6 @@ function openChat(tId, tName, isOnline) {
   loadChatMessages();
 }
 
-// # FIX:         -      
 function closeChat() {
   if (chatUnsub) { chatUnsub(); chatUnsub = null; }
   if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
@@ -2052,25 +2072,25 @@ function attachVoiceBubbleEvents(container) {
       const pBar = bubble.querySelector('.voice-progress-bar'), tLabel = bubble.querySelector('.voice-time-label');
 
       if (activePlayingAudio && activePlayingAudio.src === url) {
-        if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = ''; }
-        else { activePlayingAudio.play(); btn.textContent = ''; }
+        if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = '▶'; }
+        else { activePlayingAudio.play(); btn.textContent = '⏸'; }
         return;
       }
-      if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = ''; }
+      if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = '▶'; }
 
       const audio = new Audio(url);
-      activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '';
+      activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '⏸';
       audio.ontimeupdate = () => {
         const curTime = audio.currentTime;
         pBar.style.width = Math.min((curTime / totalDurSec) * 100, 100) + '%';
         tLabel.textContent = `${Math.floor(curTime / 60)}:${String(Math.floor(curTime % 60)).padStart(2,'0')}`;
       };
       audio.onended = () => {
-        btn.textContent = ''; pBar.style.width = '0%';
+        btn.textContent = '▶'; pBar.style.width = '0%';
         tLabel.textContent = `${Math.floor(totalDurSec / 60)}:${String(Math.floor(totalDurSec % 60)).padStart(2,'0')}`;
         activePlayingAudio = null; activePlayingBtn = null;
       };
-      audio.play().catch(()=>{ btn.textContent = ''; });
+      audio.play().catch(()=>{ btn.textContent = '▶'; });
     };
   }
 
@@ -2098,7 +2118,7 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
-// # FIX BUG 4 & BUG 5:         - 
+// # FIX BUG 4 & BUG 5: लोड चैट मैसेज में स्टार और डिलीट का रियल-टाइम रेंडर
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -2128,21 +2148,21 @@ function loadChatMessages() {
       let el = document.getElementById(`msg_${msgId}`);
       let tickHtml = '';
       if (m.senderId === myUserId) {
-        if (m.read) tickHtml = '<span class="tick-mark tick-read"></span>';
-        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered"></span>';
-        else tickHtml = '<span class="tick-mark tick-sent"></span>';
+        if (m.read) tickHtml = '<span class="tick-mark tick-read">✓✓</span>';
+        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered">✓✓</span>';
+        else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
       }
 
       if (el) {
-        // # FIX BUG 4:   
+        // # FIX BUG 4: स्टार क्लास अपडेट
         el.classList.toggle('starred', !!m.starred);
 
-        // # FIX BUG 5:          
+        // # FIX BUG 5: अगर मैसेज डिलीट हो गया है तो तुरंत अपडेट करें
         if (m.deleted || m.type === 'deleted') {
           if (!el.classList.contains('is-deleted')) {
             el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
             el.innerHTML = `
-              <div style="font-style:italic;color:#94a3b8"> ${safeName(m.text || '     ')}</div>
+              <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
               <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>
             `;
           }
@@ -2162,7 +2182,7 @@ function loadChatMessages() {
 
       if (m.type === 'system-call') {
         el.className = 'chat-bubble system-call';
-        el.textContent = `${m.text}  ${formatClockTime(m.time)}`;
+        el.textContent = `${m.text} • ${formatClockTime(m.time)}`;
         body.appendChild(el);
         shouldScroll = true;
         return;
@@ -2171,8 +2191,8 @@ function loadChatMessages() {
       if (m.type === 'deleted' || m.deleted) {
         el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
         el.innerHTML = `
-          <div style="font-style:italic;color:#94a3b8"> ${safeName(m.text || '     ')}</div>
-          <div class="chat-meta"><span>${formatClockTime(m.time) : ''}</span></div>
+          <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
+          <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
         `;
         body.appendChild(el);
         shouldScroll = true;
@@ -2188,7 +2208,7 @@ function loadChatMessages() {
           <div class="chat-reply-preview">
             <div class="chat-reply-bar"></div>
             <div class="chat-reply-body">
-              <div class="chat-reply-sender">${safeName(m.replyTo.senderName || '')}</div>
+              <div class="chat-reply-sender">${safeName(m.replyTo.senderName || 'उपयोगकर्ता')}</div>
               <div class="chat-reply-text">${safeName(m.replyTo.text || '')}</div>
             </div>
           </div>
@@ -2207,7 +2227,7 @@ function loadChatMessages() {
             <div class="media-bubble">
               <div class="media-video-thumb">
                 <video src="${m.data}" preload="metadata" playsinline></video>
-                <div class="media-play-overlay"></div>
+                <div class="media-play-overlay">▶</div>
               </div>
             </div>
           `;
@@ -2219,7 +2239,7 @@ function loadChatMessages() {
       } else if (m.type === 'audio') {
         contentHtml += `
           <div class="voice-note-bubble" id="vn_${msgId}">
-            <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}"></button>
+            <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}">▶</button>
             <div class="voice-meta-area">
               <div class="voice-progress-bg" data-dur="${m.durationSec || 5}"><div class="voice-progress-bar"></div></div>
               <div class="voice-meta-row"><span class="voice-time-label">${m.duration || '0:05'}</span><button class="voice-spd-btn">1x</button></div>
@@ -2265,18 +2285,17 @@ function loadChatMessages() {
   });
 }
 
-//  P2P   : data-media-id     UI    
 function buildMediaPlaceholderHtml(msgId, m) {
   const sizeText = m.fileSize ? formatFileSize(m.fileSize) : '';
-  const icon = m.type === 'image' ? '' : (m.type === 'video' ? '' : '');
-  const label = m.type === 'image' ? '' : (m.type === 'video' ? '' : '');
+  const icon = m.type === 'image' ? '🖼️' : (m.type === 'video' ? '🎥' : '📎');
+  const label = m.type === 'image' ? 'फ़ोटो' : (m.type === 'video' ? 'वीडियो' : 'फ़ाइल');
 
   return `
     <div class="media-download-overlay" data-media-id="${m.mediaId || msgId}" data-msg-id="${msgId}">
       <div class="media-download-icon">${icon}</div>
       <div class="media-file-name">${safeName(m.fileName || label)}</div>
       <div class="media-file-size">${sizeText}</div>
-      <button class="media-download-btn"> ${translations[currentLang].tapToDownload}</button>
+      <button class="media-download-btn">⬇ ${translations[currentLang].tapToDownload}</button>
     </div>
   `;
 }
@@ -2383,14 +2402,14 @@ async function sendChatMessage() {
 
   if (replyToMessageId && replyToMessageData) {
     let previewText = replyToMessageData.text || '';
-    if (replyToMessageData.type === 'image') previewText = ' ';
-    else if (replyToMessageData.type === 'video') previewText = ' ';
-    else if (replyToMessageData.type === 'audio') previewText = '  ';
-    else if (replyToMessageData.type === 'doc') previewText = ' ';
+    if (replyToMessageData.type === 'image') previewText = '📷 फ़ोटो';
+    else if (replyToMessageData.type === 'video') previewText = '🎥 वीडियो';
+    else if (replyToMessageData.type === 'audio') previewText = '🎙 वॉयस नोट';
+    else if (replyToMessageData.type === 'doc') previewText = '📄 दस्तावेज़';
 
     msgData.replyTo = {
       msgId: replyToMessageId,
-      senderName: replyToMessageData.senderName || '',
+      senderName: replyToMessageData.senderName || 'उपयोगकर्ता',
       text: previewText
     };
     cancelReply();
@@ -2436,7 +2455,7 @@ chatInput.addEventListener('keydown', e => {
   }
 });
 
-// P2P Media Send: Firebase RTDB 10 MB  
+// P2P Media Send: Firebase RTDB 10 MB क्रैश बाईपास
 async function sendMediaMessage(file) {
   if (!file || !currentChatTargetId) return;
 
@@ -2444,7 +2463,7 @@ async function sendMediaMessage(file) {
   const targetOnline = !!allOnlineUsers[targetId]?.online;
 
   if (!targetOnline) {
-    toast(currentLang === 'hi' ? '    ' : ' Receiver is offline');
+    toast(currentLang === 'hi' ? '⚠️ सामने वाला ऑफ़लाइन है' : '⚠️ Receiver is offline');
     return;
   }
 
@@ -2455,7 +2474,7 @@ async function sendMediaMessage(file) {
   const newMsgRef = push(ref(db, roomPath));
   const newMsgId = newMsgRef.key;
 
-  const label = mediaType === 'image' ? ' ' : (mediaType === 'video' ? ' ' : (mediaType === 'audio' ? '  ' : ' '));
+  const label = mediaType === 'image' ? '📷 फ़ोटो' : (mediaType === 'video' ? '🎥 वीडियो' : (mediaType === 'audio' ? '🎙 वॉयस नोट' : '📄 दस्तावेज़'));
 
   latestChatSnippets[targetId] = {
     text: label,
@@ -2489,14 +2508,14 @@ async function sendMediaMessage(file) {
     mimeType: file.type
   });
 
-  toast(currentLang === 'hi' ? ' P2P   ...' : ' Sending via P2P...');
+  toast(currentLang === 'hi' ? '⏫ P2P भेज रहे हैं...' : '⏫ Sending via P2P...');
   const sentMediaId = await sendMediaFileOverDataChannel(targetId, file);
 
   if (sentMediaId) {
     update(ref(db, `${roomPath}/${newMsgId}`), { delivered: true }).catch(()=>{});
-    toast(currentLang === 'hi' ? '  ' : ' Sent');
+    toast(currentLang === 'hi' ? '✅ भेज दिया' : '✅ Sent');
   } else {
-    toast(currentLang === 'hi' ? '   ' : ' Failed to send');
+    toast(currentLang === 'hi' ? '❌ भेजने में समस्या' : '❌ Failed to send');
   }
 }
 
@@ -2506,17 +2525,17 @@ async function requestMediaFromPeer(msgId, msg) {
 
   const targetOnline = !!allOnlineUsers[peerId]?.online;
   if (!targetOnline) {
-    toast(currentLang === 'hi' ? '    ' : ' Sender is offline now');
+    toast(currentLang === 'hi' ? '⚠️ सेंडर अभी ऑफ़लाइन है' : '⚠️ Sender is offline now');
     return;
   }
 
-  toast(currentLang === 'hi' ? '       ...' : ' Requesting from sender...');
+  toast(currentLang === 'hi' ? '⏬ सेंडर से फ़ाइल माँगी जा रही है...' : '⏬ Requesting from sender...');
 
   let dc;
   try {
     dc = await getOrCreateMediaDataChannel(peerId);
   } catch(e) {
-    toast(currentLang === 'hi' ? '    ' : ' Could not connect');
+    toast(currentLang === 'hi' ? '❌ कनेक्ट नहीं हो पाए' : '❌ Could not connect');
     return;
   }
 
@@ -2527,18 +2546,18 @@ async function requestMediaFromPeer(msgId, msg) {
   }));
 }
 
-//         UI     
+// 🆕 वीडियो और इमेज दोनों के लिए सटीक UI रेंडरिंग और क्लिक हैंडलर फ़िक्स
 function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', fileName = '') {
   const overlay = document.querySelector(`.media-download-overlay[data-media-id="${mediaId}"]`);
   if (overlay) {
-    const isVideo = (mimeType && mimeType.startsWith('video/')) || base64Data.startsWith('data:video') || overlay.querySelector('.media-download-icon')?.textContent.includes('');
+    const isVideo = (mimeType && mimeType.startsWith('video/')) || base64Data.startsWith('data:video') || overlay.querySelector('.media-download-icon')?.textContent.includes('🎥');
     const parent = overlay.parentNode;
     if (isVideo) {
       overlay.outerHTML = `
         <div class="media-bubble">
           <div class="media-video-thumb">
             <video src="${base64Data}" preload="metadata" playsinline></video>
-            <div class="media-play-overlay"></div>
+            <div class="media-play-overlay">▶</div>
           </div>
         </div>`;
       const thumb = parent?.querySelector('.media-video-thumb');
@@ -2551,24 +2570,22 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
   }
 }
 
-// # FIX BUG 7 & BUG 8:    VCF   
+// # FIX BUG 7 & BUG 8: लोकेशन और कांटेक्ट VCF का सटीक एक्शन
 function handleDocDownload(msgId, m) {
-  // # FIX BUG 7:   - Google Maps   
-  if (m.data && (m.data.includes('maps.google.com') || m.fileName === '')) {
+  if (m.data && (m.data.includes('maps.google.com') || m.fileName === 'लोकेशन')) {
     const openMaps = confirm(currentLang === 'hi' 
-      ? '  :\n\n[OK] = Google Maps  \n[Cancel] =   ' 
-      : ' Location Options:\n\n[OK] = Open in Google Maps\n[Cancel] = Copy Link');
+      ? '📍 लोकेशन विकल्प:\n\n[OK] = Google Maps में खोलें\n[Cancel] = लिंक कॉपी करें' 
+      : '📍 Location Options:\n\n[OK] = Open in Google Maps\n[Cancel] = Copy Link');
     if (openMaps) {
       window.open(m.data, '_blank');
     } else {
       navigator.clipboard.writeText(m.data).then(() => {
-        toast(currentLang === 'hi' ? '     ' : ' Location link copied');
+        toast(currentLang === 'hi' ? '📋 लोकेशन लिंक कॉपी हो गया' : '📋 Location link copied');
       });
     }
     return;
   }
 
-  // # FIX BUG 8:  VCF -  Contacts   
   if (m.mimeType === 'text/vcard' || (m.fileName && m.fileName.endsWith('.vcf'))) {
     const rawBase64 = m.data ? m.data.replace(/^data:text\/vcard;base64,/, '') : '';
     const handled = openContactVcfNative(rawBase64, m.fileName || 'contact.vcf');
@@ -2579,7 +2596,7 @@ function handleDocDownload(msgId, m) {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      toast(currentLang === 'hi' ? '  VCF  ' : ' Contact VCF downloaded');
+      toast(currentLang === 'hi' ? '👤 संपर्क VCF डाउनलोड हुआ' : '👤 Contact VCF downloaded');
     }
     return;
   }
@@ -2622,7 +2639,8 @@ function openMediaViewer(dataUrl, mimeType, fileName) {
   viewer.hidden = false;
 }
 
-$('closeMediaViewerBtn').onclick = () => {$('mediaViewer').hidden = true;
+$('closeMediaViewerBtn').onclick = () => {
+  $('mediaViewer').hidden = true;
   $('mediaViewerContent').innerHTML = '';
   mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
 };
@@ -2631,7 +2649,6 @@ $('saveMediaBtn').onclick = () => {
   if (!mediaViewerState.dataUrl) return;
   const { dataUrl, mimeType, fileName } = mediaViewerState;
 
-  // # FIX BUG 8:  VCF       
   if (mimeType === 'text/vcard' || (fileName && fileName.endsWith('.vcf'))) {
     const rawBase64 = dataUrl.replace(/^data:text\/vcard;base64,/, '');
     if (openContactVcfNative(rawBase64, fileName || 'contact.vcf')) return;
@@ -2640,7 +2657,7 @@ $('saveMediaBtn').onclick = () => {
   const base64Only = dataUrl.split(',')[1] || dataUrl;
   const uri = saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
   if (uri) {
-    toast(currentLang === 'hi' ? ' Downloads    ' : ' Saved to Downloads');
+    toast(currentLang === 'hi' ? '✅ Downloads में सेव हो गई' : '✅ Saved to Downloads');
   } else {
     const a = document.createElement('a');
     a.href = dataUrl;
@@ -2648,7 +2665,7 @@ $('saveMediaBtn').onclick = () => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast(currentLang === 'hi' ? '  ' : ' Download started');
+    toast(currentLang === 'hi' ? '📥 डाउनलोड शुरू' : '📥 Download started');
   }
 };
 
@@ -2693,12 +2710,22 @@ $('photoFileInput').onchange = (e) => {
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-$('videoFileInput').onchange = (e) => { const file = e.target.files[0]; if (file) sendMediaMessage(file); e.target.value = ''; };$('docFileInput').onchange = (e) => {
+$('videoFileInput').onchange = (e) => { 
+  const file = e.target.files[0]; 
+  if (file) sendMediaMessage(file); 
+  e.target.value = ''; 
+};
+$('docFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-$('anyFileInput').onchange = (e) => { const file = e.target.files[0]; if (file) sendMediaMessage(file); e.target.value = ''; };$('cameraCaptureInput').onchange = (e) => {
+$('anyFileInput').onchange = (e) => { 
+  const file = e.target.files[0]; 
+  if (file) sendMediaMessage(file); 
+  e.target.value = ''; 
+};
+$('cameraCaptureInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
@@ -2711,11 +2738,11 @@ function sendLocationMessage() {
   if (!currentChatTargetId) return;
 
   if (!navigator.geolocation) {
-    toast(currentLang === 'hi' ? '   ' : 'Location not supported');
+    toast(currentLang === 'hi' ? 'लोकेशन सपोर्ट नहीं है' : 'Location not supported');
     return;
   }
 
-  toast(currentLang === 'hi' ? '     ...' : ' Fetching location...');
+  toast(currentLang === 'hi' ? '📍 लोकेशन प्राप्त कर रहे हैं...' : '📍 Fetching location...');
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const lat = pos.coords.latitude;
@@ -2728,7 +2755,7 @@ function sendLocationMessage() {
     const newMsgRef = push(ref(db, roomPath));
     const newMsgId = newMsgRef.key;
 
-    const label = ' ';
+    const label = '📍 लोकेशन';
 
     latestChatSnippets[currentChatTargetId] = {
       text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
@@ -2741,7 +2768,7 @@ function sendLocationMessage() {
       senderName: myUserName,
       type: 'doc',
       text: label,
-      fileName: '',
+      fileName: 'लोकेशन',
       mimeType: 'text/plain',
       fileSize: mapsUrl.length,
       data: mapsUrl,
@@ -2751,12 +2778,12 @@ function sendLocationMessage() {
     });
 
     sendChatMessagePush(currentChatTargetId, label, roomId, newMsgId, {
-      mediaType: 'doc', fileName: ''
+      mediaType: 'doc', fileName: 'लोकेशन'
     });
 
-    toast(currentLang === 'hi' ? '   ' : ' Location sent');
+    toast(currentLang === 'hi' ? '✅ लोकेशन भेज दी' : '✅ Location sent');
   }, () => {
-    toast(currentLang === 'hi' ? '   ' : 'Could not get location');
+    toast(currentLang === 'hi' ? 'लोकेशन प्राप्त नहीं हुई' : 'Could not get location');
   });
 }
 
@@ -2765,17 +2792,17 @@ async function sendContactMessage() {
 
   const list = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
   if (!list.length) {
-    toast(currentLang === 'hi' ? '  ' : 'No contacts');
+    toast(currentLang === 'hi' ? 'कोई संपर्क नहीं' : 'No contacts');
     return;
   }
 
   const names = list.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt((currentLang === 'hi' ? '   ? ( )\n\n' : 'Which contact to send? (enter number)\n\n') + names);
+  const input = prompt((currentLang === 'hi' ? 'कौन सा संपर्क भेजें? (नंबर लिखें)\n\n' : 'Which contact to send? (enter number)\n\n') + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
   if (isNaN(idx) || idx < 0 || idx >= list.length) {
-    toast(currentLang === 'hi' ? ' ' : 'Invalid');
+    toast(currentLang === 'hi' ? 'गलत नंबर' : 'Invalid');
     return;
   }
 
@@ -2789,7 +2816,7 @@ async function sendContactMessage() {
   const newMsgRef = push(ref(db, roomPath));
   const newMsgId = newMsgRef.key;
 
-  const label = ` ${contact.name}`;
+  const label = `👤 ${contact.name}`;
 
   latestChatSnippets[currentChatTargetId] = {
     text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
@@ -2815,7 +2842,7 @@ async function sendContactMessage() {
     mediaType: 'doc', fileName: contact.name + '.vcf', mimeType: 'text/vcard'
   });
 
-  toast(currentLang === 'hi' ? '   ' : ' Contact sent');
+  toast(currentLang === 'hi' ? '✅ संपर्क भेज दिया' : '✅ Contact sent');
 }
 
 // ===================================================
@@ -2823,8 +2850,8 @@ async function sendContactMessage() {
 // ===================================================
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
-const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn =$('dockPauseResumeBtn');
-const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot =$('dockBlinkDot');
+const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn = $('dockPauseResumeBtn');
+const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot = $('dockBlinkDot');
 const waveCanvas = $('waveCanvas'), waveCtx = waveCanvas.getContext('2d');
 
 async function openVoiceDock() {
@@ -2837,8 +2864,8 @@ async function openVoiceDock() {
     isDockPaused = false;
     dockSeconds = 0;
     dockTimerText.textContent = '0:00';
-    dockPauseIco.textContent = '';
-    dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Pause';
+    dockPauseIco.textContent = '⏸';
+    dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
     dockBlinkDot.style.animationPlayState = 'running';
     voiceDock.hidden = false;
     setupWaveformVisualizer(dockStream);
@@ -2851,7 +2878,7 @@ async function openVoiceDock() {
       }
     }, 1000);
   } catch(e) {
-    toast('     ');
+    toast('माइक की अनुमति नहीं मिल सकी');
   }
 }
 
@@ -2894,14 +2921,14 @@ dockPauseResumeBtn.onclick = () => {
   if (!isDockPaused) {
     dockMediaRecorder.pause();
     isDockPaused = true;
-    dockPauseIco.textContent = '';
-    dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Resume';
+    dockPauseIco.textContent = '🎙';
+    dockPauseText.textContent = currentLang === 'hi' ? 'जारी रखें' : 'Resume';
     dockBlinkDot.style.animationPlayState = 'paused';
   } else {
     dockMediaRecorder.resume();
     isDockPaused = false;
-    dockPauseIco.textContent = '';
-    dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Pause';
+    dockPauseIco.textContent = '⏸';
+    dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
     dockBlinkDot.style.animationPlayState = 'running';
   }
 };
@@ -2939,7 +2966,7 @@ function sendVoiceDock() {
         const newMsgRef = push(ref(db, roomPath));
         const newMsgId = newMsgRef.key;
 
-        const voiceLabel = ' ' + (currentLang==='hi'?' ':'Voice Note');
+        const voiceLabel = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
 
         latestChatSnippets[currentChatTargetId] = {
           text: voiceLabel, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline
@@ -2977,17 +3004,13 @@ function sendVoiceDock() {
 $('dockSendBtn').onclick = sendVoiceDock;
 
 /* =========================================================================
-   <<<<<<<<<<<<<<<<<<<< [PART 2 OF 3 : app.js] <<<<<<<<<<<<<<<<<<<<
+   <<<<<<<<<<<<<<<<<<<< [PART 2 OF 3 समाप्त: app.js] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
-===================================================
+/* =========================================================================
    >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
    P2P कॉल लॉजिक, पीयर कनेक्शन, कंट्रोल्स, BUG 1 फ़िक्स व ऐप इनिशियलाइज़ेशन
    ========================================================================= */
 
-// ===================================================
-// CALL LOGIC & INCOMING LISTENERS
-// (currentCallType, currentCallTargetId Part 1 में घोषित हैं, यहाँ पुनः let नहीं लगाया गया है)
-// ===================================================
 currentCallType = 'outgoing';
 
 function listenForIncoming() {
@@ -4136,7 +4159,7 @@ $('btnAddPerson').onclick = (e) => {
   }
   $('addParticipantModal').hidden = false;
 };
-$('closeAddModalBtn').onclick = () => {$('addParticipantModal').hidden = true; };
+$('closeAddModalBtn').onclick = () => { $('addParticipantModal').hidden = true; };
 
 // ===================================================
 // PIP WINDOW SWAP
@@ -4193,7 +4216,7 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden && !isTttOpen) {
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -4342,8 +4365,9 @@ async function hangup(silent = false) {
     pipRestoreBtn.hidden = true;
     pipWrap.style.opacity = '1';
     $('camBtn').classList.remove('off');
-    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
+    $('micBtn').classList.remove('off');
+    $('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea')) $('voiceCallArea').hidden = true;
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
 
@@ -4397,16 +4421,17 @@ function setupHardwareBackButton() {
       e.preventDefault();
       return;
     }
-    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
     for (const m of openModals) {
       if (!m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     }
     if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsWhiteboardModal').hidden) {
+      $('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       history.pushState(null, '', window.location.href); e.preventDefault(); return;
     }
@@ -4425,14 +4450,15 @@ function setupHardwareBackButton() {
   if (!isNativeApp() || !appPlugin) return;
   appPlugin.addListener('backButton', () => {
     if (Date.now() < ignoreBackUntil) return;
-    const openModals = [$('adminPanelModal'), $('adminPinModal'),$('profileModal'), $('addParticipantModal'),$('permNoticeModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal')];
     for (const m of openModals) { if (!m.hidden) { m.hidden = true; return; } }
     if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {
+      $('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       return;
     }
@@ -4530,7 +4556,8 @@ async function checkWebOtaUpdate(manual = false) {
   }
 }
 
-$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
+$('checkUpdateBtn').onclick = () => {
+  $('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
 
