@@ -1,6 +1,6 @@
 /* ===================================================
-   🎨 style.css — Complete Design (v1.22.0 FIXED)
-   All original styles preserved + Phase 1+2 additions
+   🎨 style.css — Complete Design (v1.23.5 FIXED)
+   Keyboard-stuck fix applied. All Phase 1+2 UI preserved.
    =================================================== */
 
 :root {
@@ -1407,23 +1407,9 @@ html, body {
   .contact-name { font-size: 14px; }
   .pc-name { font-size: 13px; }
 }
-/* ✅ v1.23.3 — Keyboard-safe chat layout (flex based, minimal) */
-#chatScreen {
-  display: flex !important;
-  flex-direction: column !important;
-  height: 100vh !important;
-  height: 100dvh !important;
-  overflow: hidden !important;
-}
-#chatScreen .chat-header {
-  flex: 0 0 auto !important;
-}
-#chatScreen .chat-body {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  overflow-y: auto !important;
-  overscroll-behavior: contain;
-}
-#chatScreen .chat-footer {
-  flex: 0 0 auto !important;
-}
+
+/* ===================================================
+   ✅ v1.23.5 — Keyboard-safe chat layout
+   (Deleted the broken v1.23.4 block. .screen handles everything.)
+   =================================================== */
+/* No extra override needed — .screen flex column already correct */
