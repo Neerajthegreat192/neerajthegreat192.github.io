@@ -1,34 +1,27 @@
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3 शुरू: app.js v1.23.6] >>>>>>>>>>>>>>>>>>>>
-   कॉन्फ़िगरेशन, स्टेट, नेटिव ब्रिज, ऑटो-डाउनलोड कोर, प्रेजेंस व संपर्क
+   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3: app.js v1.23.9] >>>>>>>>>>>>>>>>>>>>
+   Configuration, State, Native Bridge, FCM Push Sync, Presence & Lobby
    ========================================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const CURRENT_APP_VERSION = "1.23.6";
+const CURRENT_APP_VERSION = "1.23.9";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
-// ✅ FIX: हर launch पर cache clear नहीं करो।
-// सिर्फ तब clear करो जब cache files अधूरी/corrupt हों।
 try {
   const cachedJs = localStorage.getItem('ota_cached_js');
   const cachedCss = localStorage.getItem('ota_cached_css');
   const cachedVer = localStorage.getItem('ota_active_ver');
 
-  // अगर version टैग है पर JS/CSS files missing/empty हैं → तो clear करो
   if (cachedVer && (!cachedJs || !cachedCss || cachedJs.trim() === '' || cachedCss.trim() === '')) {
-    console.warn('[OTA] Cache incomplete — clearing for re-download');
     localStorage.removeItem('ota_cached_js');
     localStorage.removeItem('ota_cached_css');
     localStorage.removeItem('ota_active_ver');
   }
-  // वरना कुछ मत करो — cached JS/CSS को रहने दो
 } catch(e) {}
 
-// ===================================================
-// DYNAMIC CAPACITOR GETTERS
-// ===================================================
+// Dynamic Capacitor Helpers
 function getCapacitor() {
   return window.Capacitor || null;
 }
@@ -49,9 +42,7 @@ function isNativeApp() {
   return false;
 }
 
-// ===================================================
-// FIREBASE & WEBRTC CONFIG (CLEAN URLs)
-// ===================================================
+// Firebase & WebRTC Setup
 const firebaseConfig = {
   apiKey: "AIzaSyBg1VC0cd1FmGiXTkMvFFG-eSL46FmgtZU",
   authDomain: "chess-e4910.firebaseapp.com",
@@ -87,9 +78,7 @@ const pipRestoreBtn = $('pipRestoreBtn');
 const chatInput = $('chatInput'), actionBtn = $('actionBtn'), micSvg = $('micSvg'), sendSvg = $('sendSvg');
 const networkBanner = $('networkBanner'), searchInput = $('searchInput');
 
-// ===================================================
-// TRANSLATIONS
-// ===================================================
+// Translations
 let currentLang = localStorage.getItem('vc_lang') || 'hi';
 const translations = {
   hi: {
@@ -154,9 +143,7 @@ function applyLanguage(lang) {
 }
 if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.value);
 
-// ===================================================
-// USER & CALL STATES
-// ===================================================
+// User & Call States
 let myUserId = localStorage.getItem('vc_user_id') || '';
 let myUserName = localStorage.getItem('vc_user_name') || '';
 let myFcmToken = localStorage.getItem('vc_fcm_token') || null;
@@ -185,17 +172,6 @@ function applyTheme(theme) {
   currentTheme = theme;
   localStorage.setItem('vc_theme', theme);
   document.documentElement.setAttribute('data-theme', theme);
-  const themeBtn = $('themeToggleBtn');
-  if (themeBtn) themeBtn.textContent = theme === 'light' ? '☀️' : '🌙';
-}
-
-function savePinnedToCache() {
-  if (!myUserId) return;
-  try { localStorage.setItem('vc_pinned_' + myUserId, JSON.stringify(pinnedChats)); } catch(e){}
-}
-function saveArchivedToCache() {
-  if (!myUserId) return;
-  try { localStorage.setItem('vc_archived_' + myUserId, JSON.stringify(archivedChats)); } catch(e){}
 }
 
 if (myUserName) {
@@ -219,9 +195,7 @@ let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
 let callJoinedViaDirectAccept = false;
 
-// ===================================================
-// P2P & AUTO-DOWNLOAD MEDIA TRANSFER STATES
-// ===================================================
+// Media States
 let activeTransfers = {};
 let mediaDataChannels = {};
 let mediaPeerConnections = {};
@@ -237,9 +211,6 @@ let permissionCallbackCounter = 0;
 let permissionCallbacks = {};
 let splashHidden = false;
 
-// ===================================================
-// SPLASH & NATIVE BRIDGE HELPERS
-// ===================================================
 function hideSplashScreen() {
   if (splashHidden) return;
   splashHidden = true;
@@ -285,7 +256,6 @@ function isDeviceLocked() {
   return false;
 }
 
-// 🆕 PHONE CONTACTS NATIVE BRIDGE
 async function loadPhoneContacts() {
   return new Promise((resolve) => {
     if (!isNativeApp()) { resolve([]); return; }
@@ -299,7 +269,6 @@ async function loadPhoneContacts() {
   });
 }
 
-// 🟡 BUG 3 FIX: ऑटो-डाउनलोड हेल्पर (Downloads/VideoCallApp में सुरक्षित सेव)
 function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
   if (!base64Data || !msgId) return;
   const cacheKey = 'auto_saved_' + msgId;
@@ -313,7 +282,7 @@ function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
       const bridge = window.AndroidBridge || window.AndroidAudio;
       bridge.saveMediaViaService(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
       saved = true;
-    } catch(e) { console.warn('saveMediaViaService failed:', e); }
+    } catch(e) {}
   }
 
   if (!saved) {
@@ -368,9 +337,6 @@ function openContactVcfNative(base64Vcf, fileName) {
   return false;
 }
 
-// ===================================================
-// PERMISSION BRIDGE
-// ===================================================
 function requestAllPermissionsNative() {
   return new Promise((resolve) => {
     if (!window.AndroidAudio || typeof window.AndroidAudio.requestAllPermissions !== 'function') {
@@ -433,9 +399,7 @@ function openAppSettingsNative() {
   }
 }
 
-// ===================================================
-// FCM TOKEN MANAGEMENT & SYNC
-// ===================================================
+// Push Token Syncing
 async function waitForPushPlugin(maxAttempts = 20) {
   for (let i = 0; i < maxAttempts; i++) {
     const push = getPushPlugin();
@@ -447,6 +411,7 @@ async function waitForPushPlugin(maxAttempts = 20) {
 
 async function saveFcmTokenToFirebase(token) {
   try {
+    if (!token) return;
     myFcmToken = token;
     localStorage.setItem('vc_fcm_token', token);
 
@@ -466,14 +431,16 @@ async function saveFcmTokenToFirebase(token) {
 async function setupNativePushListeners() {
   if (!isNativeApp()) return;
 
-  const push = await waitForPushPlugin();
+  const push = await waitForPushPlugin(15);
   if (!push) return;
 
   if (window.__pushListenersRegistered) return;
   window.__pushListenersRegistered = true;
 
   push.addListener('registration', async (token) => {
-    await saveFcmTokenToFirebase(token.value);
+    if (token && token.value) {
+      await saveFcmTokenToFirebase(token.value);
+    }
   });
 
   push.addListener('pushNotificationReceived', (notification) => {
@@ -499,9 +466,15 @@ async function setupNativePushListeners() {
         handleIncomingCallNotification(data, false);
       }
     } else if (data && data.chatTargetId) {
-      openChat(data.chatTargetId, data.chatTargetName || 'उपयोगकर्ता', false);
+      openChat(data.chatTargetId, data.chatTargetName || 'उपयोगकर्ता');
     }
   });
+
+  try {
+    let perm = await push.checkPermissions();
+    if (perm.receive !== 'granted') perm = await push.requestPermissions();
+    if (perm.receive === 'granted') await push.register();
+  } catch(e) {}
 
   const cachedToken = localStorage.getItem('vc_fcm_token');
   if (cachedToken && myUserId) {
@@ -509,9 +482,7 @@ async function setupNativePushListeners() {
   }
 }
 
-// ===================================================
-// SOUNDS & RINGTONE CONTROLS
-// ===================================================
+// Sounds & Ringtones
 let audioCtx = null, outgoingRingTimer = null;
 
 function ensureAudioContext() {
@@ -601,9 +572,7 @@ function stopIncomingRingtone() { stopNativeRinging(); }
 function stopAllCallTones() { stopOutgoingCallTone(); stopNativeRinging(); }
 document.addEventListener('pointerdown', () => { ensureAudioContext(); }, {passive:true});
 
-// ===================================================
-// UTILITIES
-// ===================================================
+// Utilities
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2600);
@@ -630,17 +599,6 @@ function getFileIcon(mimeType, fileName) {
   if (mimeType.includes('zip') || mimeType.includes('rar')) return '🗜️';
   return '📎';
 }
-function formatDateLabel(ts) {
-  if (!ts) return '';
-  const d = new Date(Number(ts));
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.floor((today - msgDay) / 86400000);
-  if (diffDays === 0) return 'आज';
-  if (diffDays === 1) return 'कल';
-  return d.toLocaleDateString(currentLang === 'hi' ? 'hi-IN' : 'en-US', { day:'2-digit', month:'short', year:'numeric' });
-}
 
 function clearOngoingCallNotification() {
   stopNativeRinging();
@@ -655,9 +613,6 @@ function clearOngoingCallNotification() {
   }
 }
 
-// ===================================================
-// MEDIA PERMISSIONS
-// ===================================================
 async function acquireCallMedia(audioOnly = false) {
   if (localStream) {
     if (!audioOnly && localStream.getVideoTracks().length === 0) {
@@ -710,10 +665,7 @@ async function requestNotificationPermission() {
     const messaging = getMessaging(app);
     const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) {
-      myFcmToken = token;
-      localStorage.setItem('vc_fcm_token', token);
-      const currentUid = myUserId || localStorage.getItem('vc_user_id');
-      if (currentUid) await update(ref(db, `users/${currentUid}`), { fcmToken: token });
+      await saveFcmTokenToFirebase(token);
     }
   } catch(err) {}
 }
@@ -725,9 +677,6 @@ async function runFullPermissionFlow() {
   return result.allGranted;
 }
 
-// ===================================================
-// INCOMING CALL & DIRECT ACCEPT
-// ===================================================
 function handleIncomingCallNotification(data, isFromForegroundListener = false) {
   if (!data || !data.callId) return;
   if (activeCallId === data.callId && !incomingDialog.hidden) return;
@@ -810,7 +759,7 @@ function checkNativeLaunchIntent() {
     if (chatTargetId) {
       window.AndroidAudio.clearLaunchChatIntent();
       setTimeout(() => {
-        openChat(chatTargetId, chatTargetName || 'उपयोगकर्ता', true);
+        openChat(chatTargetId, chatTargetName || 'उपयोगकर्ता');
       }, 600);
     }
   }
@@ -821,9 +770,7 @@ function updateHeaderTitle() {
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
 
-// ===================================================
-// PRESENCE & REAL-TIME PREVIEW SYNC
-// ===================================================
+// Presence & Listeners
 async function initPresence() {
   updateHeaderTitle();
   const userRef = ref(db, `users/${myUserId}`);
@@ -892,9 +839,6 @@ function listenSelfAccountStatus() {
   });
 }
 
-// ===================================================
-// USER REGISTRATION & SETTINGS
-// ===================================================
 function checkUser() {
   lobbyScreen.hidden = true;
   chatScreen.hidden = true;
@@ -1017,9 +961,7 @@ $('resetProfileBtn').onclick = async () => {
   localStorage.clear(); location.href = location.pathname;
 };
 
-// ===================================================
-// ADMIN PANEL
-// ===================================================
+// Admin Pin & Panel
 adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };
 $('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };
 $('verifyPinBtn').onclick = () => {
@@ -1058,9 +1000,7 @@ function openAdminPanel() {
 }
 $('closeAdminPanelBtn').onclick = () => { $('adminPanelModal').hidden = true; };
 
-// ===================================================
-// TABS & CALL LOGS
-// ===================================================
+// Tabs & Call Logs
 $('tabChatsBtn').onclick = () => {
   $('tabChatsBtn').className = 'tab-btn active-chat';
   $('tabCallsBtn').className = 'tab-btn';
@@ -1147,19 +1087,19 @@ function renderCallLogs() {
   });
 }
 
-// ===================================================
-// CONTACTS LIST & CHAT PREVIEWS (🔴 BUG 2 FIX: Filter Deleted)
-// ===================================================
+// Contacts List & Previews
 const getChatRoomId = (a, b) => [a, b].sort().join('__');
 
 function getTickBadge(snippet) {
   if (!snippet || snippet.senderId !== myUserId) return '';
-  if (snippet.read) return '<span class="tick-mark tick-read">✓✓</span>';
-  if (snippet.delivered) return '<span class="tick-mark tick-delivered">✓✓</span>';
-  return '<span class="tick-mark tick-sent">✓</span>';
+  if (snippet.read) return '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
+  if (snippet.delivered) return '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;">✓✓</span>';
+  return '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;">✓</span>';
 }
 
 let isInitialLoad = true;
+
+// 🟢 FIX: Real-time Lobby Snippet, Delivery Ticks & Unread Count Badge Sync
 function listenForLatestChatPreviews() {
   onValue(ref(db, 'chats'), snap => {
     const rooms = snap.val() || {};
@@ -1170,16 +1110,20 @@ function listenForLatestChatPreviews() {
       const parts = key.split('__');
       const targetId = parts[0] === myUserId ? parts[1] : parts[0];
       const msgs = rooms[key]?.messages || {};
-      const keys = Object.keys(msgs);
-      if (!keys.length) return;
+      const msgKeys = Object.keys(msgs);
+      if (!msgKeys.length) return;
 
-      const sortedKeys = keys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
+      const sortedKeys = msgKeys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
       const lastMsg = msgs[sortedKeys[sortedKeys.length - 1]];
 
       let unread = 0;
-      keys.forEach(k => {
+      msgKeys.forEach(k => {
         const m = msgs[k];
-        if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) unread++;
+        if (m.senderId !== myUserId && !m.read) {
+          if (currentChatTargetId !== targetId) {
+            unread++;
+          }
+        }
       });
       unreadCounts[targetId] = unread;
 
@@ -1190,13 +1134,13 @@ function listenForLatestChatPreviews() {
       if (lastMsg.deleted || lastMsg.type === 'deleted') {
         msgText = '🚫 यह संदेश हटा दिया गया है';
       } else if (lastMsg.type === 'image') {
-        msgText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
+        msgText = '📷 ' + (currentLang === 'hi' ? 'फ़ोटो' : 'Photo');
       } else if (lastMsg.type === 'video') {
-        msgText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
+        msgText = '🎥 ' + (currentLang === 'hi' ? 'वीडियो' : 'Video');
       } else if (lastMsg.type === 'audio') {
-        msgText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
+        msgText = '🎙 ' + (currentLang === 'hi' ? 'वॉयस नोट' : 'Voice Note');
       } else if (lastMsg.type === 'doc') {
-        msgText = '📄 ' + (lastMsg.fileName || (currentLang==='hi'?'दस्तावेज़':'Document'));
+        msgText = '📄 ' + (lastMsg.fileName || (currentLang === 'hi' ? 'दस्तावेज़' : 'Document'));
       }
 
       latestChatSnippets[targetId] = { 
@@ -1236,7 +1180,7 @@ function triggerSystemMessageNotification(sender, text, targetId) {
 navigator.serviceWorker?.addEventListener('message', event => {
   if (event.data?.type === 'NOTIFICATION_CLICK' && event.data.targetId) {
     window.focus();
-    openChat(event.data.targetId, event.data.senderName || 'उपयोगकर्ता', false);
+    openChat(event.data.targetId, event.data.senderName || 'उपयोगकर्ता');
   }
 });
 
@@ -1252,7 +1196,7 @@ function renderOnlineStrip() {
     return `<div class="online-avatar" data-uid="${id}" title="${safeName(u.name)}"><div class="online-avatar-circle"><span>${initial}</span><span class="online-dot"></span></div><div class="online-avatar-name">${safeName(u.name.split(' ')[0])}</div></div>`;
   }).join('');
   strip.querySelectorAll('.online-avatar').forEach(el => {
-    el.onclick = () => openChat(el.dataset.uid, allOnlineUsers[el.dataset.uid]?.name || 'उपयोगकर्ता', true);
+    el.onclick = () => openChat(el.dataset.uid, allOnlineUsers[el.dataset.uid]?.name || 'उपयोगकर्ता');
   });
 }
 
@@ -1260,8 +1204,6 @@ function renderContacts() {
   contactsList.innerHTML = '';
   const amIAdmin = isNeerajBadola(myUserName);
   const q = searchInput.value.trim().toLowerCase();
-
-  // 🔴 BUG 2 FIX: केवल सक्रिय पंजीकृत यूज़र्स का सेट
   const validUsersSet = new Set(Object.keys(allOnlineUsers));
 
   let userIds = Object.keys(allOnlineUsers).filter(id => {
@@ -1304,27 +1246,20 @@ function renderContacts() {
       <div class="contact-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
       <div class="contact-content">
         <div class="contact-left-col"><span class="contact-name">${isPinned ? '📌 ' : ''}${safeName(u.name)}</span><div class="contact-last-msg">${lastMsgHtml}</div></div>
-        <div class="contact-right-col"><span class="msg-time-label">${timeHtml}</span><span class="contact-live-status ${statusClass}">${statusText}</span>${unread > 0 ? `<div class="badge-unread">${unread}</div>` : `<div style="height:20px"></div>`}</div>
+        <div class="contact-right-col"><span class="msg-time-label">${timeHtml}</span><span class="contact-live-status ${statusClass}">${statusText}</span>${unread > 0 ? `<div class="badge-unread" data-id="${id}">${unread}</div>` : `<div style="height:20px"></div>`}</div>
       </div>
     `;
-    card.onclick = () => openChat(id, u.name, isOnline);
+    card.onclick = () => openChat(id, u.name);
     contactsList.appendChild(card);
   });
 }
 searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
-
 /* =========================================================================
-   <<<<<<<<<<<<<<<<<<<< [PART 1 OF 3 समाप्त] <<<<<<<<<<<<<<<<<<<<
-   ========================================================================= */
-/* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
-   लॉन्ग-प्रेस मेन्यू, ऑटो-डाउनलोड मीडिया इंजन, चैट हैंडलर, वॉयस डॉक व अटैचमेंट
+   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3: app.js v1.23.9] >>>>>>>>>>>>>>>>>>>>
+   Long-press Actions, Reactions, Chat Engine, Delivery/Read Sync, Voice Dock
    ========================================================================= */
 
-// ===================================================
-// CHAT MESSAGE LONG-PRESS MENU
-// ===================================================
 let longPressTimer = null;
 let longPressStartX = 0;
 let longPressStartY = 0;
@@ -1643,7 +1578,6 @@ async function toggleStarMessage(roomPath, msgId, m) {
   }
 }
 
-// 🟡 BUG 5 FIX: तत्काल DOM रीसेट के साथ डिलीट
 async function deleteMessage(roomPath, msgId, forEveryone) {
   try {
     if (forEveryone) {
@@ -1759,9 +1693,7 @@ async function forwardMessageTo(targetId, m, targetName) {
   }
 }
 
-// ===================================================
-// CHAT SCREEN OPEN/CLOSE (🟢 BUG 7 FIX: क्रैश-प्रूफ अनरीड जीरो)
-// ===================================================
+// Chat Open / Close
 let chatUnsub = null;
 let activePlayingAudio = null;
 let activePlayingBtn = null;
@@ -1775,22 +1707,18 @@ function openChat(tId, tName) {
 
   try {
     currentChatTargetId = tId;
-    currentChatTargetName = tName || 'उपयोगकर्ता';
+    currentChatTargetName = tName || allOnlineUsers[tId]?.name || 'उपयोगकर्ता';
     
-    // 🟢 सुरक्षित बैज रिमूवल
+    // Unread count locally aur badge reset
     unreadCounts[tId] = 0;
     try {
-      const badges = document.getElementsByClassName('badge-unread');
-      for (let i = badges.length - 1; i >= 0; i--) {
-        if (badges[i].getAttribute('data-id') === String(tId)) {
-          badges[i].remove();
-        }
-      }
+      localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
     } catch(e) {}
-
-    if (myUserId && tId) {
-      set(ref(db, `user_inbox/${myUserId}/${tId}/unread`), 0).catch(()=>{});
-    }
+    
+    try {
+      const badge = document.querySelector(`.badge-unread[data-id="${tId}"]`);
+      if (badge) badge.remove();
+    } catch(e) {}
 
     renderContacts();
     
@@ -1821,7 +1749,7 @@ function openChat(tId, tName) {
     updateActionBtnState();
     loadChatMessages();
   } catch (err) {
-    console.error("openChat error caught:", err);
+    console.error("openChat error:", err);
     closeChat();
   }
 }
@@ -1901,9 +1829,7 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
-// ===================================================
-// LOAD MESSAGES & TICK UPDATES (🟡 BUG 4 & BUG 5 FIX)
-// ===================================================
+// Real-time Chat Load, Delivered & Read Ticks
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -1926,8 +1852,13 @@ function loadChatMessages() {
       const m = msgs[msgId];
       if (isDeletedForMe(msgId)) return;
 
+      // Agar samne wale ka message hai aur open hone par read nahi hua hai to read: true set karein
       if (m.senderId !== myUserId && !m.read) {
-        update(ref(db, `${roomPath}/${msgId}`), { read: true, delivered: true, readAt: Date.now() }).catch(()=>{});
+        update(ref(db, `${roomPath}/${msgId}`), { 
+          read: true, 
+          delivered: true, 
+          readAt: Date.now() 
+        }).catch(()=>{});
       }
 
       if (m.data && m.senderId !== myUserId) {
@@ -1939,7 +1870,6 @@ function loadChatMessages() {
       if (el) {
         el.classList.toggle('starred', !!m.starred);
 
-        // 🟡 BUG 5: तत्काल डिलीट रीसेट
         if (m.deleted || m.type === 'deleted') {
           if (!el.classList.contains('is-deleted')) {
             el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
@@ -1951,7 +1881,6 @@ function loadChatMessages() {
           return;
         }
 
-        // 🟡 BUG 4: गारंटीड टिक अपडेट
         if (m.senderId === myUserId) {
           applyTickSafely(msgId, m);
         }
@@ -2036,9 +1965,9 @@ function loadChatMessages() {
 
       let tickHtml = '';
       if (m.senderId === myUserId) {
-        if (m.read) tickHtml = '<span class="tick-mark tick-read">✓✓</span>';
-        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered">✓✓</span>';
-        else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
+        if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
+        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;">✓✓</span>';
+        else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;">✓</span>';
       }
 
       el.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}</div>`;
@@ -2070,24 +1999,16 @@ function loadChatMessages() {
 }
 
 function applyTickSafely(msgId, m) {
-  const applyTick = () => {
-    const el = document.getElementById(`msg_${msgId}`);
-    if (el) {
-      const metaEl = el.querySelector('.chat-meta');
-      if (metaEl) {
-        let tickHtml = '';
-        if (m.read) tickHtml = '<span class="tick-mark tick-read">✓✓</span>';
-        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered">✓✓</span>';
-        else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
-        metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
-        return true;
-      }
+  const el = document.getElementById(`msg_${msgId}`);
+  if (el) {
+    const metaEl = el.querySelector('.chat-meta');
+    if (metaEl) {
+      let tickHtml = '';
+      if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
+      else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;">✓✓</span>';
+      else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;">✓</span>';
+      metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
     }
-    return false;
-  };
-
-  if (!applyTick()) {
-    requestAnimationFrame(() => applyTick());
   }
 }
 
@@ -2261,9 +2182,7 @@ chatInput.addEventListener('keydown', e => {
   }
 });
 
-// ===================================================
-// HYBRID MEDIA SENDER
-// ===================================================
+// Media Sender & Attachments
 async function sendMediaMessage(file) {
   if (!file || !currentChatTargetId) return;
 
@@ -2343,9 +2262,6 @@ async function sendMediaMessage(file) {
   }
 }
 
-// ===================================================
-// P2P DATA CHANNEL
-// ===================================================
 async function getOrCreateMediaDataChannel(peerId) {
   if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
     return mediaDataChannels[peerId];
@@ -2686,9 +2602,6 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
   }
 }
 
-// ===================================================
-// DOWNLOAD & MEDIA VIEWER
-// ===================================================
 function handleDocDownload(msgId, m) {
   if (m.data && (m.data.includes('maps.google.com') || m.fileName === 'लोकेशन')) {
     const openMaps = confirm('📍 लोकेशन Google Maps में खोलें?');
@@ -2751,9 +2664,6 @@ $('saveMediaBtn').onclick = () => {
   toast('✅ Downloads में सहेज दिया गया');
 };
 
-// ===================================================
-// ATTACH MENU & INPUTS
-// ===================================================
 const attachBtn = $('attachBtn');
 const attachMenu = $('attachMenu');
 
@@ -2788,9 +2698,6 @@ $('docFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMe
 $('anyFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
 $('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
 
-// ===================================================
-// LOCATION & CONTACT SENDERS
-// ===================================================
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
   if (!navigator.geolocation) { toast('लोकेशन सपोर्ट नहीं है'); return; }
@@ -2854,9 +2761,6 @@ async function sendContactMessage() {
   toast('✅ संपर्क भेज दिया गया');
 }
 
-// ===================================================
-// PHONE CONTACTS PICKER
-// ===================================================
 let phoneContactsCache = [];
 
 async function openPhoneContactsPicker() {
@@ -2949,9 +2853,7 @@ async function sendVcfMessage(vcfData, fileName) {
   sendChatMessagePush(targetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName, mimeType: 'text/vcard' });
 }
 
-// ===================================================
-// VOICE NOTE DOCK
-// ===================================================
+// Voice Dock Recording
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
 const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn = $('dockPauseResumeBtn');
@@ -3087,13 +2989,9 @@ function sendVoiceDock() {
   updateActionBtnState();
 }
 $('dockSendBtn').onclick = sendVoiceDock;
-
 /* =========================================================================
-   <<<<<<<<<<<<<<<<<<<< [PART 2 OF 3 समाप्त] <<<<<<<<<<<<<<<<<<<<
-   ========================================================================= */
-/* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
-   P2P कॉल लॉजिक, पीयर कनेक्शन, कंट्रोल्स, फन मोड व ऐप इनिशियलाइज़ेशन
+   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3: app.js v1.23.9] >>>>>>>>>>>>>>>>>>>>
+   Call Engine, Controls, Viewport Sync (Fixed Header), Hardware Back & Init
    ========================================================================= */
 
 currentCallType = 'outgoing';
@@ -3506,9 +3404,7 @@ function stopNetworkQualityMonitor() {
   qualityLevel = 'high';
 }
 
-// ===================================================
-// FUN MODE TRAY & MODULES
-// ===================================================
+// Fun Mode & Games
 $('funModeBtn').onclick = (e) => {
   e.stopPropagation();
   if (!isCallConnected) {
@@ -3675,9 +3571,7 @@ $('btnKidsQuiz').onclick = (e) => {
   scheduleAutoHide();
 };
 
-// ===================================================
-// WHITEBOARD MODULE
-// ===================================================
+// Whiteboard
 let isDrawing = false;
 let currentColor = '#10b981';
 let currentLineWidth = 4;
@@ -3847,9 +3741,7 @@ $('btnWhiteboard').onclick = (e) => {
   scheduleAutoHide();
 };
 
-// ===================================================
-// TIC-TAC-TOE MODULE
-// ===================================================
+// Tic-Tac-Toe
 let tttSessionUnsub = null;
 let lastAnnouncedTttWinId = null;
 
@@ -4039,9 +3931,7 @@ function cleanupKidsModules() {
   if (ctx && canvasEl) ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 }
 
-// ===================================================
-// JOIN CALL & WEBRTC CALL ENGINE
-// ===================================================
+// Call Session & Peer WebRTC
 async function joinCallSession() {
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = null;
@@ -4243,7 +4133,7 @@ $('btnAddPerson').onclick = (e) => {
 };
 $('closeAddModalBtn').onclick = () => { $('addParticipantModal').hidden = true; };
 
-// PIP WINDOW SWAP
+// PiP Swap Handlers
 let pipTouchStartX = 0, pipTouchStartY = 0, pipMoved = false;
 
 pipWrap.addEventListener('touchstart', e => {
@@ -4311,7 +4201,7 @@ callScreen.addEventListener('click', e => {
   if (isH) scheduleAutoHide();
 });
 
-// IN-CALL CONTROLS & HANGUP
+// Call Controls
 $('micBtn').onclick = async (e) => {
   e.stopPropagation();
   micEnabled = !micEnabled;
@@ -4443,9 +4333,8 @@ async function hangup(silent = false) {
     pipRestoreBtn.hidden = true;
     pipWrap.style.opacity = '1';
     $('camBtn').classList.remove('off');
-    $('micBtn').classList.remove('off');
-    $('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea')) $('voiceCallArea').hidden = true;
+    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
 
@@ -4487,9 +4376,7 @@ async function requestWakeLock() {
 }
 function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; } }
 
-// ===================================================
-// HARDWARE BACK BUTTON HANDLER
-// ===================================================
+// Hardware Back Button
 let backPressedOnce = false;
 function setupHardwareBackButton() {
   window.addEventListener('popstate', (e) => {
@@ -4498,17 +4385,16 @@ function setupHardwareBackButton() {
       e.preventDefault();
       return;
     }
-    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal'), $('phoneContactsModal')];
+    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
     for (const m of openModals) {
       if (m && !m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     }
     if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('kidsWhiteboardModal').hidden) {
-      $('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       history.pushState(null, '', window.location.href); e.preventDefault(); return;
     }
@@ -4527,15 +4413,14 @@ function setupHardwareBackButton() {
   if (!isNativeApp() || !appPlugin) return;
   appPlugin.addListener('backButton', () => {
     if (Date.now() < ignoreBackUntil) return;
-    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal'), $('phoneContactsModal')];
+    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
     for (const m of openModals) { if (m && !m.hidden) { m.hidden = true; return; } }
     if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
-    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {
-      $('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       return;
     }
@@ -4557,18 +4442,56 @@ function setupHardwareBackButton() {
 }
 
 // ===================================================
-// KEYBOARD SYNC (Safe Scroll)
+// 🟢 FIX: VIEWPORT SYNC & FIXED KEYBOARD LOCK
 // ===================================================
+if (window.visualViewport) {
+  const syncViewport = () => {
+    if (!chatScreen.hidden) {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      
+      const vh = window.visualViewport.height;
+      const vt = window.visualViewport.offsetTop;
+      
+      chatScreen.style.position = 'fixed';
+      chatScreen.style.top = `${vt}px`;
+      chatScreen.style.height = `${vh}px`;
+      chatScreen.style.width = '100%';
+      chatScreen.style.overflow = 'hidden';
+
+      const body = $('chatBody');
+      if (body) {
+        body.scrollTop = body.scrollHeight;
+      }
+    }
+  };
+
+  window.visualViewport.addEventListener('resize', syncViewport);
+  window.visualViewport.addEventListener('scroll', () => {
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+  });
+}
+
 chatInput.addEventListener('focus', () => {
   setTimeout(() => {
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
     const body = $('chatBody');
     if (body) body.scrollTop = body.scrollHeight;
-  }, 200);
+  }, 100);
 });
 
-// ===================================================
-// OTA UPDATE
-// ===================================================
+chatInput.addEventListener('blur', () => {
+  if (!chatScreen.hidden) {
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    chatScreen.style.top = '0px';
+    chatScreen.style.height = '100%';
+  }
+});
+
+// OTA Update
 async function checkWebOtaUpdate(manual = false) {
   try {
     if (manual) toast(currentLang === 'hi' ? 'अपडेट की जांच हो रही है...' : 'Checking for update...');
@@ -4611,14 +4534,11 @@ async function checkWebOtaUpdate(manual = false) {
   }
 }
 
-$('checkUpdateBtn').onclick = () => {
-  $('profileModal').hidden = true;
+$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
   checkWebOtaUpdate(true);
 };
 
-// ===================================================
-// DEEP LINKS
-// ===================================================
+// Deep Links
 function handleDeepLinks() {
   try {
     if ('serviceWorker' in navigator) {
@@ -4633,7 +4553,7 @@ function handleDeepLinks() {
             renderContacts();
           }
         } else if (data.type === 'OPEN_CHAT' && data.targetId) {
-          openChat(data.targetId, data.senderName || 'उपयोगकर्ता', true);
+          openChat(data.targetId, data.senderName || 'उपयोगकर्ता');
         } else if (data.type === 'ACCEPT_CALL' && data.callId) {
           if (!isCallConnected) handleDirectAcceptCall(data.callId);
         }
@@ -4647,7 +4567,7 @@ function handleDeepLinks() {
 
     if (openChatId) {
       window.history.replaceState({}, document.title, window.location.pathname);
-      setTimeout(() => openChat(openChatId, openChatName || 'उपयोगकर्ता', true), 800);
+      setTimeout(() => openChat(openChatId, openChatName || 'उपयोगकर्ता'), 800);
     } else if (accCallId) {
       window.history.replaceState({}, document.title, window.location.pathname);
       handleDirectAcceptCall(accCallId);
@@ -4663,7 +4583,7 @@ function handleDeepLinks() {
           const aId = url.searchParams.get('acceptCallId');
 
           if (aId) handleDirectAcceptCall(aId);
-          else if (chatTgtId) openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता', true);
+          else if (chatTgtId) openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता');
         } catch(e) {}
       });
 
@@ -4676,9 +4596,7 @@ function handleDeepLinks() {
   }
 }
 
-// ===================================================
-// INIT APP
-// ===================================================
+// App Initialization
 async function initApp() {
   try {
     applyLanguage(currentLang);
@@ -4704,5 +4622,5 @@ if (document.readyState === 'loading') {
 }
 
 /* =========================================================================
-   <<<<<<<<<<<<<<<<<<<< [PART 3 OF 3 समाप्त: app.js पूर्ण] <<<<<<<<<<<<<<<<<<<<
+   <<<<<<<<<<<<<<<<<<<< [PART 3 OF 3: app.js complete] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
