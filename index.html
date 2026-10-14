@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#090d10">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="style.css?v=1.23.5" id="baseStyle">
+<link rel="stylesheet" href="style.css?v=1.23.6" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
   try {
@@ -206,14 +206,14 @@
 <!-- 💬 CHAT -->
 <div id="chatScreen" class="screen" hidden>
   <div class="chat-header">
-    <div style="display:flex;align-items:center;gap:12px">
-      <button id="chatBackBtn" style="border:0;font-size:26px;background:none;color:#94a3b8;padding:2px 4px">‹</button>
+    <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1">
+      <button id="chatBackBtn" style="border:0;font-size:26px;background:none;color:var(--text-muted);padding:2px 4px;cursor:pointer">‹</button>
       <div class="contact-avatar" id="chatAvatar">
         <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       </div>
-      <div>
-        <div style="font-size:17px;font-weight:900;color:#fff;letter-spacing:0.2px" id="chatTargetName">उपयोगकर्ता</div>
-        <div style="font-size:11px" id="chatTargetStatus">ऑफलाइन</div>
+      <div class="chat-header-info">
+        <div class="chat-target-name" id="chatTargetName">उपयोगकर्ता</div>
+        <div class="chat-target-status" id="chatTargetStatus">ऑफलाइन</div>
       </div>
     </div>
     <div class="chat-header-actions">
@@ -418,13 +418,13 @@
       } else {
         const defaultScript = document.createElement('script');
         defaultScript.type = 'module';
-        defaultScript.src = 'app.js?v=1.23.5';
+        defaultScript.src = 'app.js?v=1.23.6';
         document.body.appendChild(defaultScript);
       }
     } catch(e) {
       const defaultScript = document.createElement('script');
       defaultScript.type = 'module';
-      defaultScript.src = 'app.js?v=1.23.5';
+      defaultScript.src = 'app.js?v=1.23.6';
       document.body.appendChild(defaultScript);
     }
   })();

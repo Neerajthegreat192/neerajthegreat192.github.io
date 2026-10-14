@@ -1,5 +1,5 @@
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3 शुरू: app.js v1.23.0] >>>>>>>>>>>>>>>>>>>>
+   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3 शुरू: app.js v1.23.6] >>>>>>>>>>>>>>>>>>>>
    कॉन्फ़िगरेशन, स्टेट, नेटिव ब्रिज, ऑटो-डाउनलोड, प्रेजेंस, संपर्क (Core Fix)
    ========================================================================= */
 
@@ -9,28 +9,22 @@ import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
 // ✅ Fixed version (native APK का baseline — silent update इसे बदल सकता है)
-// यह सिर्फ पहली बार initial value set करने के लिए है
-const CURRENT_APP_VERSION = "1.23.0";
+const CURRENT_APP_VERSION = "1.23.6";
 
 try {
-  // अगर OTA cache कभी corrupt हो जाए तो recover करने के लिए safety net
-  // ⚠️ Version mismatch पर cache clear मत करो — silent update handle करेगा
   const cachedVer = localStorage.getItem('ota_active_ver');
   const cachedJs = localStorage.getItem('ota_cached_js');
   const cachedCss = localStorage.getItem('ota_cached_css');
 
-  // Case 1: ota_active_ver मौजूद नहीं है → पहली बार install, सेट कर दो
   if (!cachedVer) {
     localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION);
   }
 
-  // Case 2: Version है पर cache files अधूरी हैं → वो version clear करो
   if (cachedVer && (!cachedJs || !cachedCss || cachedJs.trim() === '' || cachedCss.trim() === '')) {
     localStorage.removeItem('ota_active_ver');
     localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION);
   }
 } catch(e) {
-  // कुछ भी fail हो तो safe default
   try { localStorage.setItem('ota_active_ver', CURRENT_APP_VERSION); } catch(e2) {}
 }
 
@@ -299,7 +293,7 @@ async function loadPhoneContacts() {
   });
 }
 
-// 🆕 AUTO SAVE — tries FileSaveService first (reliable + progress notification)
+// 🟡 BUG 3 FIX: Robust Media Auto Save
 function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
   if (!base64Data || !msgId) return;
   const cacheKey = 'auto_saved_' + msgId;
@@ -308,9 +302,10 @@ function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
   const base64Only = base64Data.split(',')[1] || base64Data;
   let saved = false;
 
-  if (isNativeApp() && window.AndroidAudio?.saveMediaViaService) {
+  if (isNativeApp() && (window.AndroidBridge?.saveMediaViaService || window.AndroidAudio?.saveMediaViaService)) {
     try {
-      window.AndroidAudio.saveMediaViaService(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
+      const bridge = window.AndroidBridge || window.AndroidAudio;
+      bridge.saveMediaViaService(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
       saved = true;
     } catch(e) { console.warn('saveMediaViaService failed:', e); }
   }
@@ -343,11 +338,17 @@ function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
 }
 
 function saveMediaViaNative(base64Data, fileName, mimeType) {
+  if (window.AndroidBridge?.saveMediaViaService) {
+    try {
+      window.AndroidBridge.saveMediaViaService(base64Data, fileName, mimeType);
+      return 'service-started';
+    } catch(e) {}
+  }
   if (window.AndroidAudio?.saveMediaViaService) {
     try {
       window.AndroidAudio.saveMediaViaService(base64Data, fileName, mimeType);
       return 'service-started';
-    } catch(e) { console.warn('Service save failed, trying direct'); }
+    } catch(e) {}
   }
   if (window.AndroidAudio?.saveMediaToDownloads) {
     try { return window.AndroidAudio.saveMediaToDownloads(base64Data, fileName, mimeType); } catch(e) { return ''; }
@@ -414,7 +415,7 @@ function openAppSettingsNative() {
 }
 
 // ===================================================
-// FCM TOKEN (Fixed for v1.23.0)
+// FCM TOKEN (Fixed for v1.23.6 & Native Sync)
 // ===================================================
 async function waitForPushPlugin(maxAttempts = 20) {
   for (let i = 0; i < maxAttempts; i++) {
@@ -432,26 +433,26 @@ async function saveFcmTokenToFirebase(token) {
     const uid = myUserId || localStorage.getItem('vc_user_id');
     if (!uid) {
       pendingFcmToken = token;
-      console.log('[FCM] Token queued (user id not ready)');
       return;
     }
     await update(ref(db, `users/${uid}`), { fcmToken: token });
     if (window.AndroidAudio?.setUserIdForFcm) {
       try { window.AndroidAudio.setUserIdForFcm(uid); } catch(e){}
     }
-    console.log('[FCM] ✓ Token saved for uid:', uid);
+    if (window.AndroidBridge?.syncUser) {
+      try { window.AndroidBridge.syncUser(uid); } catch(e){}
+    }
   } catch(e) { console.error('[FCM] save error:', e); }
 }
 
 async function setupNativePushListeners() {
   if (!isNativeApp()) return;
   const push = await waitForPushPlugin();
-  if (!push) { console.warn('[FCM] Push plugin not available'); return; }
+  if (!push) return;
   if (window.__pushListenersRegistered) return;
   window.__pushListenersRegistered = true;
 
   push.addListener('registration', async (token) => {
-    console.log('[FCM] ✓ Token received:', (token.value || '').substring(0, 24) + '...');
     await saveFcmTokenToFirebase(token.value);
   });
 
@@ -461,15 +462,12 @@ async function setupNativePushListeners() {
 
   push.addListener('pushNotificationReceived', async (notification) => {
     const data = notification.data || {};
-    console.log('[FCM] Foreground push:', data);
-
     const rawCallId = data.callId || '';
     const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined'
       && !rawCallId.startsWith('CHAT_') && !rawCallId.startsWith('CANCEL_')
       && String(rawCallId).trim() !== '';
     if (isRealCall) { handleIncomingCallNotification(data, false); return; }
 
-    // 🆕 Chat message — immediate update in-app
     if (data.roomId && data.messageId) {
       try {
         const msgSnap = await get(ref(db, `chats/${data.roomId}/messages/${data.messageId}`));
@@ -495,14 +493,8 @@ async function setupNativePushListeners() {
             localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
           } catch(e) {}
           renderContacts();
-          if (currentChatTargetId === targetId) {
-            setTimeout(() => {
-              const body = $('chatBody');
-              if (body) body.scrollTop = body.scrollHeight;
-            }, 250);
-          }
         }
-      } catch(e) { console.warn('[FCM] chat refresh failed:', e); }
+      } catch(e) {}
 
       playMessageBeep();
       const senderName = data.title || 'नया संदेश';
@@ -530,17 +522,11 @@ async function setupNativePushListeners() {
     }
   });
 
-  // Immediate registration attempt
   try {
     let perm = await push.checkPermissions();
     if (perm.receive !== 'granted') perm = await push.requestPermissions();
-    if (perm.receive === 'granted') {
-      await push.register();
-      console.log('[FCM] ✓ push.register() called');
-    } else {
-      console.warn('[FCM] Notification permission denied');
-    }
-  } catch(e) { console.error('[FCM] Registration attempt failed:', e); }
+    if (perm.receive === 'granted') await push.register();
+  } catch(e) {}
 
   const cachedToken = localStorage.getItem('vc_fcm_token');
   if (cachedToken) await saveFcmTokenToFirebase(cachedToken);
@@ -865,16 +851,16 @@ async function initPresence() {
 
   if (myFcmToken) await update(userRef, { fcmToken: myFcmToken }).catch(()=>{});
 
-  // 🆕 Flush pending FCM token after user id available
   if (pendingFcmToken) {
     const tok = pendingFcmToken;
     pendingFcmToken = null;
     await update(userRef, { fcmToken: tok }).catch(()=>{});
-    console.log('[FCM] Queued token flushed:', myUserId);
   }
-  // 🆕 Always send userId to native side (for onNewToken REST save)
   if (window.AndroidAudio?.setUserIdForFcm) {
     try { window.AndroidAudio.setUserIdForFcm(myUserId); } catch(e){}
+  }
+  if (window.AndroidBridge?.syncUser) {
+    try { window.AndroidBridge.syncUser(myUserId); } catch(e){}
   }
 
   presenceUnsubs.push(onValue(connectedRef, async snap => {
@@ -954,6 +940,9 @@ $('saveNameBtn').onclick = async () => {
   myUserId = val.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Math.floor(100 + Math.random()*900);
   localStorage.setItem('vc_user_id', myUserId);
   localStorage.setItem('vc_user_name', myUserName);
+  if (window.AndroidBridge?.syncUser) {
+    try { window.AndroidBridge.syncUser(myUserId); } catch(e){}
+  }
   $('nameModal').hidden = true;
   $('permNoticeModal').hidden = false;
   setTimeout(async () => { try { await requestNotificationPermission(); } catch(e) {} }, 500);
@@ -1026,7 +1015,7 @@ $('clearChatHistoryBtn').onclick = async () => {
 
 $('resetProfileBtn').onclick = async () => {
   if (!confirm('क्या आप अपनी आईडी हटाकर रीसेट करना चाहते हैं?')) return;
-  try { await remove(ref(db, `users/${myUserId}`)); await remove(ref(db, `user_inbox/${myUserId}`)); } catch(e) {}
+  try { await remove(ref(db, `users/${myUserId}`)); await remove(ref(db, `user_inbox/${myUserId}`)); } catch(e){}
   localStorage.clear(); location.href = location.pathname;
 };
 
@@ -1066,6 +1055,10 @@ function openAdminPanel() {
       if (confirm(`क्या आप ${u.name} को स्थायी रूप से हटाना चाहते हैं?`)) {
         await remove(ref(db, `users/${id}`));
         await remove(ref(db, `user_inbox/${id}`));
+        delete allOnlineUsers[id];
+        delete latestChatSnippets[id];
+        delete unreadCounts[id];
+        renderContacts();
         toast(`${u.name} को हटा दिया गया`); openAdminPanel();
       }
     };
@@ -1093,7 +1086,7 @@ $('tabCallsBtn').onclick = () => {
 };
 
 // ===================================================
-// CALL LOGS (v1.23.0: with Incoming/Outgoing/Missed labels)
+// CALL LOGS
 // ===================================================
 async function recordCallLog(entry) {
   try {
@@ -1145,7 +1138,6 @@ function renderCallLogs() {
     const tag = isVoice ? '📞 ' : '📹 ';
     const t = translations[currentLang];
 
-    // 🆕 v1.23.0 — Incoming/Outgoing/Missed with duration
     if (l.type === 'missed') {
       iconHtml = `<span class="call-log-badge call-missed">↙ ${tag}${t.missed}</span>`;
     } else if (l.type === 'incoming') {
@@ -1177,7 +1169,7 @@ function renderCallLogs() {
 }
 
 // ===================================================
-// CONTACTS
+// CONTACTS (🔴 BUG 2 FIX: Filter Deleted Users)
 // ===================================================
 const getChatRoomId = (a, b) => [a, b].sort().join('__');
 
@@ -1284,11 +1276,14 @@ function renderContacts() {
   const amIAdmin = isNeerajBadola(myUserName);
   const q = (searchInput?.value || '').trim().toLowerCase();
 
+  // 🔴 BUG 2 FIX: Valid registered user IDs
+  const validUsersSet = new Set(Object.keys(allOnlineUsers));
+
   const contactIds = new Set();
   Object.keys(allOnlineUsers).forEach(id => { if (id && id !== myUserId) contactIds.add(id); });
-  Object.keys(latestChatSnippets).forEach(id => { if (id && id !== myUserId) contactIds.add(id); });
-  Object.keys(unreadCounts).forEach(id => { if (id && id !== myUserId && unreadCounts[id] > 0) contactIds.add(id); });
-  allCallLogs.forEach(l => { if (l && l.targetId && l.targetId !== myUserId) contactIds.add(l.targetId); });
+  Object.keys(latestChatSnippets).forEach(id => { if (id && id !== myUserId && validUsersSet.has(id)) contactIds.add(id); });
+  Object.keys(unreadCounts).forEach(id => { if (id && id !== myUserId && unreadCounts[id] > 0 && validUsersSet.has(id)) contactIds.add(id); });
+  allCallLogs.forEach(l => { if (l && l.targetId && l.targetId !== myUserId && validUsersSet.has(l.targetId)) contactIds.add(l.targetId); });
 
   let userIds = Array.from(contactIds).filter(id => {
     const u = getUserInfo(id);
@@ -1345,7 +1340,7 @@ function renderContacts() {
         <div class="contact-right-col">
           <span class="msg-time-label">${timeHtml}</span>
           <span class="contact-live-status ${statusClass}">${statusText}</span>
-          ${unread > 0 ? `<div class="badge-unread">${unread > 99 ? '99+' : unread}</div>` : `<div style="height:20px"></div>`}
+          ${unread > 0 ? `<div class="badge-unread" data-id="${id}">${unread > 99 ? '99+' : unread}</div>` : `<div style="height:20px"></div>`}
         </div>
       </div>
     `;
@@ -1430,7 +1425,7 @@ setInterval(() => {
    <<<<<<<<<<<<<<<<<<<< [PART 1 समाप्त] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js v1.23.0] >>>>>>>>>>>>>>>>>>>>
+   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js v1.23.6] >>>>>>>>>>>>>>>>>>>>
    लॉन्ग-प्रेस, रिएक्शन, स्वाइप-रिप्लाई, चैट, वॉयस डॉक, फ़ोन संपर्क पिकर
    ========================================================================= */
 
@@ -1688,6 +1683,7 @@ async function toggleStarMessage(roomPath, msgId, m) {
   } catch(e) { toast('त्रुटि'); }
 }
 
+// 🟡 BUG 5 FIX: Immediate DOM and Firebase Delete Synchronization
 async function deleteMessage(roomPath, msgId, forEveryone) {
   try {
     if (forEveryone) {
@@ -1699,7 +1695,9 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       const el = document.getElementById(`msg_${msgId}`);
       if (el) {
         el.className = `chat-bubble is-deleted me`;
-        el.innerHTML = `<div style="font-style:italic;color:#94a3b8">🚫 यह संदेश हटा दिया गया है</div><div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>`;
+        el.innerHTML = `
+          <div style="font-style:italic;opacity:0.7">🚫 यह संदेश हटा दिया गया है</div>
+          <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>`;
       }
     } else {
       const el = $(`msg_${msgId}`);
@@ -1760,7 +1758,7 @@ async function forwardMessageTo(targetId, m, targetName) {
 }
 
 // ===================================================
-// CHAT SCREEN
+// CHAT SCREEN (🟢 BUG 7 FIX: Zero unread immediately)
 // ===================================================
 let chatUnsub = null;
 let activePlayingAudio = null;
@@ -1771,8 +1769,19 @@ let scrollFabVisible = false;
 function openChat(tId, tName) {
   currentChatTargetId = tId;
   currentChatTargetName = tName;
+  
+  // 🟢 Instant unread zeroing
   unreadCounts[tId] = 0;
+  const badgeEl = document.querySelector(`.badge-unread[data-id="${tId}"]`);
+  if (badgeEl) badgeEl.remove();
+
+  if (myUserId && tId) {
+    set(ref(db, `user_inbox/${myUserId}/${tId}/unread`), 0).catch(()=>{});
+  }
+
   renderContacts();
+  
+  // 🔴 Header update with clean CSS classes
   $('chatTargetName').textContent = tName;
   isInitialChatOpen = true;
 
@@ -1866,6 +1875,7 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
+// 🟡 BUG 4 & BUG 5 FIX: Real-time Message Updates, Reliable Ticks, Instant Delete
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -1880,11 +1890,10 @@ function loadChatMessages() {
     const newKeySet = new Set(sortedKeys);
     currentMsgEls.forEach(el => { if (!newKeySet.has(el.dataset.msgId)) el.remove(); });
 
-    // Full rebuild for date separator correctness
     const visibleCount = sortedKeys.filter(k => !isDeletedForMe(k)).length;
     const existingCount = body.querySelectorAll('[data-msg-id]').length;
 
-        if (existingCount !== visibleCount) {
+    if (existingCount !== visibleCount) {
       body.innerHTML = '';
       sortedKeys.forEach(msgId => {
         const m = msgs[msgId];
@@ -1897,32 +1906,25 @@ function loadChatMessages() {
         const el = document.getElementById(`msg_${msgId}`);
         if (!el) return;
 
-        // ✅ Real-time DELETE update (no reload needed)
+        // 🟡 BUG 5: Real-time Delete Update without reload
         if (m.deleted || m.type === 'deleted') {
           if (!el.classList.contains('is-deleted')) {
             el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
-            el.innerHTML = `<div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div><div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>`;
+            el.innerHTML = `<div style="font-style:italic;opacity:0.7">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div><div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>`;
           }
           return;
         }
 
-        // ✅ Real-time REACTIONS update
+        // Real-time Reactions Update
         const reactEl = el.querySelector('.bubble-reactions');
         const newReactHtml = renderReactionsHtml(m, msgId);
         if (reactEl && !newReactHtml) reactEl.remove();
         else if (newReactHtml && reactEl) reactEl.outerHTML = newReactHtml;
         else if (newReactHtml && !reactEl) el.insertAdjacentHTML('beforeend', newReactHtml);
 
-        // ✅ Real-time TICK (✓ → ✓✓ grey → ✓✓ blue) update
+        // 🟡 BUG 4: Real-time Guaranteed Tick Updates with requestAnimationFrame
         if (m.senderId === myUserId) {
-          const metaEl = el.querySelector('.chat-meta');
-          if (metaEl) {
-            let tickHtml = '';
-            if (m.read) tickHtml = '<span class="tick-mark tick-read">✓✓</span>';
-            else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered">✓✓</span>';
-            else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
-            metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
-          }
+          applyTickSafely(msgId, m);
         }
       });
     }
@@ -1943,6 +1945,28 @@ function loadChatMessages() {
   });
 
   body.onscroll = updateScrollFab;
+}
+
+function applyTickSafely(msgId, m) {
+  const applyTick = () => {
+    const el = document.getElementById(`msg_${msgId}`);
+    if (el) {
+      const metaEl = el.querySelector('.chat-meta');
+      if (metaEl) {
+        let tickHtml = '';
+        if (m.read) tickHtml = '<span class="tick-mark tick-read">✓✓</span>';
+        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered">✓✓</span>';
+        else tickHtml = '<span class="tick-mark tick-sent">✓</span>';
+        metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (!applyTick()) {
+    requestAnimationFrame(() => applyTick());
+  }
 }
 
 function appendMessageBubble(body, msgId, m, roomPath, allMsgs) {
@@ -1977,7 +2001,7 @@ function appendMessageBubble(body, msgId, m, roomPath, allMsgs) {
 
   if (m.type === 'deleted' || m.deleted) {
     el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
-    el.innerHTML = `<div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div><div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>`;
+    el.innerHTML = `<div style="font-style:italic;opacity:0.7">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div><div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>`;
     body.appendChild(el);
     return;
   }
@@ -2101,7 +2125,7 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId, mediaMe
   try {
     const tSnap = await get(ref(db, `users/${targetId}`));
     const token = tSnap.val()?.fcmToken;
-    if (!token) { console.warn('No FCM token for', targetId); return; }
+    if (!token) return;
     const payload = {
       token,
       title: myUserName,
@@ -2122,13 +2146,12 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId, mediaMe
       payload.fileName = mediaMeta.fileName;
       payload.mimeType = mediaMeta.mimeType;
     }
-    const res = await fetch("https://neeraj.neerajthegreat192.workers.dev/", {
+    await fetch("https://neeraj.neerajthegreat192.workers.dev/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (!res.ok) console.warn('Push HTTP', res.status);
-  } catch(e) { console.warn('Push send failed:', e.message); }
+  } catch(e) {}
 }
 
 async function sendChatMessage() {
@@ -2522,18 +2545,19 @@ $('closeMediaViewerBtn').onclick = () => {
   mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
 };
 
-// 🆕 v1.23.0 — Save button uses FileSaveService reliably
+// 🟡 BUG 3 FIX: Reliable Save via Service Bridge
 $('saveMediaBtn').onclick = () => {
   if (!mediaViewerState.dataUrl) return;
   const { dataUrl, mimeType, fileName } = mediaViewerState;
   const base64Only = dataUrl.split(',')[1] || dataUrl;
 
-  if (isNativeApp() && window.AndroidAudio?.saveMediaViaService) {
+  if (isNativeApp() && (window.AndroidBridge?.saveMediaViaService || window.AndroidAudio?.saveMediaViaService)) {
     try {
-      window.AndroidAudio.saveMediaViaService(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
+      const bridge = window.AndroidBridge || window.AndroidAudio;
+      bridge.saveMediaViaService(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
       toast('📥 Download हो रहा है — Downloads/VideoCallApp');
       return;
-    } catch(e) { console.warn('saveMediaViaService failed:', e); }
+    } catch(e) {}
   }
 
   const result = saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
@@ -2847,7 +2871,7 @@ $('dockSendBtn').onclick = sendVoiceDock;
    <<<<<<<<<<<<<<<<<<<< [PART 2 समाप्त] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js v1.23.0] >>>>>>>>>>>>>>>>>>>>
+   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js v1.23.6] >>>>>>>>>>>>>>>>>>>>
    कॉल लॉजिक, वेबआरटीसी, कंट्रोल्स, फन मोड, ओटीए, इनिशियलाइज़ेशन
    ========================================================================= */
 
@@ -3920,8 +3944,6 @@ function setupHardwareBackButton() {
   });
 }
 
-// ✅ Keyboard खुलने पर header को top पर fixed रखें (scroll reset)
-// ✅ v1.23.2 — Simple keyboard handling
 chatInput.addEventListener('focus', () => {
   setTimeout(() => {
     const body = $('chatBody');
@@ -4023,5 +4045,5 @@ if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded
 else initApp();
 
 /* =========================================================================
-   <<<<<<<<<<<<<<<<<<<< [PART 3 समाप्त: app.js v1.23.0 पूर्ण] <<<<<<<<<<<<<<<<<<<<
+   <<<<<<<<<<<<<<<<<<<< [PART 3 समाप्त: app.js v1.23.6 पूर्ण] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
