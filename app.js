@@ -1,7 +1,7 @@
-// ===================================================
-// 📄 app.js — Part 1 of 3 (Version 1.21.0)
-// Config, State, Native Bridge, Ringtone Fix & Presence
-// ===================================================
+/* =========================================================================
+   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
+   कॉन्फ़िगरेशन, स्टेट, नेटिव ब्रिज, रिंगटोन (BUG 2 फ़िक्स), प्रेजेंस व संपर्क
+   ========================================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -9,7 +9,7 @@ import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push
 const CURRENT_APP_VERSION = "1.21.0";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
-// पुराना OTA कैश साफ़ करें ताकि नया 1.21.0 कोड ही चले
+// पुराना OTA कैश साफ़ करें ताकि नया 1.21.0 कोड ही लोड हो
 try {
   const cachedVer = localStorage.getItem('ota_active_ver');
   if (cachedVer !== CURRENT_APP_VERSION) {
@@ -146,7 +146,7 @@ function applyLanguage(lang) {
 if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.value);
 
 // ===================================================
-// USER & CALL STATES
+// USER & CALL STATES (सभी ग्लोबल वेरिएबल सिर्फ एक बार डिक्लेयर हैं)
 // ===================================================
 let myUserId = localStorage.getItem('vc_user_id') || '';
 let myUserName = localStorage.getItem('vc_user_name') || '';
@@ -169,7 +169,10 @@ if (myUserName) {
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
 
-let localStream = null, activeCallId = null, currentChatTargetId = null, currentChatTargetName = null;
+let localStream = null, activeCallId = null;
+let currentChatTargetId = null, currentChatTargetName = null;
+let currentCallType = 'outgoing', currentCallTargetId = null, currentCallTargetName = null;
+
 let isCaller = false, callStartTime = 0, timerTimer = null, facingMode = 'user';
 let micEnabled = true, camEnabled = true, speakerEnabled = true, isCallConnected = false;
 let isAudioOnlyCall = false;
@@ -495,7 +498,7 @@ function stopOutgoingCallTone() { if (outgoingRingTimer) { clearInterval(outgoin
 
 // # FIX BUG 2: इन-ऐप वेब ऑडियो रिंगटोन को खाली किया — हमेशा सिर्फ Android Native Ringtone बजेगी
 function startIncomingRingtone() {
-  // In-app web ringtone intentionally disabled to prevent double ringing
+  // In-app web ringtone intentionally disabled to prevent double ringing conflict
 }
 
 // # FIX BUG 2: कॉल कटने या उठने पर केवल नेटिव रिंगटोन बंद होगी
@@ -766,7 +769,6 @@ async function initPresence() {
   listenForLatestChatPreviews();
   listenForCallLogs();
   
-  // P2P Media File Transfer के लिए ग्लोबल लिसनर (Part 2 में परिभाषित)
   if (typeof listenForIncomingMediaSignals === 'function') {
     listenForIncomingMediaSignals();
   }
@@ -1155,10 +1157,14 @@ function renderContacts() {
 }
 searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
-// ===================================================
-// 📄 app.js — Part 2 of 3 (Version 1.21.0)
-// Long-Press Menu, P2P DataChannel Engine, Chat & Media
-// ===================================================
+
+/* =========================================================================
+   <<<<<<<<<<<<<<<<<<<< [PART 1 OF 3 समाप्त: app.js] <<<<<<<<<<<<<<<<<<<<
+   ========================================================================= */
+/* =========================================================================
+   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
+   लॉन्ग-प्रेस मेन्यू, P2P फ़ाइल शेयरिंग डेटा चैनल, चैट और मीडिया हैंडलर्स
+   ========================================================================= */
 
 // ===================================================
 // 🆕 CHAT MESSAGE LONG-PRESS MENU (# FIX BUG 3, 4, 5)
@@ -1316,7 +1322,7 @@ function openMessageMenu(el, msgId, m) {
     };
   });
 
-  // # FIX BUG 3: बैकड्रॉप पर टैप या क्लिक से ही मेन्यू बंद होगा (ऑटो टाइमआउट हटाया गया)
+  // # FIX BUG 3: बैकड्रॉप पर टैप या क्लिक से ही मेन्यू बंद होगा (ऑटो क्लोज़ टाइमर हटाया गया)
   const backdrop = menu.querySelector('.menu-backdrop');
   if (backdrop) {
     backdrop.addEventListener('touchstart', (e) => { e.preventDefault(); closeMessageMenu(); });
@@ -1564,7 +1570,7 @@ async function forwardMessageTo(targetId, m, targetName) {
 
 // ===================================================
 // P2P MEDIA TRANSFER — WEBRTC DATA CHANNEL ENGINE
-// (सेंडर हमेशा Offer बनाएगा + रिसीवर लिसनर शामिल)
+// (प्रॉमिस हैंग फ़िक्स + रिसीवर लिसनर शामिल)
 // ===================================================
 async function getOrCreateMediaDataChannel(peerId) {
   if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
@@ -1601,7 +1607,6 @@ async function getOrCreateMediaDataChannel(peerId) {
       reject(new Error("Media channel timeout"));
     }, 25000);
 
-    // सेंडर हमेशा DataChannel बनाता है और Offer भेजता है
     const dc = pc.createDataChannel('media', { ordered: true });
     setupMediaDataChannel(peerId, dc);
 
@@ -1616,17 +1621,24 @@ async function getOrCreateMediaDataChannel(peerId) {
         await pc.setRemoteDescription(new RTCSessionDescription(a));
         await pc.flushIce();
 
-        dc.onopen = () => {
+        // प्रॉमिस हैंग फ़िक्स: अगर डेटा चैनल पहले ही खुल चुका है तो तुरंत रिज़ॉल्व करें
+        if (dc.readyState === 'open') {
           clearTimeout(timeout);
           mediaDataChannels[peerId] = dc;
           resolve(dc);
-        };
+        } else {
+          dc.onopen = () => {
+            clearTimeout(timeout);
+            mediaDataChannels[peerId] = dc;
+            resolve(dc);
+          };
+        }
       }
     });
   });
 }
 
-// 🆕 रिसीवर के लिए बैकग्राउंड लिसनर (Incoming P2P Media Offer)
+// रिसीवर के लिए बैकग्राउंड लिसनर (Incoming P2P Media Offer)
 function listenForIncomingMediaSignals() {
   const incomingMediaRef = ref(db, `media_signals/${myUserId}`);
 
@@ -1668,9 +1680,13 @@ function listenForIncomingMediaSignals() {
       pc.ondatachannel = (event) => {
         const dc = event.channel;
         setupMediaDataChannel(senderId, dc);
-        dc.onopen = () => {
+        if (dc.readyState === 'open') {
           mediaDataChannels[senderId] = dc;
-        };
+        } else {
+          dc.onopen = () => {
+            mediaDataChannels[senderId] = dc;
+          };
+        }
       };
 
       await pc.setRemoteDescription(new RTCSessionDescription(o));
@@ -1737,7 +1753,7 @@ function handleMediaControlMessage(peerId, msg) {
           const base64Data = reader.result;
           updateChatMediaMessageWithData(mediaId, base64Data);
 
-          // फ़ाइल सीधे Android Downloads/VideoCallApp में सेव होती है (Firebase बाईपास)
+          // फ़ाइल सीधे Android Downloads/VideoCallApp में सुरक्षित सेव होती है
           const base64Only = base64Data.split(',')[1] || base64Data;
           const uri = saveMediaViaNative(base64Only, transfer.fileName, transfer.mimeType);
           if (uri) toast(currentLang === 'hi' ? '✅ फ़ाइल Downloads में सेव हो गई' : '✅ File saved to Downloads');
@@ -2241,13 +2257,14 @@ function loadChatMessages() {
   });
 }
 
+// 🆕 P2P फ़ाइल ट्रांसफ़र फ़िक्स: data-media-id एट्रिब्यूट जोड़ा गया ताकि UI आसानी से अपडेट हो
 function buildMediaPlaceholderHtml(msgId, m) {
   const sizeText = m.fileSize ? formatFileSize(m.fileSize) : '';
   const icon = m.type === 'image' ? '🖼️' : (m.type === 'video' ? '🎥' : '📎');
   const label = m.type === 'image' ? 'फ़ोटो' : (m.type === 'video' ? 'वीडियो' : 'फ़ाइल');
 
   return `
-    <div class="media-download-overlay" data-msg-id="${msgId}">
+    <div class="media-download-overlay" data-media-id="${m.mediaId || msgId}" data-msg-id="${msgId}">
       <div class="media-download-icon">${icon}</div>
       <div class="media-file-name">${safeName(m.fileName || label)}</div>
       <div class="media-file-size">${sizeText}</div>
@@ -2503,11 +2520,20 @@ async function requestMediaFromPeer(msgId, msg) {
   }));
 }
 
+// 🆕 वीडियो और इमेज दोनों के लिए सटीक UI रेंडरिंग फ़िक्स
 function updateChatMediaMessageWithData(mediaId, base64Data) {
-  const el = document.querySelector(`[data-media-id="${mediaId}"]`);
-  if (el) {
-    const overlay = el.closest('.media-download-overlay');
-    if (overlay) {
+  const overlay = document.querySelector(`.media-download-overlay[data-media-id="${mediaId}"]`);
+  if (overlay) {
+    const isVideo = base64Data.startsWith('data:video') || overlay.querySelector('.media-download-icon')?.textContent.includes('🎥');
+    if (isVideo) {
+      overlay.outerHTML = `
+        <div class="media-bubble">
+          <div class="media-video-thumb">
+            <video src="${base64Data}" preload="metadata" playsinline></video>
+            <div class="media-play-overlay">▶</div>
+          </div>
+        </div>`;
+    } else {
       overlay.outerHTML = `<div class="media-bubble"><img src="${base64Data}" alt="image" data-media-id="${mediaId}"></div>`;
     }
   }
@@ -2655,12 +2681,12 @@ $('photoFileInput').onchange = (e) => {
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-$('videoFileInput').onchange = (e) => {   const file = e.target.files[0];   if (file) sendMediaMessage(file);   e.target.value = ''; };$('docFileInput').onchange = (e) => {
+$('videoFileInput').onchange = (e) => { const file = e.target.files[0]; if (file) sendMediaMessage(file); e.target.value = ''; };$('docFileInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
 };
-$('anyFileInput').onchange = (e) => {   const file = e.target.files[0];   if (file) sendMediaMessage(file);   e.target.value = ''; };$('cameraCaptureInput').onchange = (e) => {
+$('anyFileInput').onchange = (e) => { const file = e.target.files[0]; if (file) sendMediaMessage(file); e.target.value = ''; };$('cameraCaptureInput').onchange = (e) => {
   const file = e.target.files[0];
   if (file) sendMediaMessage(file);
   e.target.value = '';
@@ -2937,15 +2963,20 @@ function sendVoiceDock() {
   updateActionBtnState();
 }
 $('dockSendBtn').onclick = sendVoiceDock;
-// ===================================================
-// 📄 app.js — Part 3 of 3 (Version 1.21.0 - Final)
-// Call Logic, PeerConnection, Controls, Bug 1 Fix & Init
-// ===================================================
+
+/* =========================================================================
+   <<<<<<<<<<<<<<<<<<<< [PART 2 OF 3 समाप्त: app.js] <<<<<<<<<<<<<<<<<<<<
+   ========================================================================= */
+/* =========================================================================
+   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js] >>>>>>>>>>>>>>>>>>>>
+   P2P कॉल लॉजिक, पीयर कनेक्शन, कंट्रोल्स, BUG 1 फ़िक्स व ऐप इनिशियलाइज़ेशन
+   ========================================================================= */
 
 // ===================================================
 // CALL LOGIC & INCOMING LISTENERS
+// (currentCallType, currentCallTargetId Part 1 में घोषित हैं, यहाँ पुनः let नहीं लगाया गया है)
 // ===================================================
-let currentCallType = 'outgoing', currentCallTargetId = null, currentCallTargetName = null;
+currentCallType = 'outgoing';
 
 function listenForIncoming() {
   const incomingRef = ref(db, `user_inbox/${myUserId}`);
@@ -4577,6 +4608,6 @@ if (document.readyState === 'loading') {
   initApp();
 }
 
-// ===================================================
-// END OF app.js (All 3 Parts Complete)
-// ===================================================
+/* =========================================================================
+   <<<<<<<<<<<<<<<<<<<< [PART 3 OF 3 समाप्त: app.js पूर्ण] <<<<<<<<<<<<<<<<<<<<
+   ========================================================================= */

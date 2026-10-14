@@ -20,6 +20,10 @@
   --bubble-me: #054640;
   --bubble-them: #1f2c34;
 }
+/* सभी hidden एट्रिब्यूट वाले एलिमेंट्स को सख्ती से छिपाने के लिए */
+[hidden] {
+  display: none !important;
+}
 
 * {
   box-sizing: border-box;
@@ -454,6 +458,7 @@ html, body {
   border-bottom-left-radius: 2px;
 }
 
+/* # FIX BUG 5: Delete message UI indicator */
 .chat-bubble.is-deleted {
   background: rgba(255, 255, 255, 0.05);
   border: 1px dashed var(--line);
