@@ -1479,3 +1479,63 @@ html, body {
 :root[data-theme="light"] .header .user-title,
 :root[data-theme="light"] .chat-header #chatTargetName { color: #0f172a !important; }
 :root[data-theme="light"] .chat-header #chatTargetStatus { color: #64748b !important; }
+/* ===================================================
+   🎯 FINAL KEYBOARD FIX
+   Chat screen को position: fixed बनाया ताकि keyboard खुलने पर
+   WebView का scroll header को ऊपर न खींच ले।
+   body को भी fixed किया ताकि document-level scroll रुके।
+   =================================================== */
+
+/* Body को document scroll से रोको (WebView कभी-कभी overflow:hidden को ignore कर देता है) */
+html, body {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+/* चैट स्क्रीन को viewport से fix करो */
+#chatScreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  z-index: 50 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+/* Chat header फ़िक्स रहे */
+#chatScreen .chat-header {
+  position: relative !important;
+  flex-shrink: 0 !important;
+  top: 0 !important;
+  transform: none !important;
+}
+
+/* Chat body बीच की जगह ले, scroll हो सके */
+#chatScreen .chat-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+}
+
+/* Chat footer नीचे fix रहे */
+#chatScreen .chat-footer {
+  position: relative !important;
+  flex-shrink: 0 !important;
+  bottom: 0 !important;
+}
