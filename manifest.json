@@ -1,7 +1,7 @@
 {
   "name": "VideoCallApp",
   "short_name": "VideoCallApp",
-  "id": "/?v=1.22.0",
+  "id": "/?v=1.23.0",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

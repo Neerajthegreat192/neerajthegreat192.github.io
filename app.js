@@ -1,12 +1,12 @@
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3 शुरू: app.js v1.22.0] >>>>>>>>>>>>>>>>>>>>
+   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3 शुरू: app.js v1.23.0] >>>>>>>>>>>>>>>>>>>>
    कॉन्फ़िगरेशन, स्टेट, नेटिव ब्रिज, ऑटो-डाउनलोड, प्रेजेंस, संपर्क (Core Fix)
    ========================================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const CURRENT_APP_VERSION = "1.22.0";
+const CURRENT_APP_VERSION = "1.23.0";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
 try {
@@ -87,9 +87,10 @@ const translations = {
     sending: "भेज रहे हैं...", receiving: "डाउनलोड हो रहा है...", waiting: "इंतज़ार...",
     tapToDownload: "सहेजा गया", downloading: "डाउनलोड हो रहा है", cancel: "रद्द करें",
     fileTooBig: "फाइल बहुत बड़ी है", notConnected: "प्राप्तकर्ता ऑफलाइन है", transferComplete: "डाउनलोड पूरा हुआ",
-    today: "आज", yesterday: "कल", pinned: "📌 पिन किए गए", archived: "📦 आर्काइव", onlineNow: "ऑनलाइन अभी",
+    today: "आज", yesterday: "कल", onlineNow: "ऑनलाइन अभी",
     phoneContacts: "📱 फ़ोन के संपर्क", searchContact: "नाम या नंबर खोजें...", sendSelected: "चयनित भेजें",
-    theme: "🎨 थीम", lightTheme: "लाइट", darkTheme: "डार्क", reply: "जवाब दें"
+    theme: "🎨 थीम", lightTheme: "लाइट", darkTheme: "डार्क", reply: "जवाब दें",
+    missed: "मिस्ड कॉल", incoming: "इनकमिंग", outgoing: "आउटगोइंग"
   },
   en: {
     pageTitle: "VideoCallApp", welcome: "Welcome!", enterName: "Enter your name to start calling and chatting",
@@ -103,9 +104,10 @@ const translations = {
     sending: "Sending...", receiving: "Downloading...", waiting: "Waiting...",
     tapToDownload: "Saved", downloading: "Downloading", cancel: "Cancel",
     fileTooBig: "File too big", notConnected: "Receiver is offline", transferComplete: "Download complete",
-    today: "Today", yesterday: "Yesterday", pinned: "📌 Pinned", archived: "📦 Archived", onlineNow: "Online now",
+    today: "Today", yesterday: "Yesterday", onlineNow: "Online now",
     phoneContacts: "📱 Phone Contacts", searchContact: "Search name or number...", sendSelected: "Send Selected",
-    theme: "🎨 Theme", lightTheme: "Light", darkTheme: "Dark", reply: "Reply"
+    theme: "🎨 Theme", lightTheme: "Light", darkTheme: "Dark", reply: "Reply",
+    missed: "Missed call", incoming: "Incoming", outgoing: "Outgoing"
   }
 };
 
@@ -139,6 +141,7 @@ function applyLanguage(lang) {
   setTxt('lblSpeaker', t.speaker);
   setTxt('lblHang', t.hang);
   renderContacts();
+  renderCallLogs();
 }
 if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.value);
 
@@ -148,17 +151,16 @@ if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.va
 let myUserId = localStorage.getItem('vc_user_id') || '';
 let myUserName = localStorage.getItem('vc_user_name') || '';
 let myFcmToken = localStorage.getItem('vc_fcm_token') || null;
+let pendingFcmToken = null;
 
 let allOnlineUsers = {};
 let latestChatSnippets = {};
 let unreadCounts = {};
 let allCallLogs = [];
 
-// 🆕 PHASE 1+2 NEW STATE
 let pinnedChats = {};
 let archivedChats = {};
 let currentTheme = localStorage.getItem('vc_theme') || 'dark';
-let lobbyActiveSubTab = 'all';  // 'all' | 'archived'
 
 try {
   allOnlineUsers = JSON.parse(localStorage.getItem('cached_users') || '{}');
@@ -171,7 +173,6 @@ try {
   }
 } catch(e) {}
 
-// 🆕 Track ALL presence listeners for teardown
 let presenceUnsubs = [];
 
 function applyTheme(theme) {
@@ -191,14 +192,11 @@ function saveArchivedToCache() {
   try { localStorage.setItem('vc_archived_' + myUserId, JSON.stringify(archivedChats)); } catch(e){}
 }
 
-// 🆕 User Info with fallback (Core Fix)
 function getUserInfo(id) {
   if (!id) return { id: '', name: 'उपयोगकर्ता', online: false };
   if (allOnlineUsers[id]) return allOnlineUsers[id];
-  // Fallback 1: call log
   const log = allCallLogs.find(l => l && l.targetId === id);
   if (log && log.name) return { id, name: log.name, online: false };
-  // Fallback 2: snippet-derived (rare) - use ID as name
   return { id, name: 'उपयोगकर्ता', online: false };
 }
 
@@ -285,30 +283,62 @@ async function loadPhoneContacts() {
   });
 }
 
+// 🆕 AUTO SAVE — tries FileSaveService first (reliable + progress notification)
 function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
   if (!base64Data || !msgId) return;
   const cacheKey = 'auto_saved_' + msgId;
   if (localStorage.getItem(cacheKey)) return;
-  localStorage.setItem(cacheKey, 'true');
+
   const base64Only = base64Data.split(',')[1] || base64Data;
-  const uri = saveMediaViaNative(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
-  if (uri) {
-    toast(currentLang === 'hi' ? '📥 फ़ाइल Downloads में स्वतः सेव हो गई' : '📥 File auto-saved to Downloads');
-  } else if (!isNativeApp()) {
+  let saved = false;
+
+  if (isNativeApp() && window.AndroidAudio?.saveMediaViaService) {
+    try {
+      window.AndroidAudio.saveMediaViaService(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
+      saved = true;
+    } catch(e) { console.warn('saveMediaViaService failed:', e); }
+  }
+
+  if (!saved) {
+    const uri = saveMediaViaNative(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
+    if (uri) saved = true;
+  }
+
+  if (!saved && !isNativeApp()) {
     try {
       const a = document.createElement('a');
-      a.href = base64Data; a.download = fileName || 'download';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      a.href = base64Data;
+      a.download = fileName || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      saved = true;
     } catch(e) {}
+  }
+
+  if (saved) {
+    localStorage.setItem(cacheKey, 'true');
+    if (isNativeApp()) {
+      toast(currentLang === 'hi' ? '📥 Downloads/VideoCallApp में सेव हो रहा' : '📥 Saving to Downloads/VideoCallApp');
+    } else {
+      toast(currentLang === 'hi' ? '📥 फ़ाइल Download हो गई' : '📥 File downloaded');
+    }
   }
 }
 
 function saveMediaViaNative(base64Data, fileName, mimeType) {
+  if (window.AndroidAudio?.saveMediaViaService) {
+    try {
+      window.AndroidAudio.saveMediaViaService(base64Data, fileName, mimeType);
+      return 'service-started';
+    } catch(e) { console.warn('Service save failed, trying direct'); }
+  }
   if (window.AndroidAudio?.saveMediaToDownloads) {
     try { return window.AndroidAudio.saveMediaToDownloads(base64Data, fileName, mimeType); } catch(e) { return ''; }
   }
   return '';
 }
+
 function openContactVcfNative(base64Vcf, fileName) {
   if (window.AndroidAudio?.openContactVcf) {
     try { window.AndroidAudio.openContactVcf(base64Vcf, fileName); return true; } catch(e) { return false; }
@@ -368,7 +398,7 @@ function openAppSettingsNative() {
 }
 
 // ===================================================
-// FCM TOKEN
+// FCM TOKEN (Fixed for v1.23.0)
 // ===================================================
 async function waitForPushPlugin(maxAttempts = 20) {
   for (let i = 0; i < maxAttempts; i++) {
@@ -384,30 +414,92 @@ async function saveFcmTokenToFirebase(token) {
     myFcmToken = token;
     localStorage.setItem('vc_fcm_token', token);
     const uid = myUserId || localStorage.getItem('vc_user_id');
-    if (uid) await update(ref(db, `users/${uid}`), { fcmToken: token });
-  } catch(e) {}
+    if (!uid) {
+      pendingFcmToken = token;
+      console.log('[FCM] Token queued (user id not ready)');
+      return;
+    }
+    await update(ref(db, `users/${uid}`), { fcmToken: token });
+    if (window.AndroidAudio?.setUserIdForFcm) {
+      try { window.AndroidAudio.setUserIdForFcm(uid); } catch(e){}
+    }
+    console.log('[FCM] ✓ Token saved for uid:', uid);
+  } catch(e) { console.error('[FCM] save error:', e); }
 }
 
 async function setupNativePushListeners() {
   if (!isNativeApp()) return;
   const push = await waitForPushPlugin();
-  if (!push) return;
+  if (!push) { console.warn('[FCM] Push plugin not available'); return; }
   if (window.__pushListenersRegistered) return;
   window.__pushListenersRegistered = true;
 
-  push.addListener('registration', async (token) => { await saveFcmTokenToFirebase(token.value); });
+  push.addListener('registration', async (token) => {
+    console.log('[FCM] ✓ Token received:', (token.value || '').substring(0, 24) + '...');
+    await saveFcmTokenToFirebase(token.value);
+  });
 
-  push.addListener('pushNotificationReceived', (notification) => {
+  push.addListener('registrationError', (err) => {
+    console.error('[FCM] ✗ Registration error:', JSON.stringify(err));
+  });
+
+  push.addListener('pushNotificationReceived', async (notification) => {
     const data = notification.data || {};
-    if (data.callId && data.callId !== 'null' && String(data.callId).trim() !== '') {
-      handleIncomingCallNotification(data, false);
+    console.log('[FCM] Foreground push:', data);
+
+    const rawCallId = data.callId || '';
+    const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined'
+      && !rawCallId.startsWith('CHAT_') && !rawCallId.startsWith('CANCEL_')
+      && String(rawCallId).trim() !== '';
+    if (isRealCall) { handleIncomingCallNotification(data, false); return; }
+
+    // 🆕 Chat message — immediate update in-app
+    if (data.roomId && data.messageId) {
+      try {
+        const msgSnap = await get(ref(db, `chats/${data.roomId}/messages/${data.messageId}`));
+        const msg = msgSnap.val();
+        if (msg) {
+          const parts = data.roomId.split('__');
+          const targetId = parts[0] === myUserId ? parts[1] : parts[0];
+          let msgText = msg.text || '';
+          if (msg.type === 'image') msgText = '📷 फ़ोटो';
+          else if (msg.type === 'video') msgText = '🎥 वीडियो';
+          else if (msg.type === 'audio') msgText = '🎙 वॉयस नोट';
+          else if (msg.type === 'doc') msgText = '📄 ' + (msg.fileName || 'दस्तावेज़');
+
+          latestChatSnippets[targetId] = {
+            text: msgText, time: msg.time || Date.now(),
+            senderId: msg.senderId, read: !!msg.read, delivered: !!msg.delivered
+          };
+          if (msg.senderId !== myUserId && currentChatTargetId !== targetId) {
+            unreadCounts[targetId] = (unreadCounts[targetId] || 0) + 1;
+          }
+          try {
+            localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
+            localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
+          } catch(e) {}
+          renderContacts();
+          if (currentChatTargetId === targetId) {
+            setTimeout(() => {
+              const body = $('chatBody');
+              if (body) body.scrollTop = body.scrollHeight;
+            }, 250);
+          }
+        }
+      } catch(e) { console.warn('[FCM] chat refresh failed:', e); }
+
+      playMessageBeep();
+      const senderName = data.title || 'नया संदेश';
+      toast(`💬 ${senderName}: ${data.body || 'नया संदेश'}`);
     }
   });
 
   push.addListener('pushNotificationActionPerformed', (action) => {
     const data = action.notification?.data || {};
     const rawCallId = data?.callId;
-    const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined' && String(rawCallId).trim() !== '';
+    const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined'
+      && String(rawCallId).trim() !== ''
+      && !rawCallId.startsWith('CHAT_') && !rawCallId.startsWith('CANCEL_');
     if (isRealCall) {
       if (action.actionId === 'ACTION_ACCEPT' || action.actionId === 'accept') handleDirectAcceptCall(rawCallId);
       else if (action.actionId === 'ACTION_REJECT' || action.actionId === 'reject') {
@@ -415,11 +507,27 @@ async function setupNativePushListeners() {
         if (activeCallId) update(ref(db, `call_sessions/${activeCallId}`), { status: 'rejected' }).catch(()=>{});
         closeIfLocked();
       } else handleIncomingCallNotification(data, false);
-    } else if (data && data.chatTargetId) openChat(data.chatTargetId, data.chatTargetName || 'उपयोगकर्ता', false);
+    } else if (data && (data.chatTargetId || data.senderId)) {
+      const targetId = data.chatTargetId || data.senderId;
+      const targetName = data.chatTargetName || data.senderName || 'उपयोगकर्ता';
+      openChat(targetId, targetName, false);
+    }
   });
 
+  // Immediate registration attempt
+  try {
+    let perm = await push.checkPermissions();
+    if (perm.receive !== 'granted') perm = await push.requestPermissions();
+    if (perm.receive === 'granted') {
+      await push.register();
+      console.log('[FCM] ✓ push.register() called');
+    } else {
+      console.warn('[FCM] Notification permission denied');
+    }
+  } catch(e) { console.error('[FCM] Registration attempt failed:', e); }
+
   const cachedToken = localStorage.getItem('vc_fcm_token');
-  if (cachedToken && myUserId) await saveFcmTokenToFirebase(cachedToken);
+  if (cachedToken) await saveFcmTokenToFirebase(cachedToken);
 }
 
 // ===================================================
@@ -538,7 +646,6 @@ function getFileIcon(mimeType, fileName) {
   if (mimeType.includes('zip') || mimeType.includes('rar')) return '🗜️';
   return '📎';
 }
-// 🆕 DATE LABEL
 function formatDateLabel(ts) {
   if (!ts) return '';
   const d = new Date(Number(ts));
@@ -712,7 +819,7 @@ function updateHeaderTitle() {
 }
 
 // ===================================================
-// PRESENCE (Core Fix: teardown + union logic)
+// PRESENCE (Core Fix + token flush)
 // ===================================================
 function teardownPresence() {
   presenceUnsubs.forEach(fn => { try { fn(); } catch(e){} });
@@ -741,6 +848,18 @@ async function initPresence() {
   });
 
   if (myFcmToken) await update(userRef, { fcmToken: myFcmToken }).catch(()=>{});
+
+  // 🆕 Flush pending FCM token after user id available
+  if (pendingFcmToken) {
+    const tok = pendingFcmToken;
+    pendingFcmToken = null;
+    await update(userRef, { fcmToken: tok }).catch(()=>{});
+    console.log('[FCM] Queued token flushed:', myUserId);
+  }
+  // 🆕 Always send userId to native side (for onNewToken REST save)
+  if (window.AndroidAudio?.setUserIdForFcm) {
+    try { window.AndroidAudio.setUserIdForFcm(myUserId); } catch(e){}
+  }
 
   presenceUnsubs.push(onValue(connectedRef, async snap => {
     if (snap.val() === true) {
@@ -793,7 +912,6 @@ function checkUser() {
     setTimeout(hideSplashScreen, 300);
     return;
   }
-  // Reload per-user cache
   try {
     pinnedChats = JSON.parse(localStorage.getItem('vc_pinned_' + myUserId) || '{}');
     archivedChats = JSON.parse(localStorage.getItem('vc_archived_' + myUserId) || '{}');
@@ -896,7 +1014,6 @@ $('resetProfileBtn').onclick = async () => {
   localStorage.clear(); location.href = location.pathname;
 };
 
-// 🆕 THEME TOGGLE
 const themeToggleBtn = $('themeToggleBtn');
 if (themeToggleBtn) {
   themeToggleBtn.onclick = (e) => {
@@ -959,22 +1076,8 @@ $('tabCallsBtn').onclick = () => {
   renderCallLogs();
 };
 
-// 🆕 SUB-TABS (All / Archived)
-const subtabAllBtn = $('subtabAllBtn');
-const subtabArchivedBtn = $('subtabArchivedBtn');
-if (subtabAllBtn) subtabAllBtn.onclick = () => {
-  lobbyActiveSubTab = 'all';
-  subtabAllBtn.classList.add('active'); subtabArchivedBtn.classList.remove('active');
-  renderContacts();
-};
-if (subtabArchivedBtn) subtabArchivedBtn.onclick = () => {
-  lobbyActiveSubTab = 'archived';
-  subtabArchivedBtn.classList.add('active'); subtabAllBtn.classList.remove('active');
-  renderContacts();
-};
-
 // ===================================================
-// CALL LOGS
+// CALL LOGS (v1.23.0: with Incoming/Outgoing/Missed labels)
 // ===================================================
 async function recordCallLog(entry) {
   try {
@@ -1015,7 +1118,7 @@ function listenForCallLogs() {
 function renderCallLogs() {
   callLogsList.innerHTML = '';
   if (!allCallLogs.length) {
-    callLogsList.innerHTML = `<div style="text-align:center;padding:28px;color:#94a3b8;font-size:13px">${currentLang==='hi'?'कोई कॉल लॉग नहीं है':'No call logs yet'}</div>`;
+    callLogsList.innerHTML = `<div class="empty-state"><div class="empty-emoji">📞</div><div class="empty-text">${currentLang==='hi'?'कोई कॉल लॉग नहीं है':'No call logs yet'}</div></div>`;
     return;
   }
   allCallLogs.forEach(l => {
@@ -1024,16 +1127,27 @@ function renderCallLogs() {
     let iconHtml = '';
     const isVoice = l.callMode === 'audio';
     const tag = isVoice ? '📞 ' : '📹 ';
-    if (l.type === 'missed') iconHtml = `<span class="call-log-badge call-missed">↙ ${tag} ${currentLang==='hi'?'मिस्ड कॉल':'Missed Call'}</span>`;
-    else if (l.type === 'incoming') iconHtml = `<span class="call-log-badge call-incoming">↙ ${tag} (${l.duration || '00:00'})</span>`;
-    else iconHtml = `<span class="call-log-badge call-outgoing">↗ ${tag} (${l.duration || '00:00'})</span>`;
+    const t = translations[currentLang];
+
+    // 🆕 v1.23.0 — Incoming/Outgoing/Missed with duration
+    if (l.type === 'missed') {
+      iconHtml = `<span class="call-log-badge call-missed">↙ ${tag}${t.missed}</span>`;
+    } else if (l.type === 'incoming') {
+      iconHtml = `<span class="call-log-badge call-incoming">↙ ${tag}${t.incoming} • ${l.duration || '00:00'}</span>`;
+    } else if (l.type === 'outgoing') {
+      iconHtml = `<span class="call-log-badge call-outgoing">↗ ${tag}${t.outgoing} • ${l.duration || '00:00'}</span>`;
+    } else {
+      iconHtml = `<span class="call-log-badge call-outgoing">↗ ${tag}(${l.duration || '00:00'})</span>`;
+    }
 
     const actionIconSvg = isVoice
       ? `<svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>`
       : `<svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4c.39.39 1.06.11 1.06-.45V6.95c0-.56-.67-.84-1.06-.45l-4 4z"/></svg>`;
 
+    const initial = (l.name || '?').trim().charAt(0).toUpperCase();
+
     card.innerHTML = `
-      <div class="contact-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
+      <div class="contact-avatar"><span class="avatar-initial">${initial}</span></div>
       <div class="contact-content">
         <div class="contact-left-col"><span class="contact-name">${safeName(l.name)}</span><div>${iconHtml}</div></div>
         <div class="contact-right-col"><span class="msg-time-label">${formatClockTime(l.time)}</span></div>
@@ -1047,7 +1161,7 @@ function renderCallLogs() {
 }
 
 // ===================================================
-// CONTACTS — Core Fix + Phase 1+2
+// CONTACTS
 // ===================================================
 const getChatRoomId = (a, b) => [a, b].sort().join('__');
 
@@ -1066,7 +1180,6 @@ function listenForLatestChatPreviews() {
     let hasUpdates = false;
 
     Object.keys(rooms).forEach(key => {
-      // 🆕 CORE FIX: exact-match room membership
       const parts = key.split('__');
       if (parts.length !== 2) return;
       if (parts[0] !== myUserId && parts[1] !== myUserId) return;
@@ -1134,7 +1247,6 @@ navigator.serviceWorker?.addEventListener('message', event => {
   }
 });
 
-// 🆕 ONLINE STRIP
 function renderOnlineStrip() {
   const strip = $('onlineStrip');
   if (!strip) return;
@@ -1151,13 +1263,11 @@ function renderOnlineStrip() {
   });
 }
 
-// 🆕 MAIN RENDER — Core Fix (union logic + pinned/archived)
 function renderContacts() {
   contactsList.innerHTML = '';
   const amIAdmin = isNeerajBadola(myUserName);
   const q = (searchInput?.value || '').trim().toLowerCase();
 
-  // 🆕 UNION of all known contacts
   const contactIds = new Set();
   Object.keys(allOnlineUsers).forEach(id => { if (id && id !== myUserId) contactIds.add(id); });
   Object.keys(latestChatSnippets).forEach(id => { if (id && id !== myUserId) contactIds.add(id); });
@@ -1169,7 +1279,6 @@ function renderContacts() {
     if (!u || !u.name) return false;
     if (u.hidden && !amIAdmin) return false;
     if (q && !u.name.toLowerCase().includes(q)) return false;
-    if (lobbyActiveSubTab === 'archived') return !!archivedChats[id];
     return !archivedChats[id];
   });
 
@@ -1184,8 +1293,8 @@ function renderContacts() {
 
   if (!userIds.length) {
     contactsList.innerHTML = `<div class="empty-state">
-      <div class="empty-emoji">${lobbyActiveSubTab === 'archived' ? '📦' : '💬'}</div>
-      <div class="empty-text">${lobbyActiveSubTab === 'archived' ? (currentLang==='hi'?'कोई आर्काइव चैट नहीं':'No archived chats') : (currentLang==='hi'?'कोई संपर्क उपलब्ध नहीं है':'No contacts available')}</div>
+      <div class="empty-emoji">💬</div>
+      <div class="empty-text">${currentLang==='hi'?'कोई संपर्क उपलब्ध नहीं है':'No contacts available'}</div>
     </div>`;
     return;
   }
@@ -1230,7 +1339,6 @@ function renderContacts() {
   });
 }
 
-// 🆕 CHAT CARD LONG-PRESS MENU (Pin / Archive / Delete)
 function attachCardLongPress(card, targetId, u) {
   let timer = null, moved = false, startX = 0, startY = 0;
   const HOLD = 550;
@@ -1306,12 +1414,12 @@ setInterval(() => {
    <<<<<<<<<<<<<<<<<<<< [PART 1 समाप्त] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js v1.22.0] >>>>>>>>>>>>>>>>>>>>
-   लॉन्ग-प्रेस मेन्यू, रिएक्शन्स, स्वाइप-रिप्लाई, चैट हैंडलर, वॉयस डॉक, अटैचमेंट
+   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3 शुरू: app.js v1.23.0] >>>>>>>>>>>>>>>>>>>>
+   लॉन्ग-प्रेस, रिएक्शन, स्वाइप-रिप्लाई, चैट, वॉयस डॉक, फ़ोन संपर्क पिकर
    ========================================================================= */
 
 // ===================================================
-// MESSAGE LONG-PRESS MENU + REACTIONS
+// MESSAGE LONG-PRESS MENU
 // ===================================================
 let longPressTimer = null;
 let longPressStartX = 0;
@@ -1367,7 +1475,6 @@ function openMessageMenu(el, msgId, m) {
   menu.className = 'msg-long-press-menu';
   menu.style.zIndex = '99999';
 
-  // 🆕 Reactions row
   const reactionsRow = (!isSystemCall && !isDeleted) ? `
     <div class="reactions-row">
       ${REACTION_EMOJIS.map(emo => {
@@ -1395,7 +1502,6 @@ function openMessageMenu(el, msgId, m) {
   const menuBox = menu.querySelector('.menu-box');
   if (menuBox) ['touchstart', 'touchend', 'click'].forEach(evt => menuBox.addEventListener(evt, (e) => e.stopPropagation()));
 
-  // Reaction picker
   menu.querySelectorAll('.reaction-pick-btn').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -1457,18 +1563,14 @@ async function handleMessageAction(action, msgId, m) {
   }
 }
 
-// 🆕 REACTIONS
 async function toggleReaction(msgId, m, emoji) {
   if (!currentChatTargetId) return;
   const roomId = getChatRoomId(myUserId, currentChatTargetId);
   const roomPath = `chats/${roomId}/messages/${msgId}/reactions`;
   const existing = m.reactions?.[myUserId];
   try {
-    if (existing === emoji) {
-      await remove(ref(db, `${roomPath}/${myUserId}`));
-    } else {
-      await update(ref(db, roomPath), { [myUserId]: emoji });
-    }
+    if (existing === emoji) await remove(ref(db, `${roomPath}/${myUserId}`));
+    else await update(ref(db, roomPath), { [myUserId]: emoji });
     playMessageTickSound();
   } catch(e) { toast('त्रुटि'); }
 }
@@ -1487,7 +1589,6 @@ function renderReactionsHtml(m, msgId) {
   </div>`;
 }
 
-// 🆕 SWIPE-TO-REPLY
 function attachSwipeReply(el, msgId, m) {
   if (m.type === 'system-call' || m.deleted) return;
   let startX = 0, startY = 0, moved = false, swiping = false;
@@ -1749,9 +1850,6 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
-// ===================================================
-// LOAD MESSAGES (with date separators + reactions)
-// ===================================================
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -1762,18 +1860,15 @@ function loadChatMessages() {
     const sortedKeys = Object.keys(msgs).sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
 
     const isNearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
-
-    // Cleanup orphan messages
     const currentMsgEls = body.querySelectorAll('[data-msg-id]');
     const newKeySet = new Set(sortedKeys);
     currentMsgEls.forEach(el => { if (!newKeySet.has(el.dataset.msgId)) el.remove(); });
 
-    let lastDateLabel = '';
-    // existing elements don't track lastDateLabel properly — rebuild from scratch for date separators
-    // Simplify: if messages count differs or first time, rebuild whole list
-    const needsFullRebuild = body.querySelectorAll('[data-msg-id]').length !== sortedKeys.filter(k => !isDeletedForMe(k)).length;
+    // Full rebuild for date separator correctness
+    const visibleCount = sortedKeys.filter(k => !isDeletedForMe(k)).length;
+    const existingCount = body.querySelectorAll('[data-msg-id]').length;
 
-    if (needsFullRebuild) {
+    if (existingCount !== visibleCount) {
       body.innerHTML = '';
       sortedKeys.forEach(msgId => {
         const m = msgs[msgId];
@@ -1781,23 +1876,18 @@ function loadChatMessages() {
         appendMessageBubble(body, msgId, m, roomPath, msgs);
       });
     } else {
-      // incremental update for read/delivered/reactions
       sortedKeys.forEach(msgId => {
         const m = msgs[msgId];
         const el = document.getElementById(`msg_${msgId}`);
         if (!el) return;
-        // update reactions
         const reactEl = el.querySelector('.bubble-reactions');
         const newReactHtml = renderReactionsHtml(m, msgId);
         if (reactEl && !newReactHtml) reactEl.remove();
-        else if (newReactHtml) {
-          if (reactEl) reactEl.outerHTML = newReactHtml;
-          else el.insertAdjacentHTML('beforeend', newReactHtml);
-        } else if (newReactHtml && !reactEl) el.insertAdjacentHTML('beforeend', newReactHtml);
+        else if (newReactHtml && reactEl) reactEl.outerHTML = newReactHtml;
+        else if (newReactHtml && !reactEl) el.insertAdjacentHTML('beforeend', newReactHtml);
       });
     }
 
-    // Mark as read
     sortedKeys.forEach(msgId => {
       const m = msgs[msgId];
       if (m.senderId !== myUserId && !m.read) {
@@ -1813,12 +1903,10 @@ function loadChatMessages() {
     updateScrollFab();
   });
 
-  // Scroll FAB
   body.onscroll = updateScrollFab;
 }
 
 function appendMessageBubble(body, msgId, m, roomPath, allMsgs) {
-  // Date separator
   const dateLabel = formatDateLabel(m.time);
   const existingSeps = body.querySelectorAll('.date-separator');
   const lastSep = existingSeps[existingSeps.length - 1];
@@ -1874,9 +1962,8 @@ function appendMessageBubble(body, msgId, m, roomPath, allMsgs) {
     if (m.data) contentHtml += `<div class="media-bubble"><img src="${m.data}" alt="image" data-media-id="${m.mediaId || msgId}"></div>`;
     else contentHtml += buildMediaPlaceholderHtml(msgId, m);
   } else if (m.type === 'video') {
-    if (m.data) {
-      contentHtml += `<div class="media-bubble"><div class="media-video-thumb"><video src="${m.data}" preload="metadata" playsinline></video><div class="media-play-overlay">▶</div></div></div>`;
-    } else contentHtml += buildMediaPlaceholderHtml(msgId, m);
+    if (m.data) contentHtml += `<div class="media-bubble"><div class="media-video-thumb"><video src="${m.data}" preload="metadata" playsinline></video><div class="media-play-overlay">▶</div></div></div>`;
+    else contentHtml += buildMediaPlaceholderHtml(msgId, m);
   } else if (m.type === 'doc' || m.type === 'file') {
     contentHtml += buildDocBubbleHtml(msgId, m);
   } else if (m.type === 'audio') {
@@ -1911,7 +1998,6 @@ function appendMessageBubble(body, msgId, m, roomPath, allMsgs) {
   attachSwipeReply(el, msgId, m);
   body.appendChild(el);
 
-  // reaction chip click → toggle same emoji
   el.querySelectorAll('.reaction-chip').forEach(chip => {
     chip.onclick = (e) => { e.stopPropagation(); toggleReaction(msgId, m, chip.dataset.emoji); };
   });
@@ -1976,19 +2062,33 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId, mediaMe
   try {
     const tSnap = await get(ref(db, `users/${targetId}`));
     const token = tSnap.val()?.fcmToken;
-    if (!token) return;
+    if (!token) { console.warn('No FCM token for', targetId); return; }
     const payload = {
-      token, title: myUserName, body: textContent, callerName: myUserName,
-      callId: "CHAT_" + myUserId, senderId: myUserId, roomId, messageId: msgId
+      token,
+      title: myUserName,
+      body: textContent,
+      callerName: myUserName,
+      callId: "CHAT_" + myUserId,
+      senderId: myUserId,
+      senderName: myUserName,
+      chatTargetId: myUserId,
+      chatTargetName: myUserName,
+      roomId,
+      messageId: msgId
     };
     if (mediaMeta) {
-      payload.mediaType = mediaMeta.mediaType; payload.mediaSize = mediaMeta.mediaSize;
-      payload.mediaId = mediaMeta.mediaId; payload.fileName = mediaMeta.fileName; payload.mimeType = mediaMeta.mimeType;
+      payload.mediaType = mediaMeta.mediaType;
+      payload.mediaSize = mediaMeta.mediaSize;
+      payload.mediaId = mediaMeta.mediaId;
+      payload.fileName = mediaMeta.fileName;
+      payload.mimeType = mediaMeta.mimeType;
     }
     const res = await fetch("https://neeraj.neerajthegreat192.workers.dev/", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     });
-    if (!res.ok) console.warn('Push HTTP status:', res.status);
+    if (!res.ok) console.warn('Push HTTP', res.status);
   } catch(e) { console.warn('Push send failed:', e.message); }
 }
 
@@ -1998,7 +2098,6 @@ async function sendChatMessage() {
   playMessageTickSound();
 
   const targetIdSnapshot = currentChatTargetId;
-  const targetNameSnapshot = currentChatTargetName;
   const roomId = getChatRoomId(myUserId, targetIdSnapshot);
   const roomPath = `chats/${roomId}/messages`;
   chatInput.value = '';
@@ -2060,7 +2159,7 @@ chatInput.addEventListener('keydown', e => {
 });
 
 // ===================================================
-// MEDIA SENDER (Hybrid: Direct + P2P)
+// MEDIA SENDER
 // ===================================================
 async function sendMediaMessage(file) {
   if (!file || !currentChatTargetId) return;
@@ -2384,16 +2483,27 @@ $('closeMediaViewerBtn').onclick = () => {
   mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
 };
 
+// 🆕 v1.23.0 — Save button uses FileSaveService reliably
 $('saveMediaBtn').onclick = () => {
   if (!mediaViewerState.dataUrl) return;
   const { dataUrl, mimeType, fileName } = mediaViewerState;
   const base64Only = dataUrl.split(',')[1] || dataUrl;
-  saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
-  toast('✅ Downloads में सहेज दिया गया');
+
+  if (isNativeApp() && window.AndroidAudio?.saveMediaViaService) {
+    try {
+      window.AndroidAudio.saveMediaViaService(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
+      toast('📥 Download हो रहा है — Downloads/VideoCallApp');
+      return;
+    } catch(e) { console.warn('saveMediaViaService failed:', e); }
+  }
+
+  const result = saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
+  if (result) toast('✅ Downloads में सहेज दिया');
+  else toast('❌ सेव नहीं हो सका');
 };
 
 // ===================================================
-// ATTACH MENU & INPUTS
+// ATTACH MENU
 // ===================================================
 const attachBtn = $('attachBtn');
 const attachMenu = $('attachMenu');
@@ -2423,7 +2533,7 @@ $('anyFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMe
 $('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
 
 // ===================================================
-// LOCATION & CONTACT SENDERS
+// LOCATION & APP CONTACT
 // ===================================================
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
@@ -2464,7 +2574,9 @@ async function sendContactMessage() {
   await sendVcfMessage(vcfData, contact.name + '.vcf');
 }
 
-// 🆕 PHONE CONTACT PICKER
+// ===================================================
+// PHONE CONTACTS PICKER
+// ===================================================
 let phoneContactsCache = [];
 
 async function openPhoneContactsPicker() {
@@ -2481,7 +2593,6 @@ async function openPhoneContactsPicker() {
   const selected = new Set();
 
   phoneContactsCache = await loadPhoneContacts();
-  // dedupe by phone
   const seen = new Set();
   phoneContactsCache = phoneContactsCache.filter(c => {
     if (!c || !c.phone) return false;
@@ -2500,7 +2611,7 @@ async function openPhoneContactsPicker() {
     const q = (filter || '').toLowerCase().trim();
     const items = phoneContactsCache.filter(c => !q || c.name.toLowerCase().includes(q) || c.phone.includes(q));
     if (!items.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'कोई संपर्क नहीं मिला':'No contacts found'}</div>`; return; }
-    list.innerHTML = items.slice(0, 300).map((c, i) => {
+    list.innerHTML = items.slice(0, 300).map((c) => {
       const initials = (c.name || '?').trim().charAt(0).toUpperCase();
       const isSel = selected.has(c.phone);
       return `<div class="phone-contact-row${isSel?' selected':''}" data-phone="${c.phone}">
@@ -2527,16 +2638,22 @@ async function openPhoneContactsPicker() {
     modal.hidden = true;
     for (const c of items) {
       const vcfData = `BEGIN:VCARD\nVERSION:3.0\nFN:${c.name}\nTEL;TYPE=CELL:${c.phone}\nEND:VCARD`;
-      await sendVcfMessage(vcfData, c.name.replace(/[^a-zA-Z0-9]/g,'_') + '.vcf', true);
+      await sendVcfMessage(vcfData, c.name.replace(/[^a-zA-Z0-9]/g,'_') + '.vcf');
     }
     toast(`✅ ${items.length} संपर्क भेजे गए`);
   };
 
+  updatePcCloseBtn();
   updateSendBtn();
   renderList('');
 }
 
-async function sendVcfMessage(vcfData, fileName, silent = false) {
+function updatePcCloseBtn() {
+  const cb = $('closePhoneContactsBtn');
+  if (cb) cb.onclick = () => { $('phoneContactsModal').hidden = true; };
+}
+
+async function sendVcfMessage(vcfData, fileName) {
   const targetId = currentChatTargetId;
   if (!targetId) return;
   const roomId = getChatRoomId(myUserId, targetId);
@@ -2691,7 +2808,7 @@ $('dockSendBtn').onclick = sendVoiceDock;
    <<<<<<<<<<<<<<<<<<<< [PART 2 समाप्त] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js v1.22.0] >>>>>>>>>>>>>>>>>>>>
+   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3 शुरू: app.js v1.23.0] >>>>>>>>>>>>>>>>>>>>
    कॉल लॉजिक, वेबआरटीसी, कंट्रोल्स, फन मोड, ओटीए, इनिशियलाइज़ेशन
    ========================================================================= */
 
@@ -3013,7 +3130,7 @@ function startNetworkQualityMonitor() {
 function stopNetworkQualityMonitor() { if (qualityTimer) { clearInterval(qualityTimer); qualityTimer = null; } qualityLevel = 'high'; }
 
 // ===================================================
-// FUN MODE TRAY
+// FUN MODE
 // ===================================================
 $('funModeBtn').onclick = (e) => {
   e.stopPropagation();
@@ -3862,5 +3979,5 @@ if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded
 else initApp();
 
 /* =========================================================================
-   <<<<<<<<<<<<<<<<<<<< [PART 3 समाप्त: app.js v1.22.0 पूर्ण] <<<<<<<<<<<<<<<<<<<<
+   <<<<<<<<<<<<<<<<<<<< [PART 3 समाप्त: app.js v1.23.0 पूर्ण] <<<<<<<<<<<<<<<<<<<<
    ========================================================================= */

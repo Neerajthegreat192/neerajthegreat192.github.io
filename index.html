@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#090d10">
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="style.css?v=1.22.0" id="baseStyle">
+<link rel="stylesheet" href="style.css?v=1.23.0" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
   try {
@@ -21,7 +21,6 @@
         document.getElementById('otaCustomStyle').textContent = cachedCss;
       }
     }
-    // Apply saved theme early to prevent flash
     const savedTheme = localStorage.getItem('vc_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
   } catch(e) {}
@@ -82,7 +81,7 @@
   </button>
 </div>
 
-<!-- 🆕 PHONE CONTACTS PICKER MODAL -->
+<!-- PHONE CONTACTS PICKER MODAL -->
 <div id="phoneContactsModal" class="modal-overlay" hidden>
   <div class="modal-box phone-contacts-box">
     <div class="pc-modal-header">
@@ -187,18 +186,12 @@
     </div>
   </div>
 
-  <!-- 🆕 ONLINE STRIP -->
+  <!-- ONLINE STRIP -->
   <div id="onlineStrip" class="online-strip" hidden></div>
 
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
     <input type="text" id="searchInput" class="search-input" placeholder="संपर्क या चैट खोजें..." autocomplete="off">
-  </div>
-
-  <!-- 🆕 SUB-TABS -->
-  <div class="lobby-subtabs">
-    <button id="subtabAllBtn" class="subtab-btn active">💬 सभी चैट</button>
-    <button id="subtabArchivedBtn" class="subtab-btn">📦 आर्काइव</button>
   </div>
 
   <div class="lobby-tabs">
@@ -234,7 +227,6 @@
   </div>
   <div class="chat-body" id="chatBody"></div>
 
-  <!-- 🆕 SCROLL-TO-BOTTOM FAB -->
   <button id="scrollBottomFab" class="scroll-fab" hidden>⬇</button>
 
   <div class="chat-footer" id="chatFooter">
@@ -426,13 +418,13 @@
       } else {
         const defaultScript = document.createElement('script');
         defaultScript.type = 'module';
-        defaultScript.src = 'app.js?v=1.22.0';
+        defaultScript.src = 'app.js?v=1.23.0';
         document.body.appendChild(defaultScript);
       }
     } catch(e) {
       const defaultScript = document.createElement('script');
       defaultScript.type = 'module';
-      defaultScript.src = 'app.js?v=1.22.0';
+      defaultScript.src = 'app.js?v=1.23.0';
       document.body.appendChild(defaultScript);
     }
   })();
