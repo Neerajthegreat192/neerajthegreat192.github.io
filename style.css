@@ -1,7 +1,5 @@
 /* ===================================================
-   🎨 style.css — v1.23.9 (FINAL KEYBOARD & LAYOUT FIX)
-   ✅ Native adjustResize Compatibility added
-   ✅ Body Scroll & Float Bugs Fixed
+   🎨 style.css — v1.24.0 (RESTORED WORKING CHAT LAYOUT)
    =================================================== */
 
 :root {
@@ -30,24 +28,20 @@
   user-select: none;
 }
 
-/* 🟢 ABSOLUTE HIDDEN OVERRIDE (Screen Stuck Fix) */
-#lobby[hidden], 
-#chatScreen[hidden], 
-#call[hidden], 
-[hidden] {
-  display: none !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  z-index: -1 !important;
+input, textarea {
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
+[hidden], #lobby[hidden], #chatScreen[hidden], #call[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden], #kidsTictactoeBox[hidden] {
+  display: none !important;
+}
+
+/* ✅ Working style_2.css html, body */
 html, body {
   width: 100%;
-  height: 100%; /* 100dvh हटा दिया गया है ताकि Android adjustResize सही से काम करे */
-  position: fixed; /* पूरी स्क्रीन को लॉक करेगा, कुछ भी ऊपर स्लाइड नहीं होगा */
-  top: 0;
-  left: 0;
+  height: 100%;
+  height: 100dvh;
   background-color: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -131,15 +125,20 @@ html, body {
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 
 /* ===================================================
-   SCREENS
+   ✅ SCREENS (Exact working style_2.css structure)
    =================================================== */
 .screen {
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  width: 100%; height: 100%;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
   background: var(--bg);
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
+
 #networkBanner {
   position: fixed; top: 0; left: 0; width: 100%;
   background: #dc2626; color: #fff;
@@ -390,22 +389,21 @@ html, body {
 .call-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* ===================================================
-   ✅ CHAT SCREEN (STRICT VIEWPORT KEYBOARD FIX)
+   ✅ CHAT SCREEN (Restored from working style_2.css)
+   नोट: यहाँ height पर !important नहीं है ताकि visualViewport काम करे!
    =================================================== */
-#chatScreen:not([hidden]) {
-  position: absolute !important;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100% !important;
-  height: 100% !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-  touch-action: none;
-  background-color: var(--bg, #090d10);
+#chatScreen {
+  background: var(--bg, #090d10);
   z-index: 50;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .chat-header {
@@ -415,10 +413,11 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-shrink: 0 !important;
+  flex-shrink: 0;
   position: relative;
-  z-index: 60;
+  z-index: 10;
   box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  touch-action: none;
 }
 
 .chat-header-actions { display: flex; align-items: center; gap: 8px; }
@@ -432,15 +431,15 @@ html, body {
 .wp-call-btn svg { width: 18px; height: 18px; fill: var(--text); }
 
 .chat-body {
-  flex: 1 1 0% !important; /* Perfect flexbox shrink during adjustResize */
-  overflow-y: auto !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y !important;
-  padding: 12px 14px 20px;
-  display: flex; 
+  padding: 14px;
+  display: flex;
   flex-direction: column;
-  gap: 6px;
-  scroll-behavior: smooth;
+  gap: 8px;
 }
 
 .chat-bubble {
@@ -578,19 +577,22 @@ html, body {
 }
 
 /* ===================================================
-   CHAT FOOTER
+   CHAT FOOTER (Locked against upward touch drag)
    =================================================== */
 .chat-footer {
-  flex-shrink: 0 !important;
-  position: relative !important;
-  bottom: 0 !important;
-  width: 100% !important;
-  background: var(--surface, #111827);
-  z-index: 60;
-  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 4px) 8px;
+  background: #0e161c;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  position: relative;
+  z-index: 100;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  touch-action: none;
 }
-.chat-footer:focus-within { padding-bottom: 8px !important; }
+.chat-footer:focus-within { padding-bottom: 6px !important; }
 
 .reply-preview-box {
   display: flex; align-items: center; justify-content: space-between;
@@ -621,45 +623,51 @@ html, body {
 
 .chat-input-row {
   display: flex; align-items: flex-end;
-  gap: 8px; width: 100%;
+  gap: 6px; width: 100%;
 }
 .attach-btn {
-  width: 42px; height: 42px; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
+  width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
-  font-size: 20px; color: var(--text);
+  font-size: 18px; color: var(--text);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
 }
 .input-wrap {
-  flex: 1;
-  background: rgba(255,255,255,0.06);
-  border-radius: 20px;
-  border: 1px solid var(--line);
-  padding: 4px 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #18222d;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 2px 10px;
   display: flex; align-items: center;
-  min-height: 42px;
 }
 :root[data-theme="light"] .input-wrap { background: #f0f2f5; }
 .chat-input {
   width: 100%;
-  background: transparent; border: none;
-  color: var(--text); font-size: 15px;
-  outline: none; resize: none;
+  min-height: 38px;
   max-height: 100px;
-  padding: 8px 0;
-  user-select: text;
+  padding: 8px 4px;
+  font-size: 15px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  line-height: 20px;
+  font-family: inherit;
+  box-sizing: border-box;
 }
 .action-btn {
-  width: 42px; height: 42px; border-radius: 50%;
+  width: 40px; height: 40px; border-radius: 50%;
   background: var(--gold);
   border: none;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
 }
 .action-btn svg { width: 20px; height: 20px; fill: #000; }
-.action-btn.send-mode { background: var(--success); }
-.action-btn.send-mode svg { fill: #fff; }
+.action-btn.send-mode { background: var(--success) !important; }
+.action-btn.send-mode svg { fill: #fff !important; }
 
 /* SCROLL FAB */
 .scroll-fab {
@@ -909,12 +917,15 @@ html, body {
 
 .voice-dock {
   position: absolute;
-  bottom: 60px; left: 12px; right: 12px;
-  background: #1e293b;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  padding: 10px; z-index: 60;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+  bottom: 0; left: 0; right: 0;
+  background: #11171f;
+  border-top: 2px solid #10b981;
+  padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 -6px 20px rgba(0,0,0,0.8);
 }
 .voice-dock-top {
   display: flex; align-items: center;
@@ -1456,7 +1467,7 @@ html, body {
 }
 
 /* ===================================================
-   🔥 APK BUNDLED-CSS OVERRIDE (with !important)
+   🔥 APK BUNDLED-CSS OVERRIDE (Header visibility only)
    =================================================== */
 .header,
 .chat-header {

@@ -1098,8 +1098,6 @@ function getTickBadge(snippet) {
 }
 
 let isInitialLoad = true;
-
-// 🟢 FIX: Real-time Lobby Snippet, Delivery Ticks & Unread Count Badge Sync
 function listenForLatestChatPreviews() {
   onValue(ref(db, 'chats'), snap => {
     const rooms = snap.val() || {};
@@ -1110,19 +1108,19 @@ function listenForLatestChatPreviews() {
       const parts = key.split('__');
       const targetId = parts[0] === myUserId ? parts[1] : parts[0];
       const msgs = rooms[key]?.messages || {};
-      const msgKeys = Object.keys(msgs);
-      if (!msgKeys.length) return;
+      const keys = Object.keys(msgs);
+      if (!keys.length) return;
 
-      const sortedKeys = msgKeys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
+      const sortedKeys = keys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
       const lastMsg = msgs[sortedKeys[sortedKeys.length - 1]];
 
       let unread = 0;
-      msgKeys.forEach(k => {
+      keys.forEach(k => {
         const m = msgs[k];
-        if (m.senderId !== myUserId && !m.read) {
-          if (currentChatTargetId !== targetId) {
-            unread++;
-          }
+        if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) unread++;
+        // ✅ WORKING BASE LINE RESTORED: तुरंत डबल टिक अपडेट करने के लिए
+        if (m.senderId !== myUserId && !m.delivered) {
+          update(ref(db, `chats/${key}/messages/${k}`), { delivered: true }).catch(()=>{});
         }
       });
       unreadCounts[targetId] = unread;
@@ -1131,27 +1129,21 @@ function listenForLatestChatPreviews() {
       const isNew = !isInitialLoad && lastMsg.time > prevTime && lastMsg.senderId !== myUserId && currentChatTargetId !== targetId;
 
       let msgText = lastMsg.text || '';
-      if (lastMsg.deleted || lastMsg.type === 'deleted') {
-        msgText = '🚫 यह संदेश हटा दिया गया है';
-      } else if (lastMsg.type === 'image') {
-        msgText = '📷 ' + (currentLang === 'hi' ? 'फ़ोटो' : 'Photo');
-      } else if (lastMsg.type === 'video') {
-        msgText = '🎥 ' + (currentLang === 'hi' ? 'वीडियो' : 'Video');
-      } else if (lastMsg.type === 'audio') {
-        msgText = '🎙 ' + (currentLang === 'hi' ? 'वॉयस नोट' : 'Voice Note');
-      } else if (lastMsg.type === 'doc') {
-        msgText = '📄 ' + (lastMsg.fileName || (currentLang === 'hi' ? 'दस्तावेज़' : 'Document'));
-      }
+      if (lastMsg.deleted || lastMsg.type === 'deleted') msgText = '🚫 यह संदेश हटा दिया गया है';
+      else if (lastMsg.type === 'image') msgText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
+      else if (lastMsg.type === 'video') msgText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
+      else if (lastMsg.type === 'audio') msgText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
+      else if (lastMsg.type === 'doc') msgText = '📄 ' + (lastMsg.fileName || (currentLang==='hi'?'दस्तावेज़':'Document'));
+      else if (lastMsg.type === 'system-call') msgText = lastMsg.text;
 
-      latestChatSnippets[targetId] = { 
-        text: msgText, 
-        time: lastMsg.time || Date.now(), 
-        senderId: lastMsg.senderId, 
-        read: !!lastMsg.read, 
-        delivered: !!lastMsg.delivered 
+      latestChatSnippets[targetId] = {
+        text: msgText,
+        time: lastMsg.time || Date.now(),
+        senderId: lastMsg.senderId,
+        read: !!lastMsg.read,
+        delivered: !!lastMsg.delivered
       };
       hasUpdates = true;
-
       if (isNew) triggerSystemMessageNotification(lastMsg.senderName || 'New message', msgText, targetId);
     });
 
@@ -1165,6 +1157,7 @@ function listenForLatestChatPreviews() {
     }
   });
 }
+
 
 function triggerSystemMessageNotification(sender, text, targetId) {
   playMessageBeep();
@@ -4454,33 +4447,42 @@ chatInput.addEventListener('focus', () => {
   }, 250);
 });
 
-// नोट: visualViewport और blur इवेंट्स हटा दिए गए हैं क्योंकि नेटिव ऐप खुद इसे हैंडल कर लेगा।
-
-
+// ===================================================
+// VIEWPORT SYNC (Exact Working Logic from app_4.js)
+// ===================================================
+if (window.visualViewport) {
+  const syncViewport = () => {
+    if (!chatScreen.hidden) {
+      window.scrollTo(0, 0);
+      chatScreen.style.height = `${window.visualViewport.height}px`;
+      const body = $('chatBody');
+      if (body) body.scrollTop = body.scrollHeight;
+    }
+  };
   window.visualViewport.addEventListener('resize', syncViewport);
   window.visualViewport.addEventListener('scroll', () => {
-    window.scrollTo(0, 0);
-    document.body.scrollTop = 0;
+    if (!chatScreen.hidden) window.scrollTo(0, 0);
   });
 }
 
 chatInput.addEventListener('focus', () => {
   setTimeout(() => {
     window.scrollTo(0, 0);
-    document.body.scrollTop = 0;
+    if (window.visualViewport && !chatScreen.hidden) {
+      chatScreen.style.height = `${window.visualViewport.height}px`;
+    }
     const body = $('chatBody');
     if (body) body.scrollTop = body.scrollHeight;
-  }, 100);
+  }, 150);
 });
 
 chatInput.addEventListener('blur', () => {
   if (!chatScreen.hidden) {
-    window.scrollTo(0, 0);
-    document.body.scrollTop = 0;
-    chatScreen.style.top = '0px';
     chatScreen.style.height = '100%';
+    window.scrollTo(0, 0);
   }
 });
+
 
 // OTA Update
 async function checkWebOtaUpdate(manual = false) {
