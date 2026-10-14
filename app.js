@@ -3944,12 +3944,23 @@ function setupHardwareBackButton() {
   });
 }
 
-chatInput.addEventListener('focus', () => {
-  setTimeout(() => {
-    const body = $('chatBody');
-    if (body) body.scrollTop = body.scrollHeight;
-  }, 300);
-});
+// ✅ कीबोर्ड खुलने पर विंडो को ऊपर खिसकने से रोकें
+if (chatInput) {
+  chatInput.addEventListener('focus', () => {
+    // 1. अगर ब्राउज़र ने पूरे विंडो को ऊपर धकेला है, तो तुरंत 0 पर रीसेट करें
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+
+    // 2. केवल चैट बॉडी को नीचे स्क्रोल करें ताकि नवीनतम संदेश दिखें
+    setTimeout(() => {
+      window.scrollTo(0, 0);
+      const body = $('chatBody');
+      if (body) {
+        body.scrollTop = body.scrollHeight;
+      }
+    }, 150);
+  });
+}
 
 // ===================================================
 // OTA UPDATE

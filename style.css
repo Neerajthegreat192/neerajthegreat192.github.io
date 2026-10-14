@@ -917,14 +917,23 @@ html, body {
   transform: translateX(-50%) translateY(0);
 }
 /* ===================================================
-   ✅ KEYBOARD HEADER FIX (Lock Header to Top Always)
+   ✅ KEYBOARD IMMUNITY: HEADER & BODY LOCK
    =================================================== */
 
-/* 1. स्क्रीन को 100% पर लॉक करें ताकि पूरा पेज ऊपर न खिसके */
-#chatScreen.screen {
+/* html और body को विंडो स्क्रोलिंग से पूरी तरह रोकें */
+html, body {
   position: fixed !important;
   inset: 0 !important;
   width: 100% !important;
+  height: 100% !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+/* Chat Screen को पूरे व्यूपोर्ट में बांधें */
+#chatScreen {
+  position: absolute !important;
+  inset: 0 !important;
   height: 100% !important;
   height: 100dvh !important;
   display: flex !important;
@@ -932,28 +941,27 @@ html, body {
   overflow: hidden !important;
 }
 
-/* 2. हेडर को टॉप पर फिक्स और इमूवेबल बनाएं */
+/* हेडर को पूरी तरह स्थिर रखें */
 .chat-header {
-  position: sticky !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  flex-shrink: 0 !important; /* कीबोर्ड खुलने पर हेडर कभी नहीं दबेगा */
-  z-index: 100 !important; /* हमेशा चैट बॉडी के ऊपर रहेगा */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 60 !important;
 }
 
-/* 3. चैट बॉडी को सिकुड़ने की पूरी छूट दें */
+/* केवल चैट बॉडी को स्क्रोल और आकार बदलने दें */
 .chat-body {
   flex: 1 1 auto !important;
-  min-height: 0 !important; /* सबसे महत्वपूर्ण: यह बॉडी को कीबोर्ड स्पेस में ही सिकोड़ता है */
+  min-height: 0 !important;
   overflow-y: auto !important;
   overscroll-behavior: contain !important;
-  -webkit-overflow-scrolling: touch;
+  -webkit-overflow-scrolling: touch !important;
 }
 
-/* 4. फुटर अपनी जगह पर नीचे रहे */
+/* फ़ुटर अपनी जगह पर नीचे रहे */
 .chat-footer {
+  flex: 0 0 auto !important;
   flex-shrink: 0 !important;
+  position: relative !important;
+  z-index: 40 !important;
 }
