@@ -1,3 +1,4 @@
+<!-- 🟢🟢🟢 [START (शुरू): index.html] 🟢🟢🟢 -->
 <!DOCTYPE html>
 <html lang="hi">
 <head>
@@ -120,12 +121,12 @@
   </div>
 </div>
 
-<!-- Name Modal -->
+<!-- Name Modal (✅ FIX: हिंदी और सिंगल-टैप कीबोर्ड सपोर्ट के लिए रिस्ट्रिक्शन हटाई गई) -->
 <div id="nameModal" class="modal-overlay" hidden>
   <div class="modal-box">
     <h2 id="txtWelcome">स्वागत है!</h2>
     <p id="txtEnterName">कॉलिंग एवं चैट शुरू करने के लिए अपना नाम लिखें</p>
-    <input id="nameInput" class="modal-input" placeholder="उदा. नीरज बडोला..." maxlength="25" autocomplete="name" autocorrect="off" autocapitalize="words" spellcheck="false">
+    <input type="text" id="nameInput" class="modal-input" placeholder="उदा. नीरज बडोला..." maxlength="25" enterkeyhint="done">
     <button id="saveNameBtn" class="btn-gold">आगे बढ़ें</button>
   </div>
 </div>
@@ -141,7 +142,7 @@
       </select>
     </div>
     <div id="nameEditArea" hidden>
-      <input id="editNameInput" class="modal-input" maxlength="25" placeholder="नया नाम दर्ज करें..." autocomplete="name" autocorrect="off" autocapitalize="words" spellcheck="false">
+      <input type="text" id="editNameInput" class="modal-input" maxlength="25" placeholder="नया नाम दर्ज करें..." enterkeyhint="done">
       <button id="saveEditedNameBtn" class="btn-gold" style="margin-bottom:8px">नाम सुरक्षित करें</button>
     </div>
     <button id="toggleEditNameBtn" class="btn-sec-outline">✏️ नाम बदलें / अपडेट करें</button>
@@ -486,3 +487,4 @@
 
 </body>
 </html>
+<!-- 🔴🔴🔴 [END (समाप्त): index.html] 🔴🔴🔴 -->

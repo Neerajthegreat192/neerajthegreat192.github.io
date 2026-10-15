@@ -78,6 +78,17 @@ const pipRestoreBtn = $('pipRestoreBtn');
 const chatInput = $('chatInput'), actionBtn = $('actionBtn'), micSvg = $('micSvg'), sendSvg = $('sendSvg');
 const networkBanner = $('networkBanner'), searchInput = $('searchInput');
 
+// ✅ FIX: नाम लिखने वाले बॉक्स में हिंदी कीबोर्ड और सिंगल-टैप अनलॉक करें
+['nameInput', 'editNameInput'].forEach(id => {
+  const el = $(id);
+  if (el) {
+    el.removeAttribute('autocorrect');
+    el.removeAttribute('spellcheck');
+    el.removeAttribute('autocapitalize');
+    el.removeAttribute('autocomplete');
+  }
+});
+
 // Translations
 let currentLang = localStorage.getItem('vc_lang') || 'hi';
 const translations = {
@@ -269,32 +280,41 @@ async function loadPhoneContacts() {
   });
 }
 
+// ✅ FIX: फ़ाइल का सही एक्सटेंशन सुनिश्चित करें ताकि Downloads फोल्डर में इमेज/फ़ाइल सही से खुले
+function ensureFileExtension(fileName, mimeType, base64Data) {
+  let name = (fileName || '').trim() || ('media_' + Date.now());
+  if (name.includes('.')) return name;
+  let mime = (mimeType || '').toLowerCase();
+  if (!mime && base64Data && base64Data.startsWith('data:')) {
+    mime = base64Data.substring(5, base64Data.indexOf(';')).toLowerCase();
+  }
+  if (mime.includes('png')) return name + '.png';
+  if (mime.includes('gif')) return name + '.gif';
+  if (mime.includes('webp')) return name + '.webp';
+  if (mime.startsWith('image/')) return name + '.jpg';
+  if (mime.startsWith('video/')) return name + '.mp4';
+  if (mime.startsWith('audio/')) return name + '.webm';
+  if (mime.includes('pdf')) return name + '.pdf';
+  return name + '.jpg';
+}
+
 function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
   if (!base64Data || !msgId) return;
   const cacheKey = 'auto_saved_' + msgId;
   if (localStorage.getItem(cacheKey)) return;
 
-  const base64Only = base64Data.split(',')[1] || base64Data;
+  const base64Only = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+  const safeFileName = ensureFileExtension(fileName, mimeType, base64Data);
   let saved = false;
 
-  if (isNativeApp() && (window.AndroidBridge?.saveMediaViaService || window.AndroidAudio?.saveMediaViaService)) {
-    try {
-      const bridge = window.AndroidBridge || window.AndroidAudio;
-      bridge.saveMediaViaService(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
-      saved = true;
-    } catch(e) {}
-  }
-
-  if (!saved) {
-    const uri = saveMediaViaNative(base64Only, fileName || 'file', mimeType || 'application/octet-stream');
-    if (uri) saved = true;
-  }
+  const uri = saveMediaViaNative(base64Only, safeFileName, mimeType || 'application/octet-stream');
+  if (uri) saved = true;
 
   if (!saved && !isNativeApp()) {
     try {
       const a = document.createElement('a');
       a.href = base64Data;
-      a.download = fileName || 'download';
+      a.download = safeFileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -309,20 +329,28 @@ function autoSaveMediaToDownloads(msgId, base64Data, fileName, mimeType) {
 }
 
 function saveMediaViaNative(base64Data, fileName, mimeType) {
+  const cleanBase64 = base64Data && base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+  const safeFileName = ensureFileExtension(fileName, mimeType, base64Data);
+  // Android 10+ में Downloads/VideoCallApp फोल्डर में बिना रुकावट सेव करने के लिए MediaStore.Downloads का उपयोग करें
+  const downloadCompatibleMime = 'application/octet-stream';
+
+  if (window.AndroidAudio && typeof window.AndroidAudio.saveMediaToDownloads === 'function') {
+    try {
+      const res = window.AndroidAudio.saveMediaToDownloads(cleanBase64, safeFileName, downloadCompatibleMime);
+      if (res && String(res).trim() !== '') return res;
+    } catch(e) {}
+  }
   if (window.AndroidBridge?.saveMediaViaService) {
     try {
-      window.AndroidBridge.saveMediaViaService(base64Data, fileName, mimeType);
+      window.AndroidBridge.saveMediaViaService(cleanBase64, safeFileName, downloadCompatibleMime);
       return 'service-started';
     } catch(e) {}
   }
   if (window.AndroidAudio?.saveMediaViaService) {
     try {
-      window.AndroidAudio.saveMediaViaService(base64Data, fileName, mimeType);
+      window.AndroidAudio.saveMediaViaService(cleanBase64, safeFileName, downloadCompatibleMime);
       return 'service-started';
     } catch(e) {}
-  }
-  if (window.AndroidAudio && typeof window.AndroidAudio.saveMediaToDownloads === 'function') {
-    try { return window.AndroidAudio.saveMediaToDownloads(base64Data, fileName, mimeType); } catch(e) { return ''; }
   }
   return '';
 }
@@ -885,7 +913,7 @@ function listenSelfAccountStatus() {
       myUserId = ''; myUserName = '';
       myHeaderName.textContent = '...';
       chatScreen.hidden = true; callScreen.hidden = true; lobbyScreen.hidden = true;
-      $('nameInput').value = ''; $('nameModal').hidden = false;
+      $('nameInput').value = '';$('nameModal').hidden = false;
       toast(currentLang === 'hi' ? '⚠️ आपकी आईडी रीसेट हो गई है।' : '⚠️ Your ID was reset.');
     }
   });
@@ -919,9 +947,16 @@ function checkUser() {
   initPresence();
 }
 
+// ✅ FIX: 'आगे बढ़ें' पर क्लिक करते ही कीबोर्ड तुरंत बंद (blur) होगा
 $('saveNameBtn').onclick = async () => {
-  const val = $('nameInput').value.trim();
+  const nameEl = $('nameInput');
+  const val = nameEl.value.trim();
   if (!val) return;
+  nameEl.blur();
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+
   myUserName = val;
   myUserId = val.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Math.floor(100 + Math.random()*900);
   localStorage.setItem('vc_user_id', myUserId);
@@ -938,20 +973,18 @@ $('saveNameBtn').onclick = async () => {
   }, 500);
 };
 
-$('grantPermsBtn').onclick = async () => {
-  $('permNoticeModal').hidden = true;
+$('grantPermsBtn').onclick = async () => {$('permNoticeModal').hidden = true;
   await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
   lobbyScreen.hidden = false;
   initPresence();
 };
 
-$('profileBtn').onclick = () => {
-  $('nameEditArea').hidden = true;
+$('profileBtn').onclick = () => {$('nameEditArea').hidden = true;
   $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   $('profileModal').hidden = false;
 };
-$('closeProfileBtn').onclick = () => { $('profileModal').hidden = true; };
+$('closeProfileBtn').onclick = () => {$('profileModal').hidden = true; };
 
 $('toggleEditNameBtn').onclick = () => {
   const isH = $('nameEditArea').hidden;
@@ -960,13 +993,17 @@ $('toggleEditNameBtn').onclick = () => {
     $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
   } else {
     $('editNameInput').value = myUserName;
-    $('editNameInput').focus();
-    $('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
+    $('editNameInput').focus();$('toggleEditNameBtn').textContent = currentLang === 'hi' ? 'छिपाएँ' : 'Hide';
   }
 };
 
 $('saveEditedNameBtn').onclick = async () => {
-  const val = $('editNameInput').value.trim(); if (!val) return;
+  const editEl = $('editNameInput');
+  const val = editEl.value.trim(); if (!val) return;
+  editEl.blur();
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
   myUserName = val;
   localStorage.setItem('vc_user_name', myUserName);
   await update(ref(db, `users/${myUserId}`), { name: myUserName });
@@ -976,8 +1013,7 @@ $('saveEditedNameBtn').onclick = async () => {
   toast(currentLang === 'hi' ? '✅ नाम सुरक्षित कर लिया गया' : '✅ Name saved');
 };
 
-$('recheckPermsBtn').onclick = async () => {
-  $('profileModal').hidden = true;
+$('recheckPermsBtn').onclick = async () => {$('profileModal').hidden = true;
   localStorage.removeItem('perms_done_v2');
   await runFullPermissionFlow();
   localStorage.setItem('perms_done_v2', 'true');
@@ -1024,10 +1060,8 @@ $('resetProfileBtn').onclick = async () => {
 };
 
 // Admin Pin & Panel
-adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };
-$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };
-$('verifyPinBtn').onclick = () => {
-  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) { $('adminPinModal').hidden = true; openAdminPanel(); }
+adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };$('verifyPinBtn').onclick = () => {
+  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) {$('adminPinModal').hidden = true; openAdminPanel(); }
   else toast('गलत पिन!');
 };
 
@@ -1060,19 +1094,15 @@ function openAdminPanel() {
   });
   $('adminPanelModal').hidden = false;
 }
-$('closeAdminPanelBtn').onclick = () => { $('adminPanelModal').hidden = true; };
+$('closeAdminPanelBtn').onclick = () => {$('adminPanelModal').hidden = true; };
 
 // Tabs & Call Logs
-$('tabChatsBtn').onclick = () => {
-  $('tabChatsBtn').className = 'tab-btn active-chat';
-  $('tabCallsBtn').className = 'tab-btn';
-  $('tabChatsContent').hidden = false;
+$('tabChatsBtn').onclick = () => {$('tabChatsBtn').className = 'tab-btn active-chat';
+  $('tabCallsBtn').className = 'tab-btn';$('tabChatsContent').hidden = false;
   $('tabCallsContent').hidden = true;
 };
-$('tabCallsBtn').onclick = () => {
-  $('tabCallsBtn').className = 'tab-btn active-call';
-  $('tabChatsBtn').className = 'tab-btn';
-  $('tabCallsContent').hidden = false;
+$('tabCallsBtn').onclick = () => {$('tabCallsBtn').className = 'tab-btn active-call';
+  $('tabChatsBtn').className = 'tab-btn';$('tabCallsContent').hidden = false;
   $('tabChatsContent').hidden = true;
   renderCallLogs();
 };
@@ -1325,7 +1355,7 @@ setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).lengt
    🔴🔴🔴 [PART 1 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
    ========================================================================= */
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3: app.js v1.23.9] >>>>>>>>>>>>>>>>>>>>
+   🟢🟢🟢 [PART 2 OF 3 — START (शुरू): app.js v1.24.1] 🟢🟢🟢
    Long-press Actions, Reactions, Chat Engine, Delivery/Read Sync, Voice Dock
    ========================================================================= */
 
@@ -1338,7 +1368,7 @@ let currentLongPressMsgData = null;
 let replyToMessageId = null;
 let replyToMessageData = null;
 
-const REACTION_EMOJIS = ['', '', '', '', '', ''];
+const REACTION_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
 
 function attachBubbleLongPress(el, msgId, m) {
   const HOLD_TIME = 500;
@@ -1417,8 +1447,8 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="reply">
-        <span class="menu-item-ic"></span>
-        <span>  (Reply)</span>
+        <span class="menu-item-ic">↩️</span>
+        <span>जवाब दें (Reply)</span>
       </button>
     `;
   }
@@ -1426,8 +1456,8 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted && (!m.type || m.type === 'text')) {
     itemsHtml += `
       <button class="menu-item" data-action="copy">
-        <span class="menu-item-ic"></span>
-        <span>  (Copy)</span>
+        <span class="menu-item-ic">📋</span>
+        <span>कॉपी करें (Copy)</span>
       </button>
     `;
   }
@@ -1435,17 +1465,17 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="forward">
-        <span class="menu-item-ic"></span>
-        <span>  (Forward)</span>
+        <span class="menu-item-ic">➡️</span>
+        <span>फॉरवर्ड करें (Forward)</span>
       </button>
     `;
   }
 
   if (!isSystemCall && !isDeleted) {
-    const starLabel = m.starred ? '  (Unstar)' : '  (Star)';
+    const starLabel = m.starred ? 'स्टार हटाएँ (Unstar)' : 'स्टार करें (Star)';
     itemsHtml += `
       <button class="menu-item" data-action="star">
-        <span class="menu-item-ic"></span>
+        <span class="menu-item-ic">⭐</span>
         <span>${starLabel}</span>
       </button>
     `;
@@ -1454,15 +1484,15 @@ function openMessageMenu(el, msgId, m) {
   if (!isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="delete-me">
-        <span class="menu-item-ic"></span>
-        <span>   (Delete for me)</span>
+        <span class="menu-item-ic">🗑️</span>
+        <span>मेरे लिए हटाएँ (Delete for me)</span>
       </button>
     `;
     if (isMine) {
       itemsHtml += `
         <button class="menu-item danger" data-action="delete-all">
-          <span class="menu-item-ic"></span>
-          <span>   (Delete for everyone)</span>
+          <span class="menu-item-ic">🗑️</span>
+          <span>सबके लिए हटाएँ (Delete for everyone)</span>
         </button>
       `;
     }
@@ -1524,13 +1554,13 @@ async function handleMessageAction(action, msgId, m) {
     case 'copy':
       try {
         await navigator.clipboard.writeText(m.text || '');
-        toast(currentLang === 'hi' ? '   ' : ' Copied');
+        toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied');
       } catch(e) {
         const ta = document.createElement('textarea');
         ta.value = m.text || '';
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); toast(currentLang === 'hi' ? '   ' : ' Copied'); } catch(e2) {}
+        try { document.execCommand('copy'); toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied'); } catch(e2) {}
         document.body.removeChild(ta);
       }
       break;
@@ -1553,7 +1583,7 @@ async function handleMessageAction(action, msgId, m) {
 
     case 'delete-all':
       const confirmMsg = currentLang === 'hi'
-        ? '        ?'
+        ? 'क्या आप सबके लिए यह मैसेज हटाना चाहते हैं?'
         : 'Delete this message for everyone?';
       if (confirm(confirmMsg)) {
         await deleteMessage(roomPath, msgId, true);
@@ -1571,7 +1601,7 @@ async function toggleReaction(msgId, m, emoji) {
     if (existing === emoji) await remove(ref(db, `${roomPath}/${myUserId}`));
     else await update(ref(db, roomPath), { [myUserId]: emoji });
     playMessageTickSound();
-  } catch(e) { toast(''); }
+  } catch(e) { toast('त्रुटि'); }
 }
 
 function renderReactionsHtml(m, msgId) {
@@ -1593,12 +1623,12 @@ function startReply(msgId, m) {
   replyToMessageData = m;
 
   let previewText = m.text || '';
-  if (m.type === 'image') previewText = ' ' + (currentLang==='hi'?'':'Photo');
-  else if (m.type === 'video') previewText = ' ' + (currentLang==='hi'?'':'Video');
-  else if (m.type === 'audio') previewText = ' ' + (currentLang==='hi'?' ':'Voice Note');
-  else if (m.type === 'doc') previewText = ' ' + (currentLang==='hi'?'':'Document');
+  if (m.type === 'image') previewText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
+  else if (m.type === 'video') previewText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
+  else if (m.type === 'audio') previewText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
+  else if (m.type === 'doc') previewText = '📄 ' + (currentLang==='hi'?'दस्तावेज़':'Document');
 
-  showReplyPreview(m.senderName || '', previewText);
+  showReplyPreview(m.senderName || 'उपयोगकर्ता', previewText);
   chatInput.focus();
 }
 
@@ -1612,10 +1642,10 @@ function showReplyPreview(senderName, text) {
   box.innerHTML = `
     <div class="reply-preview-bar"></div>
     <div class="reply-preview-content">
-      <div class="reply-preview-sender"> ${safeName(senderName)}</div>
+      <div class="reply-preview-sender">↩️ ${safeName(senderName)}</div>
       <div class="reply-preview-text">${safeName(text)}</div>
     </div>
-    <button class="reply-preview-close" id="closeReplyBtn"></button>
+    <button class="reply-preview-close" id="closeReplyBtn">✕</button>
   `;
 
   const footer = document.querySelector('.chat-footer');
@@ -1641,9 +1671,9 @@ async function toggleStarMessage(roomPath, msgId, m) {
     await update(ref(db, roomPath), { starred: newStar });
     const el = document.getElementById(`msg_${msgId}`);
     if (el) el.classList.toggle('starred', newStar);
-    toast(newStar ? '  ' : ' ');
+    toast(newStar ? '⭐ स्टार किया' : 'स्टार हटाया');
   } catch(e) {
-    toast('');
+    toast('त्रुटि');
   }
 }
 
@@ -1653,7 +1683,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       await update(ref(db, roomPath), {
         deleted: true,
         deletedAt: Date.now(),
-        text: '      ',
+        text: '🚫 यह संदेश हटा दिया गया है',
         data: null,
         type: 'deleted',
         senderName: myUserName
@@ -1663,7 +1693,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       if (el) {
         el.className = `chat-bubble is-deleted me`;
         el.innerHTML = `
-          <div style="font-style:italic;color:#94a3b8">      </div>
+          <div style="font-style:italic;color:#94a3b8">🚫 यह संदेश हटा दिया गया है</div>
           <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>
         `;
       }
@@ -1684,9 +1714,9 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       } catch(e) {}
     }
 
-    toast(forEveryone ? '   ' : '  ');
+    toast(forEveryone ? '🗑️ सबके लिए हटाया' : '🗑️ हटा दिया');
   } catch(e) {
-    toast('');
+    toast('त्रुटि');
   }
 }
 
@@ -1703,17 +1733,17 @@ function isDeletedForMe(msgId) {
 function openForwardDialog(msgId, m) {
   const users = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
   if (!users.length) {
-    toast('  ');
+    toast('कोई संपर्क नहीं');
     return;
   }
 
   const names = users.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt('  ? ( )\n\n' + names);
+  const input = prompt('किसे फॉरवर्ड करें? (नंबर लिखें)\n\n' + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
   if (isNaN(idx) || idx < 0 || idx >= users.length) {
-    toast(' ');
+    toast('गलत नंबर');
     return;
   }
 
@@ -1756,9 +1786,9 @@ async function forwardMessageTo(targetId, m, targetName) {
     }
 
     await set(newMsgRef, msgData);
-    toast(`${targetName}    `);
+    toast(`${targetName} को फॉरवर्ड कर दिया`);
   } catch(e) {
-    toast(' ');
+    toast('फॉरवर्ड फेल');
   }
 }
 
@@ -1776,7 +1806,7 @@ function openChat(tId, tName) {
 
   try {
     currentChatTargetId = tId;
-    currentChatTargetName = tName || allOnlineUsers[tId]?.name || '';
+    currentChatTargetName = tName || allOnlineUsers[tId]?.name || 'उपयोगकर्ता';
     
     // Unread count locally aur badge reset
     unreadCounts[tId] = 0;
@@ -1802,9 +1832,9 @@ function openChat(tId, tName) {
       if (!statusEl) return;
       const isTyping = u.typingTo === myUserId;
       const online = !!u.online;
-      if (isTyping) { statusEl.textContent = translations[currentLang]?.typing || '  ...'; statusEl.style.color = 'var(--success)'; }
-      else if (online) { statusEl.textContent = translations[currentLang]?.online || ''; statusEl.style.color = 'var(--success)'; }
-      else { statusEl.textContent = formatLastSeen(u.lastSeen) || (translations[currentLang]?.offline || ''); statusEl.style.color = '#94a3b8'; }
+      if (isTyping) { statusEl.textContent = translations[currentLang]?.typing || 'लिख रहे हैं...'; statusEl.style.color = 'var(--success)'; }
+      else if (online) { statusEl.textContent = translations[currentLang]?.online || 'ऑनलाइन'; statusEl.style.color = 'var(--success)'; }
+      else { statusEl.textContent = formatLastSeen(u.lastSeen) || (translations[currentLang]?.offline || 'ऑफलाइन'); statusEl.style.color = '#94a3b8'; }
     });
 
     if (lobbyScreen) lobbyScreen.hidden = true;
@@ -1852,25 +1882,25 @@ function attachVoiceBubbleEvents(container) {
       const pBar = bubble.querySelector('.voice-progress-bar'), tLabel = bubble.querySelector('.voice-time-label');
 
       if (activePlayingAudio && activePlayingAudio.src === url) {
-        if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = ''; }
-        else { activePlayingAudio.play(); btn.textContent = ''; }
+        if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = '▶'; }
+        else { activePlayingAudio.play(); btn.textContent = '⏸'; }
         return;
       }
-      if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = ''; }
+      if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = '▶'; }
 
       const audio = new Audio(url);
-      activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '';
+      activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '⏸';
       audio.ontimeupdate = () => {
         const curTime = audio.currentTime;
         pBar.style.width = Math.min((curTime / totalDurSec) * 100, 100) + '%';
         tLabel.textContent = `${Math.floor(curTime / 60)}:${String(Math.floor(curTime % 60)).padStart(2,'0')}`;
       };
       audio.onended = () => {
-        btn.textContent = ''; pBar.style.width = '0%';
+        btn.textContent = '▶'; pBar.style.width = '0%';
         tLabel.textContent = `${Math.floor(totalDurSec / 60)}:${String(Math.floor(totalDurSec % 60)).padStart(2,'0')}`;
         activePlayingAudio = null; activePlayingBtn = null;
       };
-      audio.play().catch(()=>{ btn.textContent = ''; });
+      audio.play().catch(()=>{ btn.textContent = '▶'; });
     };
   }
 
@@ -1943,7 +1973,7 @@ function loadChatMessages() {
           if (!el.classList.contains('is-deleted')) {
             el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
             el.innerHTML = `
-              <div style="font-style:italic;color:#94a3b8"> ${safeName(m.text || '     ')}</div>
+              <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
               <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
             `;
           }
@@ -1962,7 +1992,7 @@ function loadChatMessages() {
 
       if (m.type === 'system-call') {
         el.className = 'chat-bubble system-call';
-        el.textContent = `${m.text}  ${formatClockTime(m.time)}`;
+        el.textContent = `${m.text} • ${formatClockTime(m.time)}`;
         body.appendChild(el);
         shouldScroll = true;
         return;
@@ -1971,7 +2001,7 @@ function loadChatMessages() {
       if (m.type === 'deleted' || m.deleted) {
         el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
         el.innerHTML = `
-          <div style="font-style:italic;color:#94a3b8"> ${safeName(m.text || '     ')}</div>
+          <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
           <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
         `;
         body.appendChild(el);
@@ -1988,7 +2018,7 @@ function loadChatMessages() {
           <div class="chat-reply-preview">
             <div class="chat-reply-bar"></div>
             <div class="chat-reply-body">
-              <div class="chat-reply-sender">${safeName(m.replyTo.senderName || '')}</div>
+              <div class="chat-reply-sender">${safeName(m.replyTo.senderName || 'उपयोगकर्ता')}</div>
               <div class="chat-reply-text">${safeName(m.replyTo.text || '')}</div>
             </div>
           </div>
@@ -2007,7 +2037,7 @@ function loadChatMessages() {
             <div class="media-bubble">
               <div class="media-video-thumb">
                 <video src="${m.data}" preload="metadata" playsinline></video>
-                <div class="media-play-overlay"></div>
+                <div class="media-play-overlay">▶</div>
               </div>
             </div>
           `;
@@ -2019,7 +2049,7 @@ function loadChatMessages() {
       } else if (m.type === 'audio') {
         contentHtml += `
           <div class="voice-note-bubble" id="vn_${msgId}">
-            <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}"></button>
+            <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}">▶</button>
             <div class="voice-meta-area">
               <div class="voice-progress-bg" data-dur="${m.durationSec || 5}"><div class="voice-progress-bar"></div></div>
               <div class="voice-meta-row"><span class="voice-time-label">${m.duration || '0:05'}</span><button class="voice-spd-btn">1x</button></div>
@@ -2034,9 +2064,9 @@ function loadChatMessages() {
 
       let tickHtml = '';
       if (m.senderId === myUserId) {
-        if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;"></span>';
-        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;"></span>';
-        else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;"></span>';
+        if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
+        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;">✓✓</span>';
+        else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;">✓</span>';
       }
 
       el.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}</div>`;
@@ -2073,9 +2103,9 @@ function applyTickSafely(msgId, m) {
     const metaEl = el.querySelector('.chat-meta');
     if (metaEl) {
       let tickHtml = '';
-      if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;"></span>';
-      else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;"></span>';
-      else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;"></span>';
+      if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
+      else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;">✓✓</span>';
+      else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;">✓</span>';
       metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
     }
   }
@@ -2083,15 +2113,15 @@ function applyTickSafely(msgId, m) {
 
 function buildMediaPlaceholderHtml(msgId, m) {
   const sizeText = m.fileSize ? formatFileSize(m.fileSize) : '';
-  const icon = m.type === 'image' ? '' : (m.type === 'video' ? '' : '');
-  const label = m.type === 'image' ? '' : (m.type === 'video' ? '' : '');
+  const icon = m.type === 'image' ? '🖼️' : (m.type === 'video' ? '🎥' : '📎');
+  const label = m.type === 'image' ? 'फ़ोटो' : (m.type === 'video' ? 'वीडियो' : 'फ़ाइल');
 
   return `
     <div class="media-download-overlay" data-media-id="${m.mediaId || msgId}" data-msg-id="${msgId}">
       <div class="media-download-icon">${icon}</div>
       <div class="media-file-name">${safeName(m.fileName || label)}</div>
       <div class="media-file-size">${sizeText}</div>
-      <button class="media-download-btn">     ...</button>
+      <button class="media-download-btn">⬇ स्वतः डाउनलोड हो रहा है...</button>
     </div>
   `;
 }
@@ -2104,7 +2134,7 @@ function buildDocBubbleHtml(msgId, m) {
       <div class="media-doc-icon">${icon}</div>
       <div class="media-doc-info">
         <div class="media-doc-name">${safeName(m.fileName || 'document')}</div>
-        <div class="media-doc-size">${size}   </div>
+        <div class="media-doc-size">${size} • सहेजा गया</div>
       </div>
     </div>
   `;
@@ -2198,14 +2228,14 @@ async function sendChatMessage() {
 
   if (replyToMessageId && replyToMessageData) {
     let previewText = replyToMessageData.text || '';
-    if (replyToMessageData.type === 'image') previewText = ' ';
-    else if (replyToMessageData.type === 'video') previewText = ' ';
-    else if (replyToMessageData.type === 'audio') previewText = '  ';
-    else if (replyToMessageData.type === 'doc') previewText = ' ';
+    if (replyToMessageData.type === 'image') previewText = '📷 फ़ोटो';
+    else if (replyToMessageData.type === 'video') previewText = '🎥 वीडियो';
+    else if (replyToMessageData.type === 'audio') previewText = '🎙 वॉयस नोट';
+    else if (replyToMessageData.type === 'doc') previewText = '📄 दस्तावेज़';
 
     msgData.replyTo = {
       msgId: replyToMessageId,
-      senderName: replyToMessageData.senderName || '',
+      senderName: replyToMessageData.senderName || 'उपयोगकर्ता',
       text: previewText
     };
     cancelReply();
@@ -2260,7 +2290,7 @@ async function sendMediaMessage(file) {
   const roomPath = `chats/${roomId}/messages`;
   const mediaType = getMediaTypeFromMime(file.type);
   const mediaId = `media_${Date.now()}_${Math.floor(Math.random()*10000)}`;
-  const label = mediaType === 'image' ? ' ' : (mediaType === 'video' ? ' ' : (mediaType === 'audio' ? '  ' : ' '));
+  const label = mediaType === 'image' ? '📷 फ़ोटो' : (mediaType === 'video' ? '🎥 वीडियो' : (mediaType === 'audio' ? '🎙 वॉयस नोट' : '📄 दस्तावेज़'));
 
   localFileMemoryCache[mediaId] = file;
 
@@ -2269,7 +2299,7 @@ async function sendMediaMessage(file) {
   renderContacts();
 
   if (file.size <= DIRECT_SEND_MAX_SIZE) {
-    toast(currentLang === 'hi' ? '     ...' : ' Sending file...');
+    toast(currentLang === 'hi' ? '📤 फ़ाइल भेजी जा रही है...' : '📤 Sending file...');
     const reader = new FileReader();
     reader.onload = async () => {
       const base64Data = reader.result;
@@ -2294,7 +2324,7 @@ async function sendMediaMessage(file) {
       sendChatMessagePush(targetId, label, roomId, newMsgId, {
         mediaType, mediaSize: file.size, mediaId, fileName: file.name, mimeType: file.type
       });
-      toast(currentLang === 'hi' ? '     ' : ' File sent successfully');
+      toast(currentLang === 'hi' ? '✅ फ़ाइल सफलतापूर्वक भेज दी गई' : '✅ File sent successfully');
     };
     reader.readAsDataURL(file);
     return;
@@ -2321,13 +2351,13 @@ async function sendMediaMessage(file) {
     mediaType, mediaSize: file.size, mediaId, fileName: file.name, mimeType: file.type
   });
 
-  toast(currentLang === 'hi' ? '   P2P     ...' : ' Sending large file via P2P...');
+  toast(currentLang === 'hi' ? '⏫ बड़ी फ़ाइल P2P से भेजी जा रही है...' : '⏫ Sending large file via P2P...');
   const sentMediaId = await sendMediaFileOverDataChannel(targetId, file);
   if (sentMediaId) {
     update(ref(db, `${roomPath}/${newMsgId}`), { delivered: true }).catch(()=>{});
-    toast(currentLang === 'hi' ? '  ' : ' Sent');
+    toast(currentLang === 'hi' ? '✅ भेज दिया' : '✅ Sent');
   } else {
-    toast(currentLang === 'hi' ? '    ' : ' Failed to send');
+    toast(currentLang === 'hi' ? '❌ भेजने में समस्या आई' : '❌ Failed to send');
   }
 }
 
@@ -2633,7 +2663,7 @@ function renderTransferQueue() {
     const isSend = t.direction === 'send';
     const current = isSend ? (t.sentBytes || 0) : (t.receivedBytes || 0);
     const pct = t.totalSize > 0 ? Math.min(100, Math.round(current * 100 / t.totalSize)) : 0;
-    const arrow = isSend ? '' : '';
+    const arrow = isSend ? '⬆' : '⬇';
     const icon = getFileIcon(t.mimeType, t.fileName);
 
     return `
@@ -2658,7 +2688,7 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
         <div class="media-bubble">
           <div class="media-video-thumb">
             <video src="${base64Data}" preload="metadata" playsinline></video>
-            <div class="media-play-overlay"></div>
+            <div class="media-play-overlay">▶</div>
           </div>
         </div>`;
       const thumb = parent?.querySelector('.media-video-thumb');
@@ -2672,10 +2702,10 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
 }
 
 function handleDocDownload(msgId, m) {
-  if (m.data && (m.data.includes('maps.google.com') || m.fileName === '')) {
-    const openMaps = confirm('  Google Maps  ?');
+  if (m.data && (m.data.includes('maps.google.com') || m.fileName === 'लोकेशन')) {
+    const openMaps = confirm('📍 लोकेशन Google Maps में खोलें?');
     if (openMaps) window.open(m.data, '_blank');
-    else navigator.clipboard.writeText(m.data).then(() => toast('    '));
+    else navigator.clipboard.writeText(m.data).then(() => toast('📋 लिंक कॉपी हो गया'));
     return;
   }
 
@@ -2684,7 +2714,7 @@ function handleDocDownload(msgId, m) {
     const handled = openContactVcfNative(rawBase64, m.fileName || 'contact.vcf');
     if (!handled && m.data) {
       saveMediaViaNative(rawBase64, m.fileName || 'contact.vcf', 'text/x-vcard');
-      toast('  VCF  ');
+      toast('👤 संपर्क VCF डाउनलोड हुआ');
     }
     return;
   }
@@ -2719,8 +2749,7 @@ function openMediaViewer(dataUrl, mimeType, fileName) {
   viewer.hidden = false;
 }
 
-$('closeMediaViewerBtn').onclick = () => {
-  $('mediaViewer').hidden = true;
+$('closeMediaViewerBtn').onclick = () => {$('mediaViewer').hidden = true;
   $('mediaViewerContent').innerHTML = '';
   mediaViewerState = { mediaId: null, dataUrl: null, mimeType: null, fileName: null };
 };
@@ -2730,7 +2759,7 @@ $('saveMediaBtn').onclick = () => {
   const { dataUrl, mimeType, fileName } = mediaViewerState;
   const base64Only = dataUrl.split(',')[1] || dataUrl;
   saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
-  toast(' Downloads    ');
+  toast('✅ Downloads में सहेज दिया गया');
 };
 
 const attachBtn = $('attachBtn');
@@ -2762,15 +2791,13 @@ attachMenu.querySelectorAll('.attach-menu-item').forEach(btn => {
 });
 
 $('photoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
-$('videoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
-$('docFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
-$('anyFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
-$('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('videoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };$('docFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('anyFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };$('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
 
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
-  if (!navigator.geolocation) { toast('   '); return; }
-  toast('     ...');
+  if (!navigator.geolocation) { toast('लोकेशन सपोर्ट नहीं है'); return; }
+  toast('📍 लोकेशन प्राप्त कर रहे हैं...');
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const lat = pos.coords.latitude, lng = pos.coords.longitude;
@@ -2779,7 +2806,7 @@ function sendLocationMessage() {
     const roomPath = `chats/${roomId}/messages`;
     const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
     const newMsgRef = push(ref(db, roomPath));
-    const label = ' ';
+    const label = '📍 लोकेशन';
 
     latestChatSnippets[currentChatTargetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
     localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
@@ -2787,26 +2814,26 @@ function sendLocationMessage() {
 
     await set(newMsgRef, {
       senderId: myUserId, senderName: myUserName, type: 'doc', text: label,
-      fileName: '', mimeType: 'text/plain', fileSize: mapsUrl.length,
+      fileName: 'लोकेशन', mimeType: 'text/plain', fileSize: mapsUrl.length,
       data: mapsUrl, time: Date.now(), delivered: targetOnline, read: false
     });
 
-    sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: '' });
-    toast('    ');
-  }, () => { toast('   '); });
+    sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: 'लोकेशन' });
+    toast('✅ लोकेशन भेज दी गई');
+  }, () => { toast('लोकेशन प्राप्त नहीं हुई'); });
 }
 
 async function sendContactMessage() {
   if (!currentChatTargetId) return;
   const list = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
-  if (!list.length) { toast('  '); return; }
+  if (!list.length) { toast('कोई संपर्क नहीं'); return; }
 
   const names = list.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt('   ? ( )\n\n' + names);
+  const input = prompt('कौन सा संपर्क भेजें? (नंबर लिखें)\n\n' + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= list.length) { toast(' '); return; }
+  if (isNaN(idx) || idx < 0 || idx >= list.length) { toast('गलत नंबर'); return; }
 
   const contact = allOnlineUsers[list[idx]];
   const vcfData = `BEGIN:VCARD\nVERSION:3.0\nFN:${contact.name}\nUID:${list[idx]}\nEND:VCARD`;
@@ -2814,7 +2841,7 @@ async function sendContactMessage() {
   const roomPath = `chats/${roomId}/messages`;
   const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
   const newMsgRef = push(ref(db, roomPath));
-  const label = ` ${contact.name}`;
+  const label = `👤 ${contact.name}`;
 
   latestChatSnippets[currentChatTargetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
@@ -2827,21 +2854,21 @@ async function sendContactMessage() {
   });
 
   sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: contact.name + '.vcf', mimeType: 'text/vcard' });
-  toast('    ');
+  toast('✅ संपर्क भेज दिया गया');
 }
 
 let phoneContactsCache = [];
 
 async function openPhoneContactsPicker() {
   if (!currentChatTargetId) return;
-  if (!isNativeApp()) { toast(currentLang === 'hi' ? '      ' : 'Only works in app'); return; }
+  if (!isNativeApp()) { toast(currentLang === 'hi' ? 'यह सिर्फ ऐप में काम करता है' : 'Only works in app'); return; }
   const modal = $('phoneContactsModal');
   if (!modal) return;
   modal.hidden = false;
   const list = $('phoneContactsList');
   const searchIn = $('phoneContactsSearch');
   const sendBtn = $('phoneContactsSendBtn');
-  list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'    ...':'Loading contacts...'}</div>`;
+  list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'संपर्क लोड हो रहे हैं...':'Loading contacts...'}</div>`;
   searchIn.value = '';
   const selected = new Set();
 
@@ -2863,14 +2890,14 @@ async function openPhoneContactsPicker() {
   const renderList = (filter) => {
     const q = (filter || '').toLowerCase().trim();
     const items = phoneContactsCache.filter(c => !q || c.name.toLowerCase().includes(q) || c.phone.includes(q));
-    if (!items.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'   ':'No contacts found'}</div>`; return; }
+    if (!items.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'कोई संपर्क नहीं मिला':'No contacts found'}</div>`; return; }
     list.innerHTML = items.slice(0, 300).map((c) => {
       const initials = (c.name || '?').trim().charAt(0).toUpperCase();
       const isSel = selected.has(c.phone);
       return `<div class="phone-contact-row${isSel?' selected':''}" data-phone="${c.phone}">
         <div class="pc-avatar">${initials}</div>
         <div class="pc-info"><div class="pc-name">${safeName(c.name)}</div><div class="pc-phone">${c.phone}</div></div>
-        <div class="pc-check">${isSel ? '' : ''}</div>
+        <div class="pc-check">${isSel ? '✓' : ''}</div>
       </div>`;
     }).join('');
     list.querySelectorAll('.phone-contact-row').forEach(row => {
@@ -2878,7 +2905,7 @@ async function openPhoneContactsPicker() {
         const ph = row.dataset.phone;
         if (selected.has(ph)) selected.delete(ph); else selected.add(ph);
         row.classList.toggle('selected', selected.has(ph));
-        row.querySelector('.pc-check').textContent = selected.has(ph) ? '' : '';
+        row.querySelector('.pc-check').textContent = selected.has(ph) ? '✓' : '';
         updateSendBtn();
       };
     });
@@ -2893,7 +2920,7 @@ async function openPhoneContactsPicker() {
       const vcfData = `BEGIN:VCARD\nVERSION:3.0\nFN:${c.name}\nTEL;TYPE=CELL:${c.phone}\nEND:VCARD`;
       await sendVcfMessage(vcfData, c.name.replace(/[^a-zA-Z0-9]/g,'_') + '.vcf');
     }
-    toast(` ${items.length}   `);
+    toast(`✅ ${items.length} संपर्क भेजे गए`);
   };
 
   const cb = $('closePhoneContactsBtn');
@@ -2909,7 +2936,7 @@ async function sendVcfMessage(vcfData, fileName) {
   const roomPath = `chats/${roomId}/messages`;
   const targetOnline = !!allOnlineUsers[targetId]?.online;
   const newMsgRef = push(ref(db, roomPath));
-  const label = ` ${fileName.replace('.vcf','')}`;
+  const label = `👤 ${fileName.replace('.vcf','')}`;
   latestChatSnippets[targetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
@@ -2925,8 +2952,8 @@ async function sendVcfMessage(vcfData, fileName) {
 // Voice Dock Recording
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
-const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn = $('dockPauseResumeBtn');
-const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot = $('dockBlinkDot');
+const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn =$('dockPauseResumeBtn');
+const dockPauseIco = $('dockPauseIco'), dockPauseText = $('dockPauseText'), dockBlinkDot =$('dockBlinkDot');
 const waveCanvas = $('waveCanvas'), waveCtx = waveCanvas.getContext('2d');
 
 async function openVoiceDock() {
@@ -2938,8 +2965,8 @@ async function openVoiceDock() {
     dockMediaRecorder.start(100);
     isDockPaused = false; dockSeconds = 0;
     dockTimerText.textContent = '0:00';
-    dockPauseIco.textContent = '';
-    dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Pause';
+    dockPauseIco.textContent = '⏸';
+    dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
     dockBlinkDot.style.animationPlayState = 'running';
     voiceDock.hidden = false;
     setupWaveformVisualizer(dockStream);
@@ -2952,7 +2979,7 @@ async function openVoiceDock() {
       }
     }, 1000);
   } catch(e) {
-    toast('     ');
+    toast('माइक की अनुमति नहीं मिल सकी');
   }
 }
 
@@ -2994,11 +3021,11 @@ dockPauseResumeBtn.onclick = () => {
   if (!dockMediaRecorder) return;
   if (!isDockPaused) {
     dockMediaRecorder.pause(); isDockPaused = true;
-    dockPauseIco.textContent = ''; dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Resume';
+    dockPauseIco.textContent = '🎙'; dockPauseText.textContent = currentLang === 'hi' ? 'जारी रखें' : 'Resume';
     dockBlinkDot.style.animationPlayState = 'paused';
   } else {
     dockMediaRecorder.resume(); isDockPaused = false;
-    dockPauseIco.textContent = ''; dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Pause';
+    dockPauseIco.textContent = '⏸'; dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
     dockBlinkDot.style.animationPlayState = 'running';
   }
 };
@@ -3033,7 +3060,7 @@ function sendVoiceDock() {
         const durStr = `${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}`;
         const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
         const newMsgRef = push(ref(db, roomPath));
-        const voiceLabel = ' ' + (currentLang==='hi'?' ':'Voice Note');
+        const voiceLabel = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
 
         latestChatSnippets[currentChatTargetId] = { text: voiceLabel, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
         localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
@@ -3058,10 +3085,10 @@ function sendVoiceDock() {
   updateActionBtnState();
 }
 $('dockSendBtn').onclick = sendVoiceDock;
+
 /* =========================================================================
    🔴🔴🔴 [PART 2 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
    ========================================================================= */
-
 /* =========================================================================
    🟢🟢🟢 [PART 3 OF 3 — START (शुरू): app.js v1.24.1] 🟢🟢🟢
    Call Engine, Controls, Strict Viewport & Touch-Slide Lock Fix, Hardware Back & Init
@@ -3980,7 +4007,7 @@ async function resetTictactoeGame() {
 }
 
 async function closeTictactoeGame() {
-  if (activeCallId) await update(ref(db, `call_sessions/${activeCallId}/tictactoe_state`), { active: false }).catch(()=>{});
+  if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/tictactoe_state`), { active: false }).catch(()=>{});
   const box = $('kidsTictactoeBox');
   if (box) box.hidden = true;
 }
@@ -4000,7 +4027,7 @@ function cleanupKidsModules() {
   const box = $('kidsQuizBox'); if (box) box.hidden = true;
   const wb = $('kidsWhiteboardModal'); if (wb) wb.hidden = true;
   const ttt = $('kidsTictactoeBox'); if (ttt) ttt.hidden = true;
-  if ($('funModeTray')) $('funModeTray').hidden = true;
+  if ($('funModeTray'))$('funModeTray').hidden = true;
   if (ctx && canvasEl) ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 }
 
@@ -4204,7 +4231,7 @@ $('btnAddPerson').onclick = (e) => {
   }
   $('addParticipantModal').hidden = false;
 };
-$('closeAddModalBtn').onclick = () => { $('addParticipantModal').hidden = true; };
+$('closeAddModalBtn').onclick = () => {$('addParticipantModal').hidden = true; };
 
 // PiP Swap Handlers
 let pipTouchStartX = 0, pipTouchStartY = 0, pipMoved = false;
@@ -4259,7 +4286,7 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen) {
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden && !isTttOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -4572,7 +4599,7 @@ if (window.MutationObserver && chatScreen) {
   chatObserver.observe(chatScreen, { attributes: true, attributeFilter: ['hidden'] });
 }
 
-// Header aur Footer par ungli rakhkar upar slide karne se screen pan hone ko rokein
+// Header aur Footer par ungli rakhkar upار slide karne से screen pan hone ko rokein
 document.addEventListener('touchmove', (e) => {
   if (chatScreen.hidden) return;
   const inHeader = e.target.closest('.chat-header');
