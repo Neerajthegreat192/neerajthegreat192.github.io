@@ -1,0 +1,96 @@
+{
+  "easy_mode": [
+    {
+      "q": "Which is the National Animal of India?",
+      "opts": ["Lion", "Tiger", "Elephant", "Leopard"],
+      "ans": "Tiger"
+    },
+    {
+      "q": "ऐसी कौन सी चीज है जो पानी पीते ही मर जाती है?",
+      "opts": ["पेड़", "आग", "प्यास", "नदी"],
+      "ans": "आग"
+    },
+    {
+      "q": "What comes after Sunday?",
+      "opts": ["Monday", "Tuesday", "Friday", "Saturday"],
+      "ans": "Monday"
+    },
+    {
+      "q": "आसमान का रंग कैसा होता है?",
+      "opts": ["लाल", "नीला", "हरा", "पीला"],
+      "ans": "नीला"
+    },
+    {
+      "q": "How many legs does a spider have?",
+      "opts": ["6", "8", "10", "4"],
+      "ans": "8"
+    },
+    {
+      "q": "जंगल का राजा किसे कहा जाता है?",
+      "opts": ["भालू", "शेर", "हाथी", "लोमड़ी"],
+      "ans": "शेर"
+    },
+    {
+      "q": "Which bird gives us eggs?",
+      "opts": ["Parrot", "Hen", "Crow", "Peacock"],
+      "ans": "Hen"
+    },
+    {
+      "q": "हमारे शरीर में एक हाथ में कितनी उँगलियाँ होती हैं?",
+      "opts": ["4", "5", "6", "10"],
+      "ans": "5"
+    },
+    {
+      "q": "What is the color of a ripe Apple?",
+      "opts": ["Red", "Blue", "Black", "White"],
+      "ans": "Red"
+    },
+    {
+      "q": "एक दिन में कितने घंटे होते हैं?",
+      "opts": ["12", "20", "24", "30"],
+      "ans": "24"
+    }
+  ],
+  "hard_mode": [
+    {
+      "q": "ऐसी कौन सी जगह है जहाँ समुद्र है लेकिन पानी नहीं, नदियाँ हैं लेकिन मछली नहीं, और जंगल हैं लेकिन पेड़ नहीं?",
+      "ans": "नक्शा"
+    },
+    {
+      "q": "I speak without a mouth and hear without ears. What am I?",
+      "ans": "An Echo"
+    },
+    {
+      "q": "वह क्या है जो हमेशा आता है, लेकिन कभी पहुँचता नहीं?",
+      "ans": "आने वाला कल"
+    },
+    {
+      "q": "What has to be broken before you can use it?",
+      "ans": "An Egg"
+    },
+    {
+      "q": "भारत की राजधानी का क्या नाम है?",
+      "ans": "नई दिल्ली"
+    },
+    {
+      "q": "Which is the largest planet in our solar system?",
+      "ans": "Jupiter"
+    },
+    {
+      "q": "ऐसी कौन सी चीज है जो ऊपर तो जाती है लेकिन कभी नीचे नहीं आती?",
+      "ans": "उम्र"
+    },
+    {
+      "q": "I am tall when I am young, and I am short when I am old. What am I?",
+      "ans": "A Candle"
+    },
+    {
+      "q": "कौन सा जानवर अंतरिक्ष (Space) में सबसे पहले गया था?",
+      "ans": "कुत्ता"
+    },
+    {
+      "q": "What gets wetter the more it dries?",
+      "ans": "A Towel"
+    }
+  ]
+}
