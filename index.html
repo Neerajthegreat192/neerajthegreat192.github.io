@@ -185,6 +185,12 @@
     <div class="user-title" id="myHeaderName">...</div>
     <div class="header-actions">
       <button id="adminBtn" class="admin-badge">👑 एडमिन</button>
+      
+      <!-- पॉइंट #2: WhatsApp शेयरिंग बटन (एडमिन और सेटिंग्स के बीच) -->
+      <button class="icon-hdr-btn btn-whatsapp-share" id="shareAppWhatsappBtn" title="व्हाट्सएप पर शेयर करें">
+        <svg viewBox="0 0 24 24" style="fill:#25D366;width:20px;height:20px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.196 8.196 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.02-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.37-.44.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.35-.77-1.85-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.78 2.71 4.3 3.8.6.26 1.07.42 1.44.54.61.19 1.16.17 1.6.1.49-.07 1.47-.6 1.68-1.18.21-.59.21-1.09.15-1.19-.06-.1-.22-.16-.47-.29z"/></svg>
+      </button>
+
       <button class="icon-hdr-btn btn-gear" id="profileBtn" title="सेटिंग्स">
         <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
       </button>
@@ -317,6 +323,10 @@
       <div class="network-pill high" id="networkPill"><span class="network-dot"></span><span id="networkText">हाई</span></div>
     </div>
     <div class="top-call-actions">
+      <!-- पॉइंट #4: Picture-in-Picture (PiP) बटन -->
+      <button class="top-action-btn" id="btnEnterPip" title="मिनी स्क्रीन (PiP)">
+        <svg viewBox="0 0 24 24"><path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"/></svg>
+      </button>
       <button class="top-action-btn" id="btnAddPerson" title="सदस्य जोड़ें">
         <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       </button>
@@ -341,6 +351,11 @@
         <button class="tray-item" id="btnKidsQuiz">
           <span class="tray-icon">🎯</span>
           <span class="tray-label">किड्स क्विज़</span>
+        </button>
+        <!-- पॉइंट #3: फन मोड ट्रे में Riddle & GK टैब जोड़ा गया -->
+        <button class="tray-item" id="trayBtnRiddleGk">
+          <span class="tray-icon">🧩</span>
+          <span class="tray-label">Riddle & GK</span>
         </button>
         <button class="tray-item" id="btnWhiteboard">
           <span class="tray-icon">🎨</span>
@@ -371,6 +386,37 @@
     <div id="quizQuestionText" class="quiz-question">सवाल लोड हो रहा है...</div>
     <div id="quizOptionsArea" class="quiz-options-grid"></div>
     <button id="nextQuizBtn" class="quiz-next-big-btn">🔄 अगला सवाल (Next Question)</button>
+  </div>
+
+  <!-- पॉइंट #3: Riddle & GK फ्लोटिंग गेम बॉक्स -->
+  <div id="kidsRiddleBox" class="quiz-floating-box" hidden>
+    <div class="quiz-header">
+      <div class="quiz-header-title">🧩 Riddle & GK Challenge</div>
+      <div class="quiz-header-actions">
+        <select id="riddleModeSelect" class="quiz-cat-select" title="मोड चुनें">
+          <option value="easy_mode">Easy (6 वर्ष - 4 विकल्प)</option>
+          <option value="hard_mode">Hard (9 वर्ष - बोलकर)</option>
+        </select>
+        <button id="closeRiddleBtn" class="quiz-close-btn" title="बंद करें">✕</button>
+      </div>
+    </div>
+    <div class="quiz-timer-wrap">
+      <div id="riddleTimerBar" class="quiz-timer-bar"></div>
+    </div>
+    <div class="riddle-status-row">
+      <div id="riddleScoreDisplay" class="riddle-score-txt">✅ 0 | ❌ 0 (0/10)</div>
+      <button id="riddleBuzzerBtn" class="riddle-buzzer-btn">🔔 बजर (Buzzer)</button>
+    </div>
+    <div id="riddleQuestionText" class="quiz-question">पहेली लोड हो रही है...</div>
+    <div id="riddleOptionsArea" class="quiz-options-grid"></div>
+    <div id="riddleHardEvalArea" class="riddle-hard-eval" hidden>
+      <div id="riddleHiddenAnswer" class="riddle-hidden-ans"></div>
+      <div class="riddle-eval-btns">
+        <button id="evalRightBtn" class="eval-btn eval-btn-right">✅ सही (Right)</button>
+        <button id="evalWrongBtn" class="eval-btn eval-btn-wrong">❌ गलत (Wrong)</button>
+      </div>
+    </div>
+    <button id="nextRiddleBtn" class="quiz-next-big-btn">🔄 अगला मुकाबला / सवाल (Next)</button>
   </div>
 
   <div id="kidsWhiteboardModal" class="whiteboard-overlay" hidden>

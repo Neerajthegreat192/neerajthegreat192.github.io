@@ -42,6 +42,15 @@ function isNativeApp() {
   return false;
 }
 
+// --- पॉइंट #4: Android PiP Mode से वापस आने या जाने पर UI को एडजस्ट करने का ग्लोबल फंक्शन ---
+window.onPipModeChanged = function(isInPipMode) {
+  if (isInPipMode) {
+    document.body.classList.add('in-pip-mode');
+  } else {
+    document.body.classList.remove('in-pip-mode');
+  }
+};
+
 // Firebase & WebRTC Setup
 const firebaseConfig = {
   apiKey: "AIzaSyBg1VC0cd1FmGiXTkMvFFG-eSL46FmgtZU",
@@ -1350,6 +1359,15 @@ function renderContacts() {
 }
 searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
+
+// पॉइंट #2: WhatsApp शेयरिंग बटन
+if ($('shareAppWhatsappBtn')) {$('shareAppWhatsappBtn').onclick = () => {
+    const promoMsg = currentLang === 'hi' 
+      ? `📱 कमाल का वीडियो कॉलिंग ऐप! इसमें फन-मोड, वाइटबोर्ड और पहेलियां (Riddles) भी हैं। अभी डाउनलोड करें: \n${GITHUB_APK_URL}` 
+      : `📱 Amazing Video Calling App with Fun-Mode, Whiteboard & Riddles! Download now: \n${GITHUB_APK_URL}`;
+    window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(promoMsg), '_blank');
+  };
+}
 
 /* =========================================================================
    🔴🔴🔴 [PART 1 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
@@ -3422,6 +3440,20 @@ $('audioModeBtn').onclick = (e) => {
   scheduleAutoHide();
 };
 
+// --- पॉइंट #4: PiP Mode Native Call ---
+if ($('btnEnterPip')) {
+  $('btnEnterPip').onclick = (e) => {
+    e.stopPropagation();
+    if (window.AndroidBridge && window.AndroidBridge.enterPipMode) {
+      window.AndroidBridge.enterPipMode();
+    } else if (window.AndroidAudio && window.AndroidAudio.enterPipMode) {
+      window.AndroidAudio.enterPipMode();
+    } else {
+      toast(currentLang === 'hi' ? 'PiP मोड केवल ऐप में समर्थित है' : 'PiP mode supported in app only');
+    }
+  };
+}
+
 async function boostPeerBitrate(pc) {
   try {
     for (const sender of pc.getSenders()) {
@@ -3504,7 +3536,9 @@ function stopNetworkQualityMonitor() {
   qualityLevel = 'high';
 }
 
-// Fun Mode & Games
+// ===================================================
+// 🪄 FUN MODE & GAMES
+// ===================================================
 $('funModeBtn').onclick = (e) => {
   e.stopPropagation();
   if (!isCallConnected) {
@@ -3525,6 +3559,7 @@ $('funModeTray').onclick = (e) => {
   if (e.target === $('funModeTray')) $('funModeTray').hidden = true;
 };
 
+// 1. Kids Quiz Module
 let allQuizQuestions = null;
 let quizSessionUnsub = null;
 let quizTimerInterval = null;
@@ -3670,6 +3705,268 @@ $('btnKidsQuiz').onclick = (e) => {
   }
   scheduleAutoHide();
 };
+
+// --- पॉइंट #3: Riddle & GK Module ---
+let riddleData = null;
+let riddleSessionUnsub = null;
+let riddleTimerInterval = null;
+
+async function fetchRiddleData() {
+  if (riddleData) return riddleData;
+  try {
+    const res = await fetch('https://neerajthegreat192.github.io/riddle.json?t=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data) { riddleData = data; return riddleData; }
+    }
+  } catch(e) {}
+  
+  // Fallback defaults
+  return {
+    easy_mode: [
+      { q: "Which is the National Animal of India?", opts: ["Lion", "Tiger", "Elephant", "Leopard"], ans: "Tiger" },
+      { q: "ऐसी कौन सी चीज है जो पानी पीते ही मर जाती है?", opts: ["पेड़", "आग", "प्यास", "नदी"], ans: "आग" }
+    ],
+    hard_mode: [
+      { q: "ऐसी कौन सी जगह है जहाँ समुद्र है लेकिन पानी नहीं, नदियाँ हैं लेकिन मछली नहीं, और जंगल हैं लेकिन पेड़ नहीं?", ans: "नक्शा" },
+      { q: "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?", ans: "An Echo" }
+    ]
+  };
+}
+
+function startRiddleTimerBar(durationSec = 20) {
+  stopRiddleTimerBar();
+  const bar = $('riddleTimerBar');
+  if (!bar) return;
+  let timeLeft = durationSec;
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+  setTimeout(() => { if (bar) bar.style.transition = 'width 1s linear'; }, 50);
+
+  riddleTimerInterval = setInterval(() => {
+    timeLeft--;
+    const pct = Math.max(0, (timeLeft / durationSec) * 100);
+    if (bar) bar.style.width = pct + '%';
+    if (timeLeft <= 0) {
+      clearInterval(riddleTimerInterval);
+      riddleTimerInterval = null;
+      playOopsSound();
+      toast(currentLang === 'hi' ? '⏱ समय समाप्त हो गया!' : '⏱ Time up!');
+
+      if (activeCallId) {
+        const riddleRef = ref(db, `call_sessions/${activeCallId}/riddle_state`);
+        get(riddleRef).then(snap => {
+          const st = snap.val();
+          if (st && !st.answered) {
+            update(riddleRef, {
+              answered: true,
+              timedOut: true,
+              wrongScore: (st.wrongScore || 0) + 1,
+              updatedAt: Date.now()
+            });
+          }
+        });
+      }
+    }
+  }, 1000);
+}
+
+function stopRiddleTimerBar() {
+  if (riddleTimerInterval) { clearInterval(riddleTimerInterval); riddleTimerInterval = null; }
+  const bar = $('riddleTimerBar');
+  if (bar) bar.style.width = '100%';
+}
+
+async function sendRiddleQuestion(mode = 'easy_mode') {
+  if (!activeCallId) return;
+  const data = await fetchRiddleData();
+  const list = data[mode] || data.easy_mode;
+  if (!list || list.length === 0) return;
+
+  const randomQ = list[Math.floor(Math.random() * list.length)];
+  const riddleRef = ref(db, `call_sessions/${activeCallId}/riddle_state`);
+
+  get(riddleRef).then(snap => {
+    const cur = snap.val() || {};
+    let rScore = cur.rightScore || 0;
+    let wScore = cur.wrongScore || 0;
+
+    if (rScore + wScore >= 10) { rScore = 0; wScore = 0; }
+
+    set(riddleRef, {
+      mode,
+      question: randomQ.q || randomQ.question,
+      options: randomQ.opts || randomQ.options || null,
+      answer: randomQ.ans || randomQ.answer,
+      answered: false,
+      buzzerPressed: false,
+      timedOut: false,
+      rightScore: rScore,
+      wrongScore: wScore,
+      updatedAt: Date.now()
+    });
+  });
+}
+
+function initRiddleGkListener() {
+  if (!activeCallId) return;
+  if (riddleSessionUnsub) riddleSessionUnsub();
+
+  const riddleRef = ref(db, `call_sessions/${activeCallId}/riddle_state`);
+  riddleSessionUnsub = onValue(riddleRef, snap => {
+    const state = snap.val();
+    let box = $('kidsRiddleBox');
+    if (!box) return;
+    if (!state || !state.question) { box.hidden = true; stopRiddleTimerBar(); return; }
+
+    box.hidden = false;
+    $('funModeTray').hidden = true;
+    controlsBar.classList.add('fade-out');
+
+    $('riddleQuestionText').textContent = state.question;
+    $('riddleModeSelect').value = state.mode;
+
+    const rScore = state.rightScore || 0;
+    const wScore = state.wrongScore || 0;
+    $('riddleScoreDisplay').textContent = `✅ ${rScore} | ❌ ${wScore} (${rScore + wScore}/10)`;
+
+    const optsArea = $('riddleOptionsArea');
+    const hardEvalArea = $('riddleHardEvalArea');
+    optsArea.innerHTML = '';
+    hardEvalArea.hidden = true;
+
+    if (rScore + wScore >= 10) {
+      stopRiddleTimerBar();
+      optsArea.innerHTML = `<div style="text-align:center;font-size:16px;font-weight:800;color:#10b981;padding:15px;grid-column:1/-1;">🎉 मुकाबला समाप्त! सही: ${rScore}, गलत: ${wScore}</div>`;
+      return;
+    }
+
+    if (!state.answered && !state.timedOut && !state.buzzerPressed) {
+      startRiddleTimerBar(20);
+    } else {
+      stopRiddleTimerBar();
+    }
+
+    if (state.mode === 'easy_mode' && state.options) {
+      state.options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'quiz-opt-btn';
+        btn.textContent = opt;
+
+        if (state.answered) {
+          if (opt === state.answer) {
+            btn.style.background = '#10b981'; btn.style.color = '#fff'; btn.style.borderColor = '#10b981';
+          } else if (opt === state.selectedAnswer && !state.isCorrect) {
+            btn.style.background = '#ef4444'; btn.style.color = '#fff'; btn.style.borderColor = '#ef4444';
+          }
+          btn.disabled = true;
+        }
+
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          if (state.answered) return;
+          stopRiddleTimerBar();
+          const isRight = (opt === state.answer);
+          if (isRight) playCheerSound(); else playOopsSound();
+
+          update(riddleRef, {
+            answered: true,
+            selectedAnswer: opt,
+            isCorrect: isRight,
+            rightScore: isRight ? rScore + 1 : rScore,
+            wrongScore: !isRight ? wScore + 1 : wScore,
+            updatedAt: Date.now()
+          });
+        };
+        optsArea.appendChild(btn);
+      });
+    }
+    else if (state.mode === 'hard_mode') {
+      hardEvalArea.hidden = false;
+      const ansLabel = $('riddleHiddenAnswer');
+
+      if (state.answered) {
+        ansLabel.textContent = `उत्तर: ${state.answer}`;
+        ansLabel.style.color = state.isCorrect ? '#10b981' : '#ef4444';
+        $('evalRightBtn').disabled = true;
+        $('evalWrongBtn').disabled = true;
+      } else {
+        ansLabel.textContent = `[गुप्त उत्तर]: ${state.answer}`;
+        ansLabel.style.color = '#f59e0b';
+        $('evalRightBtn').disabled = false;
+        $('evalWrongBtn').disabled = false;
+      }
+    }
+
+    if (state.answered || state.timedOut) {
+      const info = document.createElement('div');
+      info.style.cssText = 'margin-top:10px;font-size:14px;font-weight:800;text-align:center;grid-column:1/-1;';
+      info.style.color = state.isCorrect ? '#10b981' : (state.timedOut ? '#f59e0b' : '#ef4444');
+      info.textContent = state.timedOut ? `⏱ समय समाप्त! उत्तर: ${state.answer}` : (state.isCorrect ? '🎉 सही जवाब!' : `❌ गलत! उत्तर: ${state.answer}`);
+      optsArea.appendChild(info);
+    }
+  });
+}
+
+async function evaluateHardAnswer(isRight) {
+  if (!activeCallId) return;
+  stopRiddleTimerBar();
+  if (isRight) playCheerSound(); else playOopsSound();
+
+  const riddleRef = ref(db, `call_sessions/${activeCallId}/riddle_state`);
+  const snap = await get(riddleRef);
+  const st = snap.val();
+  if (!st || st.answered) return;
+
+  const rScore = st.rightScore || 0;
+  const wScore = st.wrongScore || 0;
+
+  await update(riddleRef, {
+    answered: true,
+    isCorrect: isRight,
+    rightScore: isRight ? rScore + 1 : rScore,
+    wrongScore: !isRight ? wScore + 1 : wScore,
+    updatedAt: Date.now()
+  });
+}
+
+async function closeRiddleGame() {
+  stopRiddleTimerBar();
+  if (activeCallId) await remove(ref(db, `call_sessions/${activeCallId}/riddle_state`)).catch(()=>{});
+  const box = $('kidsRiddleBox');
+  if (box) box.hidden = true;
+}
+
+if ($('trayBtnRiddleGk')) {
+  $('trayBtnRiddleGk').onclick = (e) => {
+    e.stopPropagation();
+    $('funModeTray').hidden = true;
+    if (!isCallConnected) { toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही गेम शुरू करें' : 'Connect call to play'); return; }
+    const box = $('kidsRiddleBox');
+    if (box.hidden) {
+      sendRiddleQuestion('easy_mode');
+    } else {
+      closeRiddleGame();
+    }
+    scheduleAutoHide();
+  };
+}
+
+if ($('riddleBuzzerBtn')) {
+  $('riddleBuzzerBtn').onclick = (e) => {
+    e.stopPropagation();
+    if (!activeCallId) return;
+    playMessageTickSound();
+    update(ref(db, `call_sessions/${activeCallId}/riddle_state`), { buzzerPressed: true }).catch(()=>{});
+  };
+}
+
+if ($('evalRightBtn')) $('evalRightBtn').onclick = (e) => { e.stopPropagation(); evaluateHardAnswer(true); };
+if ($('evalWrongBtn')) $('evalWrongBtn').onclick = (e) => { e.stopPropagation(); evaluateHardAnswer(false); };
+if ($('nextRiddleBtn')) $('nextRiddleBtn').onclick = (e) => { e.stopPropagation(); sendRiddleQuestion($('riddleModeSelect').value); };
+if ($('riddleModeSelect')) $('riddleModeSelect').onchange = (e) => { e.stopPropagation(); sendRiddleQuestion(e.target.value); };
+if ($('closeRiddleBtn')) $('closeRiddleBtn').onclick = (e) => { e.stopPropagation(); closeRiddleGame(); };
+
 
 // Whiteboard
 let isDrawing = false;
@@ -4020,11 +4317,15 @@ $('trayBtnTictactoe').onclick = (e) => {
 
 function cleanupKidsModules() {
   stopQuizTimerBar();
+  stopRiddleTimerBar(); // Point #3
   if (quizSessionUnsub) { quizSessionUnsub(); quizSessionUnsub = null; }
+  if (riddleSessionUnsub) { riddleSessionUnsub(); riddleSessionUnsub = null; } // Point #3
   if (canvasSessionUnsub) { canvasSessionUnsub(); canvasSessionUnsub = null; }
   if (whiteboardSyncUnsub) { whiteboardSyncUnsub(); whiteboardSyncUnsub = null; }
   if (tttSessionUnsub) { tttSessionUnsub(); tttSessionUnsub = null; }
+  
   const box = $('kidsQuizBox'); if (box) box.hidden = true;
+  const rBox = $('kidsRiddleBox'); if (rBox) rBox.hidden = true; // Point #3
   const wb = $('kidsWhiteboardModal'); if (wb) wb.hidden = true;
   const ttt = $('kidsTictactoeBox'); if (ttt) ttt.hidden = true;
   if ($('funModeTray'))$('funModeTray').hidden = true;
@@ -4057,7 +4358,16 @@ async function joinCallSession() {
   startTimer();
   scheduleAutoHide();
 
+  // --- पॉइंट #1: Call Foreground Service Start ---
+  if (window.AndroidBridge && typeof window.AndroidBridge.startCallForegroundService === 'function') {
+    window.AndroidBridge.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
+  } else if (window.AndroidAudio && typeof window.AndroidAudio.startCallForegroundService === 'function') {
+    window.AndroidAudio.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
+  }
+
+  // Games Listeners Initialize
   initKidsQuizListener();
+  initRiddleGkListener(); // --- पॉइंट #3: Riddle Game Sync ---
   listenRemoteCanvas();
   listenWhiteboardAutoSync();
   listenTictactoeSession();
@@ -4286,7 +4596,8 @@ function scheduleAutoHide() {
   clearTimeout(autoHideTimer);
   autoHideTimer = setTimeout(() => {
     const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden && !isTttOpen) {
+    const isRiddleOpen = $('kidsRiddleBox') && !$('kidsRiddleBox').hidden; // Point #3
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden && !isTttOpen && !isRiddleOpen) {
       controlsBar.classList.add('fade-out');
       $('callTopBar').classList.add('fade-out');
     }
@@ -4294,7 +4605,7 @@ function scheduleAutoHide() {
 }
 
 callScreen.addEventListener('click', e => {
-  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox')) return;
+  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox') || e.target.closest('#kidsRiddleBox')) return; // Added kidsRiddleBox for Point #3
   const isH = controlsBar.classList.contains('fade-out');
   controlsBar.classList.toggle('fade-out', !isH);
   $('callTopBar').classList.toggle('fade-out', !isH);
@@ -4381,6 +4692,13 @@ async function hangup(silent = false) {
     stopNetworkQualityMonitor();
     cleanupKidsModules();
     resetHardwareAudio();
+
+    // --- पॉइंट #1: Call Foreground Service Stop ---
+    if (window.AndroidBridge && typeof window.AndroidBridge.stopCallForegroundService === 'function') {
+      window.AndroidBridge.stopCallForegroundService();
+    } else if (window.AndroidAudio && typeof window.AndroidAudio.stopCallForegroundService === 'function') {
+      window.AndroidAudio.stopCallForegroundService();
+    }
 
     if (isCallConnected && currentCallTargetId) {
       recordCallLog({
@@ -4493,6 +4811,7 @@ function setupHardwareBackButton() {
     if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; } // Point #3
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
@@ -4519,6 +4838,7 @@ function setupHardwareBackButton() {
     if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
     if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
+    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; } // Point #3
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
     if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});

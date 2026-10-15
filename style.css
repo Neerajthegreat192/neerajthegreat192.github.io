@@ -36,7 +36,7 @@ input, textarea {
   touch-action: manipulation !important;
 }
 
-[hidden], #lobby[hidden], #chatScreen[hidden], #call[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden], #kidsTictactoeBox[hidden] {
+[hidden], #lobby[hidden], #chatScreen[hidden], #call[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsRiddleBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden], #kidsTictactoeBox[hidden] {
   display: none !important;
 }
 
@@ -204,6 +204,17 @@ html, body {
   width: 20px;
   height: 20px;
   fill: currentColor;
+}
+
+/* पॉइंट #2: WhatsApp शेयरिंग बटन स्टाइल */
+.btn-whatsapp-share {
+  background: rgba(37, 211, 102, 0.12) !important;
+  border: 1px solid rgba(37, 211, 102, 0.35) !important;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.btn-whatsapp-share:active {
+  transform: scale(0.92);
+  background: rgba(37, 211, 102, 0.25) !important;
 }
 
 /* ===================================================
@@ -393,7 +404,6 @@ html, body {
 
 /* ===================================================
    ✅ CHAT SCREEN (Restored from working style_2.css)
-   नोट: यहाँ height पर !important नहीं है ताकि visualViewport काम करे!
    =================================================== */
 #chatScreen {
   background: var(--bg, #090d10);
@@ -580,7 +590,7 @@ html, body {
 }
 
 /* ===================================================
-   CHAT FOOTER (Locked against upward touch drag)
+   CHAT FOOTER
    =================================================== */
 .chat-footer {
   display: flex;
@@ -1068,6 +1078,29 @@ html, body {
   top: 0; right: 0;
   border: none; border-radius: 0; z-index: 1;
 }
+
+/* पॉइंट #4: Android Native Picture-in-Picture (PiP) एक्टिव मोड */
+body.in-pip-mode #callTopBar,
+body.in-pip-mode #controlsBar,
+body.in-pip-mode #funModeTray,
+body.in-pip-mode #kidsQuizBox,
+body.in-pip-mode #kidsRiddleBox,
+body.in-pip-mode #kidsWhiteboardModal,
+body.in-pip-mode .pip-restore-btn {
+  display: none !important;
+}
+body.in-pip-mode .pip-wrap {
+  top: 8px !important;
+  right: 8px !important;
+  width: 60px !important;
+  height: 90px !important;
+  border-radius: 8px !important;
+}
+body.in-pip-mode #remoteGrid {
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
 .call-top-bar {
   position: absolute;
   top: max(14px, env(safe-area-inset-top, 14px));
@@ -1334,7 +1367,7 @@ html, body {
 }
 
 /* ===================================================
-   FUN MODE
+   FUN MODE & RIDDLE / GK
    =================================================== */
 .fun-tray-modal {
   position: absolute; inset: 0;
@@ -1355,13 +1388,13 @@ html, body {
 }
 .fun-tray-title { font-weight: 800; font-size: 15px; color: #fff; }
 .fun-tray-close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
-.fun-tray-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.fun-tray-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .tray-item {
   display: flex; flex-direction: column;
   align-items: center; gap: 6px;
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--line);
-  padding: 12px 6px;
+  padding: 12px 4px;
   border-radius: 12px;
   color: #fff; cursor: pointer;
 }
@@ -1396,7 +1429,7 @@ html, body {
   border-radius: 2px; overflow: hidden;
   margin-bottom: 10px;
 }
-.quiz-timer-bar { width: 100%; height: 100%; background: var(--gold); }
+.quiz-timer-bar { width: 100%; height: 100%; background: var(--gold); transition: width 1s linear; }
 .quiz-question { font-size: 14px; font-weight: 700; margin-bottom: 10px; text-align: center; color: #fff; }
 .quiz-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .quiz-opt-btn {
@@ -1405,7 +1438,9 @@ html, body {
   border-radius: 8px; padding: 8px;
   color: #fff; font-size: 12px; font-weight: 700;
   cursor: pointer;
+  transition: all 0.15s;
 }
+.quiz-opt-btn:active { background: rgba(255,255,255,0.15); }
 .quiz-next-big-btn, .ttt-reset-btn {
   width: 100%; background: var(--gold);
   border: none; border-radius: 8px;
@@ -1413,6 +1448,66 @@ html, body {
   font-size: 12px; font-weight: 800;
   cursor: pointer;
 }
+
+/* पॉइंट #3: Riddle & GK विशिष्ट स्टाइल */
+.riddle-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+}
+.riddle-score-txt {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--success);
+}
+.riddle-buzzer-btn {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
+  animation: pulseBuzzer 1.5s infinite;
+}
+@keyframes pulseBuzzer {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.riddle-hard-eval {
+  margin-top: 10px;
+  text-align: center;
+}
+.riddle-hidden-ans {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.riddle-eval-btns {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.eval-btn {
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.eval-btn:active { transform: scale(0.95); }
+.eval-btn-right { background: var(--success); color: #fff; }
+.eval-btn-wrong { background: var(--danger); color: #fff; }
+
 .ttt-status-bar { font-size: 12px; font-weight: 700; text-align: center; margin-bottom: 10px; color: var(--text-muted); }
 .ttt-status-bar.my-turn { color: var(--success); }
 .ttt-status-bar.their-turn { color: var(--gold); }
@@ -1477,6 +1572,7 @@ html, body {
   .online-avatar-name { max-width: 52px; font-size: 9px; }
   .contact-name { font-size: 14px; }
   .pc-name { font-size: 13px; }
+  .fun-tray-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ===================================================
