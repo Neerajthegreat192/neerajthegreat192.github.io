@@ -1,12 +1,12 @@
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 1 OF 3: app.js v1.23.9] >>>>>>>>>>>>>>>>>>>>
-   Configuration, State, Native Bridge, FCM Push Sync, Presence & Lobby
+   🟢🟢🟢 [PART 1 OF 3 — START (शुरू): app.js v1.24.1] 🟢🟢🟢
+   Configuration, State, Native Bridge, Ghost-User Fix, Presence & Lobby
    ========================================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const CURRENT_APP_VERSION = "1.23.9";
+const CURRENT_APP_VERSION = "1.24.1";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
 try {
@@ -770,12 +770,52 @@ function updateHeaderTitle() {
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
 
-// Presence & Listeners
+// ===================================================
+// ✅ PRESENCE & LISTENERS (GHOST USER & OTA WIPE FIX)
+// ===================================================
+let connectedUnsub = null;
+let usersListUnsub = null;
+let activePresenceUserRef = null;
+let activePresenceInboxRef = null;
+
+function clearUserSessionOnly() {
+  const keysToRemove = [
+    'vc_user_id',
+    'vc_user_name',
+    'vc_fcm_token',
+    'cached_users',
+    'cached_snippets',
+    'cached_unreads',
+    'cached_call_logs'
+  ];
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+}
+
+async function cleanupOldPresence() {
+  if (connectedUnsub) { connectedUnsub(); connectedUnsub = null; }
+  if (selfStatusUnsub) { selfStatusUnsub(); selfStatusUnsub = null; }
+  if (activePresenceUserRef) {
+    try { await onDisconnect(activePresenceUserRef).cancel(); } catch(e) {}
+    activePresenceUserRef = null;
+  }
+  if (activePresenceInboxRef) {
+    try { await onDisconnect(activePresenceInboxRef).cancel(); } catch(e) {}
+    activePresenceInboxRef = null;
+  }
+}
+
 async function initPresence() {
+  if (!myUserId || !myUserName) return;
+  await cleanupOldPresence();
+
   updateHeaderTitle();
-  const userRef = ref(db, `users/${myUserId}`);
-  const inboxRef = ref(db, `user_inbox/${myUserId}`);
+  const currentUid = myUserId;
+  const userRef = ref(db, `users/${currentUid}`);
+  const inboxRef = ref(db, `user_inbox/${currentUid}`);
   const connectedRef = ref(db, '.info/connected');
+
+  activePresenceUserRef = userRef;
+  activePresenceInboxRef = inboxRef;
 
   await onDisconnect(userRef).update({
     online: false, lastSeen: serverTimestamp(), onlineSince: null,
@@ -784,7 +824,7 @@ async function initPresence() {
   await onDisconnect(inboxRef).remove().catch(()=>{});
 
   await update(userRef, {
-    id: myUserId, name: myUserName, online: true,
+    id: currentUid, name: myUserName, online: true,
     onlineSince: serverTimestamp(), lastSeen: serverTimestamp(), activeCallId: null
   });
 
@@ -793,22 +833,30 @@ async function initPresence() {
   }
 
   if (window.AndroidBridge?.syncUser) {
-    try { window.AndroidBridge.syncUser(myUserId); } catch(e){}
+    try { window.AndroidBridge.syncUser(currentUid); } catch(e){}
   }
 
-  onValue(connectedRef, async snap => {
+  connectedUnsub = onValue(connectedRef, async snap => {
+    if (!myUserId || myUserId !== currentUid) return;
+
     if (snap.val() === true) {
       networkBanner.hidden = true;
       await onDisconnect(userRef).update({ online: false, lastSeen: serverTimestamp(), onlineSince: null, activeCallId: null, isBusy: false, typingTo: null }).catch(()=>{});
       await onDisconnect(inboxRef).remove().catch(()=>{});
-      await update(userRef, { online: true, onlineSince: serverTimestamp() }).catch(()=>{});
+      await update(userRef, { id: currentUid, name: myUserName, online: true, onlineSince: serverTimestamp() }).catch(()=>{});
     } else {
       networkBanner.hidden = false;
     }
   });
 
-  onValue(ref(db, 'users'), snap => {
+  if (usersListUnsub) usersListUnsub();
+  usersListUnsub = onValue(ref(db, 'users'), snap => {
     allOnlineUsers = snap.val() || {};
+    Object.keys(allOnlineUsers).forEach(uid => {
+      if (!allOnlineUsers[uid] || !allOnlineUsers[uid].name) {
+        delete allOnlineUsers[uid];
+      }
+    });
     try { localStorage.setItem('cached_users', JSON.stringify(allOnlineUsers)); } catch(e) {}
     renderContacts();
     renderOnlineStrip();
@@ -826,10 +874,14 @@ async function initPresence() {
 
 function listenSelfAccountStatus() {
   if (selfStatusUnsub) selfStatusUnsub();
-  selfStatusUnsub = onValue(ref(db, `users/${myUserId}`), (snap) => {
-    if (!snap.exists() && myUserId) {
-      if (selfStatusUnsub) { selfStatusUnsub(); selfStatusUnsub = null; }
-      hangup(true); localStorage.clear();
+  const watchedUid = myUserId;
+  if (!watchedUid) return;
+
+  selfStatusUnsub = onValue(ref(db, `users/${watchedUid}`), async (snap) => {
+    if (!snap.exists() && myUserId === watchedUid) {
+      await cleanupOldPresence();
+      hangup(true);
+      clearUserSessionOnly();
       myUserId = ''; myUserName = '';
       myHeaderName.textContent = '...';
       chatScreen.hidden = true; callScreen.hidden = true; lobbyScreen.hidden = true;
@@ -957,8 +1009,18 @@ $('clearChatHistoryBtn').onclick = async () => {
 
 $('resetProfileBtn').onclick = async () => {
   if (!confirm('क्या आप अपनी आईडी हटाकर रीसेट करना चाहते हैं?')) return;
-  try { await remove(ref(db, `users/${myUserId}`)); await remove(ref(db, `user_inbox/${myUserId}`)); } catch(e){}
-  localStorage.clear(); location.href = location.pathname;
+  const oldId = myUserId;
+  myUserId = '';
+  myUserName = '';
+  await cleanupOldPresence();
+  try {
+    if (oldId) {
+      await remove(ref(db, `users/${oldId}`));
+      await remove(ref(db, `user_inbox/${oldId}`));
+    }
+  } catch(e){}
+  clearUserSessionOnly();
+  location.href = location.pathname;
 };
 
 // Admin Pin & Panel
@@ -1098,6 +1160,8 @@ function getTickBadge(snippet) {
 }
 
 let isInitialLoad = true;
+
+// ✅ FIX: Real-time Lobby Snippet, Instant Delivery Ticks & Unread Count Sync
 function listenForLatestChatPreviews() {
   onValue(ref(db, 'chats'), snap => {
     const rooms = snap.val() || {};
@@ -1108,17 +1172,18 @@ function listenForLatestChatPreviews() {
       const parts = key.split('__');
       const targetId = parts[0] === myUserId ? parts[1] : parts[0];
       const msgs = rooms[key]?.messages || {};
-      const keys = Object.keys(msgs);
-      if (!keys.length) return;
+      const msgKeys = Object.keys(msgs);
+      if (!msgKeys.length) return;
 
-      const sortedKeys = keys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
+      const sortedKeys = msgKeys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
       const lastMsg = msgs[sortedKeys[sortedKeys.length - 1]];
 
       let unread = 0;
-      keys.forEach(k => {
+      msgKeys.forEach(k => {
         const m = msgs[k];
-        if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) unread++;
-        // ✅ WORKING BASE LINE RESTORED: तुरंत डबल टिक अपडेट करने के लिए
+        if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) {
+          unread++;
+        }
         if (m.senderId !== myUserId && !m.delivered) {
           update(ref(db, `chats/${key}/messages/${k}`), { delivered: true }).catch(()=>{});
         }
@@ -1129,21 +1194,29 @@ function listenForLatestChatPreviews() {
       const isNew = !isInitialLoad && lastMsg.time > prevTime && lastMsg.senderId !== myUserId && currentChatTargetId !== targetId;
 
       let msgText = lastMsg.text || '';
-      if (lastMsg.deleted || lastMsg.type === 'deleted') msgText = '🚫 यह संदेश हटा दिया गया है';
-      else if (lastMsg.type === 'image') msgText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
-      else if (lastMsg.type === 'video') msgText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
-      else if (lastMsg.type === 'audio') msgText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
-      else if (lastMsg.type === 'doc') msgText = '📄 ' + (lastMsg.fileName || (currentLang==='hi'?'दस्तावेज़':'Document'));
-      else if (lastMsg.type === 'system-call') msgText = lastMsg.text;
+      if (lastMsg.deleted || lastMsg.type === 'deleted') {
+        msgText = '🚫 यह संदेश हटा दिया गया है';
+      } else if (lastMsg.type === 'image') {
+        msgText = '📷 ' + (currentLang === 'hi' ? 'फ़ोटो' : 'Photo');
+      } else if (lastMsg.type === 'video') {
+        msgText = '🎥 ' + (currentLang === 'hi' ? 'वीडियो' : 'Video');
+      } else if (lastMsg.type === 'audio') {
+        msgText = '🎙 ' + (currentLang === 'hi' ? 'वॉयस नोट' : 'Voice Note');
+      } else if (lastMsg.type === 'doc') {
+        msgText = '📄 ' + (lastMsg.fileName || (currentLang === 'hi' ? 'दस्तावेज़' : 'Document'));
+      } else if (lastMsg.type === 'system-call') {
+        msgText = lastMsg.text;
+      }
 
-      latestChatSnippets[targetId] = {
-        text: msgText,
-        time: lastMsg.time || Date.now(),
-        senderId: lastMsg.senderId,
-        read: !!lastMsg.read,
-        delivered: !!lastMsg.delivered
+      latestChatSnippets[targetId] = { 
+        text: msgText, 
+        time: lastMsg.time || Date.now(), 
+        senderId: lastMsg.senderId, 
+        read: !!lastMsg.read, 
+        delivered: !!lastMsg.delivered 
       };
       hasUpdates = true;
+
       if (isNew) triggerSystemMessageNotification(lastMsg.senderName || 'New message', msgText, targetId);
     });
 
@@ -1157,7 +1230,6 @@ function listenForLatestChatPreviews() {
     }
   });
 }
-
 
 function triggerSystemMessageNotification(sender, text, targetId) {
   playMessageBeep();
@@ -1248,6 +1320,10 @@ function renderContacts() {
 }
 searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
+
+/* =========================================================================
+   🔴🔴🔴 [PART 1 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
+   ========================================================================= */
 /* =========================================================================
    >>>>>>>>>>>>>>>>>>>> [PART 2 OF 3: app.js v1.23.9] >>>>>>>>>>>>>>>>>>>>
    Long-press Actions, Reactions, Chat Engine, Delivery/Read Sync, Voice Dock
@@ -1262,7 +1338,7 @@ let currentLongPressMsgData = null;
 let replyToMessageId = null;
 let replyToMessageData = null;
 
-const REACTION_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
+const REACTION_EMOJIS = ['', '', '', '', '', ''];
 
 function attachBubbleLongPress(el, msgId, m) {
   const HOLD_TIME = 500;
@@ -1341,8 +1417,8 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="reply">
-        <span class="menu-item-ic">↩️</span>
-        <span>जवाब दें (Reply)</span>
+        <span class="menu-item-ic"></span>
+        <span>  (Reply)</span>
       </button>
     `;
   }
@@ -1350,8 +1426,8 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted && (!m.type || m.type === 'text')) {
     itemsHtml += `
       <button class="menu-item" data-action="copy">
-        <span class="menu-item-ic">📋</span>
-        <span>कॉपी करें (Copy)</span>
+        <span class="menu-item-ic"></span>
+        <span>  (Copy)</span>
       </button>
     `;
   }
@@ -1359,17 +1435,17 @@ function openMessageMenu(el, msgId, m) {
   if (!isSystemCall && !isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="forward">
-        <span class="menu-item-ic">➡️</span>
-        <span>फॉरवर्ड करें (Forward)</span>
+        <span class="menu-item-ic"></span>
+        <span>  (Forward)</span>
       </button>
     `;
   }
 
   if (!isSystemCall && !isDeleted) {
-    const starLabel = m.starred ? 'स्टार हटाएँ (Unstar)' : 'स्टार करें (Star)';
+    const starLabel = m.starred ? '  (Unstar)' : '  (Star)';
     itemsHtml += `
       <button class="menu-item" data-action="star">
-        <span class="menu-item-ic">⭐</span>
+        <span class="menu-item-ic"></span>
         <span>${starLabel}</span>
       </button>
     `;
@@ -1378,15 +1454,15 @@ function openMessageMenu(el, msgId, m) {
   if (!isDeleted) {
     itemsHtml += `
       <button class="menu-item" data-action="delete-me">
-        <span class="menu-item-ic">🗑️</span>
-        <span>मेरे लिए हटाएँ (Delete for me)</span>
+        <span class="menu-item-ic"></span>
+        <span>   (Delete for me)</span>
       </button>
     `;
     if (isMine) {
       itemsHtml += `
         <button class="menu-item danger" data-action="delete-all">
-          <span class="menu-item-ic">🗑️</span>
-          <span>सबके लिए हटाएँ (Delete for everyone)</span>
+          <span class="menu-item-ic"></span>
+          <span>   (Delete for everyone)</span>
         </button>
       `;
     }
@@ -1448,13 +1524,13 @@ async function handleMessageAction(action, msgId, m) {
     case 'copy':
       try {
         await navigator.clipboard.writeText(m.text || '');
-        toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied');
+        toast(currentLang === 'hi' ? '   ' : ' Copied');
       } catch(e) {
         const ta = document.createElement('textarea');
         ta.value = m.text || '';
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied'); } catch(e2) {}
+        try { document.execCommand('copy'); toast(currentLang === 'hi' ? '   ' : ' Copied'); } catch(e2) {}
         document.body.removeChild(ta);
       }
       break;
@@ -1477,7 +1553,7 @@ async function handleMessageAction(action, msgId, m) {
 
     case 'delete-all':
       const confirmMsg = currentLang === 'hi'
-        ? 'क्या आप सबके लिए यह मैसेज हटाना चाहते हैं?'
+        ? '        ?'
         : 'Delete this message for everyone?';
       if (confirm(confirmMsg)) {
         await deleteMessage(roomPath, msgId, true);
@@ -1495,7 +1571,7 @@ async function toggleReaction(msgId, m, emoji) {
     if (existing === emoji) await remove(ref(db, `${roomPath}/${myUserId}`));
     else await update(ref(db, roomPath), { [myUserId]: emoji });
     playMessageTickSound();
-  } catch(e) { toast('त्रुटि'); }
+  } catch(e) { toast(''); }
 }
 
 function renderReactionsHtml(m, msgId) {
@@ -1517,12 +1593,12 @@ function startReply(msgId, m) {
   replyToMessageData = m;
 
   let previewText = m.text || '';
-  if (m.type === 'image') previewText = '📷 ' + (currentLang==='hi'?'फ़ोटो':'Photo');
-  else if (m.type === 'video') previewText = '🎥 ' + (currentLang==='hi'?'वीडियो':'Video');
-  else if (m.type === 'audio') previewText = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
-  else if (m.type === 'doc') previewText = '📄 ' + (currentLang==='hi'?'दस्तावेज़':'Document');
+  if (m.type === 'image') previewText = ' ' + (currentLang==='hi'?'':'Photo');
+  else if (m.type === 'video') previewText = ' ' + (currentLang==='hi'?'':'Video');
+  else if (m.type === 'audio') previewText = ' ' + (currentLang==='hi'?' ':'Voice Note');
+  else if (m.type === 'doc') previewText = ' ' + (currentLang==='hi'?'':'Document');
 
-  showReplyPreview(m.senderName || 'उपयोगकर्ता', previewText);
+  showReplyPreview(m.senderName || '', previewText);
   chatInput.focus();
 }
 
@@ -1536,10 +1612,10 @@ function showReplyPreview(senderName, text) {
   box.innerHTML = `
     <div class="reply-preview-bar"></div>
     <div class="reply-preview-content">
-      <div class="reply-preview-sender">↩️ ${safeName(senderName)}</div>
+      <div class="reply-preview-sender"> ${safeName(senderName)}</div>
       <div class="reply-preview-text">${safeName(text)}</div>
     </div>
-    <button class="reply-preview-close" id="closeReplyBtn">✕</button>
+    <button class="reply-preview-close" id="closeReplyBtn"></button>
   `;
 
   const footer = document.querySelector('.chat-footer');
@@ -1565,9 +1641,9 @@ async function toggleStarMessage(roomPath, msgId, m) {
     await update(ref(db, roomPath), { starred: newStar });
     const el = document.getElementById(`msg_${msgId}`);
     if (el) el.classList.toggle('starred', newStar);
-    toast(newStar ? '⭐ स्टार किया' : 'स्टार हटाया');
+    toast(newStar ? '  ' : ' ');
   } catch(e) {
-    toast('त्रुटि');
+    toast('');
   }
 }
 
@@ -1577,7 +1653,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       await update(ref(db, roomPath), {
         deleted: true,
         deletedAt: Date.now(),
-        text: '🚫 यह संदेश हटा दिया गया है',
+        text: '      ',
         data: null,
         type: 'deleted',
         senderName: myUserName
@@ -1587,7 +1663,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       if (el) {
         el.className = `chat-bubble is-deleted me`;
         el.innerHTML = `
-          <div style="font-style:italic;color:#94a3b8">🚫 यह संदेश हटा दिया गया है</div>
+          <div style="font-style:italic;color:#94a3b8">      </div>
           <div class="chat-meta"><span>${formatClockTime(Date.now())}</span></div>
         `;
       }
@@ -1608,9 +1684,9 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
       } catch(e) {}
     }
 
-    toast(forEveryone ? '🗑️ सबके लिए हटाया' : '🗑️ हटा दिया');
+    toast(forEveryone ? '   ' : '  ');
   } catch(e) {
-    toast('त्रुटि');
+    toast('');
   }
 }
 
@@ -1627,17 +1703,17 @@ function isDeletedForMe(msgId) {
 function openForwardDialog(msgId, m) {
   const users = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
   if (!users.length) {
-    toast('कोई संपर्क नहीं');
+    toast('  ');
     return;
   }
 
   const names = users.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt('किसे फॉरवर्ड करें? (नंबर लिखें)\n\n' + names);
+  const input = prompt('  ? ( )\n\n' + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
   if (isNaN(idx) || idx < 0 || idx >= users.length) {
-    toast('गलत नंबर');
+    toast(' ');
     return;
   }
 
@@ -1680,9 +1756,9 @@ async function forwardMessageTo(targetId, m, targetName) {
     }
 
     await set(newMsgRef, msgData);
-    toast(`${targetName} को फॉरवर्ड कर दिया`);
+    toast(`${targetName}    `);
   } catch(e) {
-    toast('फॉरवर्ड फेल');
+    toast(' ');
   }
 }
 
@@ -1700,7 +1776,7 @@ function openChat(tId, tName) {
 
   try {
     currentChatTargetId = tId;
-    currentChatTargetName = tName || allOnlineUsers[tId]?.name || 'उपयोगकर्ता';
+    currentChatTargetName = tName || allOnlineUsers[tId]?.name || '';
     
     // Unread count locally aur badge reset
     unreadCounts[tId] = 0;
@@ -1726,9 +1802,9 @@ function openChat(tId, tName) {
       if (!statusEl) return;
       const isTyping = u.typingTo === myUserId;
       const online = !!u.online;
-      if (isTyping) { statusEl.textContent = translations[currentLang]?.typing || 'लिख रहे हैं...'; statusEl.style.color = 'var(--success)'; }
-      else if (online) { statusEl.textContent = translations[currentLang]?.online || 'ऑनलाइन'; statusEl.style.color = 'var(--success)'; }
-      else { statusEl.textContent = formatLastSeen(u.lastSeen) || (translations[currentLang]?.offline || 'ऑफलाइन'); statusEl.style.color = '#94a3b8'; }
+      if (isTyping) { statusEl.textContent = translations[currentLang]?.typing || '  ...'; statusEl.style.color = 'var(--success)'; }
+      else if (online) { statusEl.textContent = translations[currentLang]?.online || ''; statusEl.style.color = 'var(--success)'; }
+      else { statusEl.textContent = formatLastSeen(u.lastSeen) || (translations[currentLang]?.offline || ''); statusEl.style.color = '#94a3b8'; }
     });
 
     if (lobbyScreen) lobbyScreen.hidden = true;
@@ -1776,25 +1852,25 @@ function attachVoiceBubbleEvents(container) {
       const pBar = bubble.querySelector('.voice-progress-bar'), tLabel = bubble.querySelector('.voice-time-label');
 
       if (activePlayingAudio && activePlayingAudio.src === url) {
-        if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = '▶'; }
-        else { activePlayingAudio.play(); btn.textContent = '⏸'; }
+        if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = ''; }
+        else { activePlayingAudio.play(); btn.textContent = ''; }
         return;
       }
-      if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = '▶'; }
+      if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = ''; }
 
       const audio = new Audio(url);
-      activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '⏸';
+      activePlayingAudio = audio; activePlayingBtn = btn; btn.textContent = '';
       audio.ontimeupdate = () => {
         const curTime = audio.currentTime;
         pBar.style.width = Math.min((curTime / totalDurSec) * 100, 100) + '%';
         tLabel.textContent = `${Math.floor(curTime / 60)}:${String(Math.floor(curTime % 60)).padStart(2,'0')}`;
       };
       audio.onended = () => {
-        btn.textContent = '▶'; pBar.style.width = '0%';
+        btn.textContent = ''; pBar.style.width = '0%';
         tLabel.textContent = `${Math.floor(totalDurSec / 60)}:${String(Math.floor(totalDurSec % 60)).padStart(2,'0')}`;
         activePlayingAudio = null; activePlayingBtn = null;
       };
-      audio.play().catch(()=>{ btn.textContent = '▶'; });
+      audio.play().catch(()=>{ btn.textContent = ''; });
     };
   }
 
@@ -1867,7 +1943,7 @@ function loadChatMessages() {
           if (!el.classList.contains('is-deleted')) {
             el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
             el.innerHTML = `
-              <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
+              <div style="font-style:italic;color:#94a3b8"> ${safeName(m.text || '     ')}</div>
               <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
             `;
           }
@@ -1886,7 +1962,7 @@ function loadChatMessages() {
 
       if (m.type === 'system-call') {
         el.className = 'chat-bubble system-call';
-        el.textContent = `${m.text} • ${formatClockTime(m.time)}`;
+        el.textContent = `${m.text}  ${formatClockTime(m.time)}`;
         body.appendChild(el);
         shouldScroll = true;
         return;
@@ -1895,7 +1971,7 @@ function loadChatMessages() {
       if (m.type === 'deleted' || m.deleted) {
         el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
         el.innerHTML = `
-          <div style="font-style:italic;color:#94a3b8">🚫 ${safeName(m.text || 'यह संदेश हटा दिया गया है')}</div>
+          <div style="font-style:italic;color:#94a3b8"> ${safeName(m.text || '     ')}</div>
           <div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span></div>
         `;
         body.appendChild(el);
@@ -1912,7 +1988,7 @@ function loadChatMessages() {
           <div class="chat-reply-preview">
             <div class="chat-reply-bar"></div>
             <div class="chat-reply-body">
-              <div class="chat-reply-sender">${safeName(m.replyTo.senderName || 'उपयोगकर्ता')}</div>
+              <div class="chat-reply-sender">${safeName(m.replyTo.senderName || '')}</div>
               <div class="chat-reply-text">${safeName(m.replyTo.text || '')}</div>
             </div>
           </div>
@@ -1931,7 +2007,7 @@ function loadChatMessages() {
             <div class="media-bubble">
               <div class="media-video-thumb">
                 <video src="${m.data}" preload="metadata" playsinline></video>
-                <div class="media-play-overlay">▶</div>
+                <div class="media-play-overlay"></div>
               </div>
             </div>
           `;
@@ -1943,7 +2019,7 @@ function loadChatMessages() {
       } else if (m.type === 'audio') {
         contentHtml += `
           <div class="voice-note-bubble" id="vn_${msgId}">
-            <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}">▶</button>
+            <button class="voice-play-circle" data-url="${m.data}" data-dur="${m.durationSec || 5}"></button>
             <div class="voice-meta-area">
               <div class="voice-progress-bg" data-dur="${m.durationSec || 5}"><div class="voice-progress-bar"></div></div>
               <div class="voice-meta-row"><span class="voice-time-label">${m.duration || '0:05'}</span><button class="voice-spd-btn">1x</button></div>
@@ -1958,9 +2034,9 @@ function loadChatMessages() {
 
       let tickHtml = '';
       if (m.senderId === myUserId) {
-        if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
-        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;">✓✓</span>';
-        else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;">✓</span>';
+        if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;"></span>';
+        else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;"></span>';
+        else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;"></span>';
       }
 
       el.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}</div>`;
@@ -1997,9 +2073,9 @@ function applyTickSafely(msgId, m) {
     const metaEl = el.querySelector('.chat-meta');
     if (metaEl) {
       let tickHtml = '';
-      if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
-      else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;">✓✓</span>';
-      else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;">✓</span>';
+      if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;"></span>';
+      else if (m.delivered) tickHtml = '<span class="tick-mark tick-delivered" style="color:#94a3b8;font-weight:900;"></span>';
+      else tickHtml = '<span class="tick-mark tick-sent" style="color:#64748b;font-weight:900;"></span>';
       metaEl.innerHTML = `<span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}`;
     }
   }
@@ -2007,15 +2083,15 @@ function applyTickSafely(msgId, m) {
 
 function buildMediaPlaceholderHtml(msgId, m) {
   const sizeText = m.fileSize ? formatFileSize(m.fileSize) : '';
-  const icon = m.type === 'image' ? '🖼️' : (m.type === 'video' ? '🎥' : '📎');
-  const label = m.type === 'image' ? 'फ़ोटो' : (m.type === 'video' ? 'वीडियो' : 'फ़ाइल');
+  const icon = m.type === 'image' ? '' : (m.type === 'video' ? '' : '');
+  const label = m.type === 'image' ? '' : (m.type === 'video' ? '' : '');
 
   return `
     <div class="media-download-overlay" data-media-id="${m.mediaId || msgId}" data-msg-id="${msgId}">
       <div class="media-download-icon">${icon}</div>
       <div class="media-file-name">${safeName(m.fileName || label)}</div>
       <div class="media-file-size">${sizeText}</div>
-      <button class="media-download-btn">⬇ स्वतः डाउनलोड हो रहा है...</button>
+      <button class="media-download-btn">     ...</button>
     </div>
   `;
 }
@@ -2028,7 +2104,7 @@ function buildDocBubbleHtml(msgId, m) {
       <div class="media-doc-icon">${icon}</div>
       <div class="media-doc-info">
         <div class="media-doc-name">${safeName(m.fileName || 'document')}</div>
-        <div class="media-doc-size">${size} • सहेजा गया</div>
+        <div class="media-doc-size">${size}   </div>
       </div>
     </div>
   `;
@@ -2122,14 +2198,14 @@ async function sendChatMessage() {
 
   if (replyToMessageId && replyToMessageData) {
     let previewText = replyToMessageData.text || '';
-    if (replyToMessageData.type === 'image') previewText = '📷 फ़ोटो';
-    else if (replyToMessageData.type === 'video') previewText = '🎥 वीडियो';
-    else if (replyToMessageData.type === 'audio') previewText = '🎙 वॉयस नोट';
-    else if (replyToMessageData.type === 'doc') previewText = '📄 दस्तावेज़';
+    if (replyToMessageData.type === 'image') previewText = ' ';
+    else if (replyToMessageData.type === 'video') previewText = ' ';
+    else if (replyToMessageData.type === 'audio') previewText = '  ';
+    else if (replyToMessageData.type === 'doc') previewText = ' ';
 
     msgData.replyTo = {
       msgId: replyToMessageId,
-      senderName: replyToMessageData.senderName || 'उपयोगकर्ता',
+      senderName: replyToMessageData.senderName || '',
       text: previewText
     };
     cancelReply();
@@ -2184,7 +2260,7 @@ async function sendMediaMessage(file) {
   const roomPath = `chats/${roomId}/messages`;
   const mediaType = getMediaTypeFromMime(file.type);
   const mediaId = `media_${Date.now()}_${Math.floor(Math.random()*10000)}`;
-  const label = mediaType === 'image' ? '📷 फ़ोटो' : (mediaType === 'video' ? '🎥 वीडियो' : (mediaType === 'audio' ? '🎙 वॉयस नोट' : '📄 दस्तावेज़'));
+  const label = mediaType === 'image' ? ' ' : (mediaType === 'video' ? ' ' : (mediaType === 'audio' ? '  ' : ' '));
 
   localFileMemoryCache[mediaId] = file;
 
@@ -2193,7 +2269,7 @@ async function sendMediaMessage(file) {
   renderContacts();
 
   if (file.size <= DIRECT_SEND_MAX_SIZE) {
-    toast(currentLang === 'hi' ? '📤 फ़ाइल भेजी जा रही है...' : '📤 Sending file...');
+    toast(currentLang === 'hi' ? '     ...' : ' Sending file...');
     const reader = new FileReader();
     reader.onload = async () => {
       const base64Data = reader.result;
@@ -2218,7 +2294,7 @@ async function sendMediaMessage(file) {
       sendChatMessagePush(targetId, label, roomId, newMsgId, {
         mediaType, mediaSize: file.size, mediaId, fileName: file.name, mimeType: file.type
       });
-      toast(currentLang === 'hi' ? '✅ फ़ाइल सफलतापूर्वक भेज दी गई' : '✅ File sent successfully');
+      toast(currentLang === 'hi' ? '     ' : ' File sent successfully');
     };
     reader.readAsDataURL(file);
     return;
@@ -2245,13 +2321,13 @@ async function sendMediaMessage(file) {
     mediaType, mediaSize: file.size, mediaId, fileName: file.name, mimeType: file.type
   });
 
-  toast(currentLang === 'hi' ? '⏫ बड़ी फ़ाइल P2P से भेजी जा रही है...' : '⏫ Sending large file via P2P...');
+  toast(currentLang === 'hi' ? '   P2P     ...' : ' Sending large file via P2P...');
   const sentMediaId = await sendMediaFileOverDataChannel(targetId, file);
   if (sentMediaId) {
     update(ref(db, `${roomPath}/${newMsgId}`), { delivered: true }).catch(()=>{});
-    toast(currentLang === 'hi' ? '✅ भेज दिया' : '✅ Sent');
+    toast(currentLang === 'hi' ? '  ' : ' Sent');
   } else {
-    toast(currentLang === 'hi' ? '❌ भेजने में समस्या आई' : '❌ Failed to send');
+    toast(currentLang === 'hi' ? '    ' : ' Failed to send');
   }
 }
 
@@ -2557,7 +2633,7 @@ function renderTransferQueue() {
     const isSend = t.direction === 'send';
     const current = isSend ? (t.sentBytes || 0) : (t.receivedBytes || 0);
     const pct = t.totalSize > 0 ? Math.min(100, Math.round(current * 100 / t.totalSize)) : 0;
-    const arrow = isSend ? '⬆' : '⬇';
+    const arrow = isSend ? '' : '';
     const icon = getFileIcon(t.mimeType, t.fileName);
 
     return `
@@ -2582,7 +2658,7 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
         <div class="media-bubble">
           <div class="media-video-thumb">
             <video src="${base64Data}" preload="metadata" playsinline></video>
-            <div class="media-play-overlay">▶</div>
+            <div class="media-play-overlay"></div>
           </div>
         </div>`;
       const thumb = parent?.querySelector('.media-video-thumb');
@@ -2596,10 +2672,10 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
 }
 
 function handleDocDownload(msgId, m) {
-  if (m.data && (m.data.includes('maps.google.com') || m.fileName === 'लोकेशन')) {
-    const openMaps = confirm('📍 लोकेशन Google Maps में खोलें?');
+  if (m.data && (m.data.includes('maps.google.com') || m.fileName === '')) {
+    const openMaps = confirm('  Google Maps  ?');
     if (openMaps) window.open(m.data, '_blank');
-    else navigator.clipboard.writeText(m.data).then(() => toast('📋 लिंक कॉपी हो गया'));
+    else navigator.clipboard.writeText(m.data).then(() => toast('    '));
     return;
   }
 
@@ -2608,7 +2684,7 @@ function handleDocDownload(msgId, m) {
     const handled = openContactVcfNative(rawBase64, m.fileName || 'contact.vcf');
     if (!handled && m.data) {
       saveMediaViaNative(rawBase64, m.fileName || 'contact.vcf', 'text/x-vcard');
-      toast('👤 संपर्क VCF डाउनलोड हुआ');
+      toast('  VCF  ');
     }
     return;
   }
@@ -2654,7 +2730,7 @@ $('saveMediaBtn').onclick = () => {
   const { dataUrl, mimeType, fileName } = mediaViewerState;
   const base64Only = dataUrl.split(',')[1] || dataUrl;
   saveMediaViaNative(base64Only, fileName || 'media', mimeType || 'application/octet-stream');
-  toast('✅ Downloads में सहेज दिया गया');
+  toast(' Downloads    ');
 };
 
 const attachBtn = $('attachBtn');
@@ -2693,8 +2769,8 @@ $('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) 
 
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
-  if (!navigator.geolocation) { toast('लोकेशन सपोर्ट नहीं है'); return; }
-  toast('📍 लोकेशन प्राप्त कर रहे हैं...');
+  if (!navigator.geolocation) { toast('   '); return; }
+  toast('     ...');
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const lat = pos.coords.latitude, lng = pos.coords.longitude;
@@ -2703,7 +2779,7 @@ function sendLocationMessage() {
     const roomPath = `chats/${roomId}/messages`;
     const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
     const newMsgRef = push(ref(db, roomPath));
-    const label = '📍 लोकेशन';
+    const label = ' ';
 
     latestChatSnippets[currentChatTargetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
     localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
@@ -2711,26 +2787,26 @@ function sendLocationMessage() {
 
     await set(newMsgRef, {
       senderId: myUserId, senderName: myUserName, type: 'doc', text: label,
-      fileName: 'लोकेशन', mimeType: 'text/plain', fileSize: mapsUrl.length,
+      fileName: '', mimeType: 'text/plain', fileSize: mapsUrl.length,
       data: mapsUrl, time: Date.now(), delivered: targetOnline, read: false
     });
 
-    sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: 'लोकेशन' });
-    toast('✅ लोकेशन भेज दी गई');
-  }, () => { toast('लोकेशन प्राप्त नहीं हुई'); });
+    sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: '' });
+    toast('    ');
+  }, () => { toast('   '); });
 }
 
 async function sendContactMessage() {
   if (!currentChatTargetId) return;
   const list = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
-  if (!list.length) { toast('कोई संपर्क नहीं'); return; }
+  if (!list.length) { toast('  '); return; }
 
   const names = list.map((id, i) => `${i+1}. ${allOnlineUsers[id].name}`).join('\n');
-  const input = prompt('कौन सा संपर्क भेजें? (नंबर लिखें)\n\n' + names);
+  const input = prompt('   ? ( )\n\n' + names);
   if (!input) return;
 
   const idx = parseInt(input) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= list.length) { toast('गलत नंबर'); return; }
+  if (isNaN(idx) || idx < 0 || idx >= list.length) { toast(' '); return; }
 
   const contact = allOnlineUsers[list[idx]];
   const vcfData = `BEGIN:VCARD\nVERSION:3.0\nFN:${contact.name}\nUID:${list[idx]}\nEND:VCARD`;
@@ -2738,7 +2814,7 @@ async function sendContactMessage() {
   const roomPath = `chats/${roomId}/messages`;
   const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
   const newMsgRef = push(ref(db, roomPath));
-  const label = `👤 ${contact.name}`;
+  const label = ` ${contact.name}`;
 
   latestChatSnippets[currentChatTargetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
@@ -2751,21 +2827,21 @@ async function sendContactMessage() {
   });
 
   sendChatMessagePush(currentChatTargetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName: contact.name + '.vcf', mimeType: 'text/vcard' });
-  toast('✅ संपर्क भेज दिया गया');
+  toast('    ');
 }
 
 let phoneContactsCache = [];
 
 async function openPhoneContactsPicker() {
   if (!currentChatTargetId) return;
-  if (!isNativeApp()) { toast(currentLang === 'hi' ? 'यह सिर्फ ऐप में काम करता है' : 'Only works in app'); return; }
+  if (!isNativeApp()) { toast(currentLang === 'hi' ? '      ' : 'Only works in app'); return; }
   const modal = $('phoneContactsModal');
   if (!modal) return;
   modal.hidden = false;
   const list = $('phoneContactsList');
   const searchIn = $('phoneContactsSearch');
   const sendBtn = $('phoneContactsSendBtn');
-  list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'संपर्क लोड हो रहे हैं...':'Loading contacts...'}</div>`;
+  list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'    ...':'Loading contacts...'}</div>`;
   searchIn.value = '';
   const selected = new Set();
 
@@ -2787,14 +2863,14 @@ async function openPhoneContactsPicker() {
   const renderList = (filter) => {
     const q = (filter || '').toLowerCase().trim();
     const items = phoneContactsCache.filter(c => !q || c.name.toLowerCase().includes(q) || c.phone.includes(q));
-    if (!items.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'कोई संपर्क नहीं मिला':'No contacts found'}</div>`; return; }
+    if (!items.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px">${currentLang==='hi'?'   ':'No contacts found'}</div>`; return; }
     list.innerHTML = items.slice(0, 300).map((c) => {
       const initials = (c.name || '?').trim().charAt(0).toUpperCase();
       const isSel = selected.has(c.phone);
       return `<div class="phone-contact-row${isSel?' selected':''}" data-phone="${c.phone}">
         <div class="pc-avatar">${initials}</div>
         <div class="pc-info"><div class="pc-name">${safeName(c.name)}</div><div class="pc-phone">${c.phone}</div></div>
-        <div class="pc-check">${isSel ? '✓' : ''}</div>
+        <div class="pc-check">${isSel ? '' : ''}</div>
       </div>`;
     }).join('');
     list.querySelectorAll('.phone-contact-row').forEach(row => {
@@ -2802,7 +2878,7 @@ async function openPhoneContactsPicker() {
         const ph = row.dataset.phone;
         if (selected.has(ph)) selected.delete(ph); else selected.add(ph);
         row.classList.toggle('selected', selected.has(ph));
-        row.querySelector('.pc-check').textContent = selected.has(ph) ? '✓' : '';
+        row.querySelector('.pc-check').textContent = selected.has(ph) ? '' : '';
         updateSendBtn();
       };
     });
@@ -2817,7 +2893,7 @@ async function openPhoneContactsPicker() {
       const vcfData = `BEGIN:VCARD\nVERSION:3.0\nFN:${c.name}\nTEL;TYPE=CELL:${c.phone}\nEND:VCARD`;
       await sendVcfMessage(vcfData, c.name.replace(/[^a-zA-Z0-9]/g,'_') + '.vcf');
     }
-    toast(`✅ ${items.length} संपर्क भेजे गए`);
+    toast(` ${items.length}   `);
   };
 
   const cb = $('closePhoneContactsBtn');
@@ -2833,7 +2909,7 @@ async function sendVcfMessage(vcfData, fileName) {
   const roomPath = `chats/${roomId}/messages`;
   const targetOnline = !!allOnlineUsers[targetId]?.online;
   const newMsgRef = push(ref(db, roomPath));
-  const label = `👤 ${fileName.replace('.vcf','')}`;
+  const label = ` ${fileName.replace('.vcf','')}`;
   latestChatSnippets[targetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
@@ -2862,8 +2938,8 @@ async function openVoiceDock() {
     dockMediaRecorder.start(100);
     isDockPaused = false; dockSeconds = 0;
     dockTimerText.textContent = '0:00';
-    dockPauseIco.textContent = '⏸';
-    dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
+    dockPauseIco.textContent = '';
+    dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Pause';
     dockBlinkDot.style.animationPlayState = 'running';
     voiceDock.hidden = false;
     setupWaveformVisualizer(dockStream);
@@ -2876,7 +2952,7 @@ async function openVoiceDock() {
       }
     }, 1000);
   } catch(e) {
-    toast('माइक की अनुमति नहीं मिल सकी');
+    toast('     ');
   }
 }
 
@@ -2918,11 +2994,11 @@ dockPauseResumeBtn.onclick = () => {
   if (!dockMediaRecorder) return;
   if (!isDockPaused) {
     dockMediaRecorder.pause(); isDockPaused = true;
-    dockPauseIco.textContent = '🎙'; dockPauseText.textContent = currentLang === 'hi' ? 'जारी रखें' : 'Resume';
+    dockPauseIco.textContent = ''; dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Resume';
     dockBlinkDot.style.animationPlayState = 'paused';
   } else {
     dockMediaRecorder.resume(); isDockPaused = false;
-    dockPauseIco.textContent = '⏸'; dockPauseText.textContent = currentLang === 'hi' ? 'पॉज़ करें' : 'Pause';
+    dockPauseIco.textContent = ''; dockPauseText.textContent = currentLang === 'hi' ? ' ' : 'Pause';
     dockBlinkDot.style.animationPlayState = 'running';
   }
 };
@@ -2957,7 +3033,7 @@ function sendVoiceDock() {
         const durStr = `${Math.floor(durSec/60)}:${String(durSec%60).padStart(2,'0')}`;
         const targetOnline = !!allOnlineUsers[currentChatTargetId]?.online;
         const newMsgRef = push(ref(db, roomPath));
-        const voiceLabel = '🎙 ' + (currentLang==='hi'?'वॉयस नोट':'Voice Note');
+        const voiceLabel = ' ' + (currentLang==='hi'?' ':'Voice Note');
 
         latestChatSnippets[currentChatTargetId] = { text: voiceLabel, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
         localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
@@ -2983,8 +3059,12 @@ function sendVoiceDock() {
 }
 $('dockSendBtn').onclick = sendVoiceDock;
 /* =========================================================================
-   >>>>>>>>>>>>>>>>>>>> [PART 3 OF 3: app.js v1.23.9] >>>>>>>>>>>>>>>>>>>>
-   Call Engine, Controls, Viewport Sync (Fixed Header), Hardware Back & Init
+   🔴🔴🔴 [PART 2 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
+   ========================================================================= */
+
+/* =========================================================================
+   🟢🟢🟢 [PART 3 OF 3 — START (शुरू): app.js v1.24.1] 🟢🟢🟢
+   Call Engine, Controls, Strict Viewport & Touch-Slide Lock Fix, Hardware Back & Init
    ========================================================================= */
 
 currentCallType = 'outgoing';
@@ -4435,54 +4515,93 @@ function setupHardwareBackButton() {
 }
 
 // ===================================================
-// ✅ SIMPLE SCROLL FIX (NATIVE ADJUST-RESIZE COMPATIBLE)
+// 🔒 STRICT VIEWPORT & TOUCH-SLIDE LOCK FIX
 // ===================================================
-chatInput.addEventListener('focus', () => {
-  // कीबोर्ड खुलने का समय देकर सिर्फ चैट को नीचे स्क्रॉल करें
-  setTimeout(() => {
-    const body = $('chatBody');
-    if (body) {
-      body.scrollTop = body.scrollHeight;
-    }
-  }, 250);
-});
+function lockChatViewportHeight() {
+  if (chatScreen.hidden) return;
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
 
-// ===================================================
-// VIEWPORT SYNC (Exact Working Logic from app_4.js)
-// ===================================================
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const px = `${vh}px`;
+
+  document.documentElement.style.height = px;
+  document.body.style.height = px;
+  chatScreen.style.position = 'fixed';
+  chatScreen.style.top = '0px';
+  chatScreen.style.left = '0px';
+  chatScreen.style.right = '0px';
+  chatScreen.style.height = px;
+}
+
+function resetChatViewportHeight() {
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  document.documentElement.style.height = '100%';
+  document.body.style.height = '100%';
+  chatScreen.style.top = '0px';
+  chatScreen.style.height = '100%';
+}
+
 if (window.visualViewport) {
-  const syncViewport = () => {
+  window.visualViewport.addEventListener('resize', () => {
     if (!chatScreen.hidden) {
-      window.scrollTo(0, 0);
-      chatScreen.style.height = `${window.visualViewport.height}px`;
+      lockChatViewportHeight();
       const body = $('chatBody');
       if (body) body.scrollTop = body.scrollHeight;
     }
-  };
-  window.visualViewport.addEventListener('resize', syncViewport);
+  });
   window.visualViewport.addEventListener('scroll', () => {
-    if (!chatScreen.hidden) window.scrollTo(0, 0);
+    if (!chatScreen.hidden) {
+      lockChatViewportHeight();
+    }
   });
 }
 
+// Chat screen khulne ya band hone par height automatic sync karein
+if (window.MutationObserver && chatScreen) {
+  const chatObserver = new MutationObserver(() => {
+    if (!chatScreen.hidden) {
+      lockChatViewportHeight();
+    } else {
+      resetChatViewportHeight();
+    }
+  });
+  chatObserver.observe(chatScreen, { attributes: true, attributeFilter: ['hidden'] });
+}
+
+// Header aur Footer par ungli rakhkar upar slide karne se screen pan hone ko rokein
+document.addEventListener('touchmove', (e) => {
+  if (chatScreen.hidden) return;
+  const inHeader = e.target.closest('.chat-header');
+  const inFooter = e.target.closest('.chat-footer');
+  if (inHeader || inFooter) {
+    if (e.target === chatInput && chatInput.scrollHeight > chatInput.clientHeight) {
+      return;
+    }
+    e.preventDefault();
+  }
+}, { passive: false });
+
 chatInput.addEventListener('focus', () => {
   setTimeout(() => {
-    window.scrollTo(0, 0);
-    if (window.visualViewport && !chatScreen.hidden) {
-      chatScreen.style.height = `${window.visualViewport.height}px`;
-    }
+    lockChatViewportHeight();
     const body = $('chatBody');
     if (body) body.scrollTop = body.scrollHeight;
   }, 150);
 });
 
 chatInput.addEventListener('blur', () => {
-  if (!chatScreen.hidden) {
-    chatScreen.style.height = '100%';
-    window.scrollTo(0, 0);
-  }
+  setTimeout(() => {
+    if (!chatScreen.hidden) {
+      lockChatViewportHeight();
+    } else {
+      resetChatViewportHeight();
+    }
+  }, 100);
 });
-
 
 // OTA Update
 async function checkWebOtaUpdate(manual = false) {
@@ -4615,5 +4734,5 @@ if (document.readyState === 'loading') {
 }
 
 /* =========================================================================
-   <<<<<<<<<<<<<<<<<<<< [PART 3 OF 3: app.js complete] <<<<<<<<<<<<<<<<<<<<
+   🔴🔴🔴 [PART 3 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
    ========================================================================= */
