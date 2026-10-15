@@ -6,6 +6,506 @@
       "ans": "Tiger"
     },
     {
+    "q": "सब्जियों का मैं राजा हूँ, गोल-गोल और भूरा हूँ, समोसे के अंदर छिपा रहता हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["टमाटर", "आलू", "बैंगन", "गाजर"],
+    "ans": "आलू"
+  },
+  {
+    "q": "ऊपर से हूँ हरा-भरा, अंदर से हूँ लाल-लाल, खट्टा-मीठा स्वाद है मेरा, गोल है मेरा आकार। बताओ मैं कौन हूँ?",
+    "opts": ["तरबूज", "सेब", "अंगूर", "संतरा"],
+    "ans": "तरबूज"
+  },
+  {
+    "q": "तुम्हारे एक हाथ में 5 उंगलियां हैं और दूसरे हाथ में भी 5 उंगलियां हैं। दोनों हाथों को मिलाकर कुल कितनी उंगलियां हुईं?",
+    "opts": ["5", "8", "10", "12"],
+    "ans": "10"
+  },
+  {
+    "q": "लाल-लाल हूँ, गोल-गोल हूँ, मम्मी मुझे सलाद में काटती हैं, सूप बनाओ तो शौक से पीते हैं। बताओ मैं कौन हूँ?",
+    "opts": ["आलू", "टमाटर", "प्याज", "कद्दू"],
+    "ans": "टमाटर"
+  },
+  {
+    "q": "फलों का मैं राजा हूँ, गर्मियों में मैं आता हूँ, पीला-पीला रंग है मेरा, रसदार मेरा नाम है। बताओ मैं कौन हूँ?",
+    "opts": ["केला", "आम", "पपीता", "सेब"],
+    "ans": "आम"
+  },
+  {
+    "q": "अगर तुम्हारे पास 3 टॉफियां हैं और पापा ने तुम्हें 2 टॉफियां और दे दीं, तो अब तुम्हारे पास कुल कितनी टॉफियां हैं?",
+    "opts": ["4", "5", "6", "3"],
+    "ans": "5"
+  },
+  {
+    "q": "लंबी हूँ और नारंगी (orange) रंग की हूँ, खरगोश को मैं बहुत पसंद हूँ, आँखें मेरी खाकर तेज होती हैं। बताओ मैं कौन हूँ?",
+    "opts": ["मूली", "गाजर", "भिंडी", "बैंगन"],
+    "ans": "गाजर"
+  },
+  {
+    "q": "एक सेब रोज खाओगे, तो डॉक्टर के पास कभी नहीं जाओगे। लाल-लाल सुंदर सा फल हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["अनार", "तरबूज", "सेब", "स्ट्रॉबेरी"],
+    "ans": "सेब"
+  },
+  {
+    "q": "एक कार में 4 पहिए होते हैं। अगर कार का 1 पहिया पंचर हो जाए, तो कार में कितने सही पहिए बचेंगे?",
+    "opts": ["3", "2", "4", "1"],
+    "ans": "3"
+  },
+  {
+    "q": "हरे रंग का मेरा कोट है, सिर पर एक छोटा सा ताज (मुकुट) है, बैंगनी (purple) रंग का मेरा शरीर है। बताओ मैं कौन हूँ?",
+    "opts": ["करेला", "लौकी", "बैंगन", "आलू"],
+    "ans": "बैंगन"
+  },
+  {
+    "q": "पीला रंग है मेरा, छिलका उतार कर मुझे खाते हैं, बंदर भैया को मैं बहुत पसंद हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["आम", "केला", "नींबू", "अनानास"],
+    "ans": "केला"
+  },
+  {
+    "q": "एक पेड़ पर 6 चिड़ियाँ बैठी थीं। 2 चिड़ियाँ उड़ गईं। अब पेड़ पर कितनी चिड़ियाँ बची हैं?",
+    "opts": ["4", "5", "3", "6"],
+    "ans": "4"
+  },
+  {
+    "q": "हरे रंग की एक फली हूँ, पतली सी और लंबी हूँ, लेडी फिंगर (Lady finger) अंग्रेजी में मेरा नाम है। बताओ मैं कौन हूँ?",
+    "opts": ["ककड़ी", "भिंडी", "मटर", "लोबिया"],
+    "ans": "भिंडी"
+  },
+  {
+    "q": "छोटे-छोटे दाने हैं मेरे, हरे रंग के गुच्छों में लटकता हूँ, खट्टा-मीठा स्वाद है मेरा। बताओ मैं कौन हूँ?",
+    "opts": ["लीची", "चेरी", "अंगूर", "जामुन"],
+    "ans": "अंगूर"
+  },
+  {
+    "q": "अगर आप 1 से लेकर 5 तक गिनती गाते हो, तो 3 के तुरंत बाद कौन सा नंबर आता है?",
+    "opts": ["2", "4", "5", "1"],
+    "ans": "4"
+  },
+  {
+    "q": "लंबे-लंबे बाल हैं मेरे, जमीन के नीचे उगती हूँ, तीखी-तीखी स्वाद में हूँ, काटते समय आंसू लाती हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["अदरक", "लहसुन", "प्याज", "मूली"],
+    "ans": "प्याज"
+  },
+  {
+    "q": "छोटा सा हूँ, गोल-गोल हूँ, हरे रंग के घर में रहता हूँ, मुझे छीलोगे तो छोटे-छोटे दाने निकलेंगे। बताओ मैं कौन हूँ?",
+    "opts": ["मटर", "चना", "सोयाबीन", "मक्का"],
+    "ans": "मटर"
+  },
+  {
+    "q": "नारंगी (orange) रंग का गोल-गोल फल हूँ, मेरा नाम और मेरा रंग दोनों एक ही हैं। बताओ मैं कौन हूँ?",
+    "opts": ["आम", "संतरा", "नींबू", "पपीता"],
+    "ans": "संतरा"
+  },
+  {
+    "q": "एक हाथ में कितनी उंगलियां होती हैं (अंगूठे को मिलाकर)?",
+    "opts": ["4", "5", "6", "10"],
+    "ans": "5"
+  },
+  {
+    "q": "लाल-लाल दाने हैं मेरे अंदर, मोतियों जैसे चमकते हैं, बीमार होने पर मेरा जूस पीते हैं। बताओ मैं कौन हूँ?",
+    "opts": ["अनार", "तरबूज", "चेरी", "अंगूर"],
+    "ans": "अनार"
+  },
+    {
+    "q": "लंबी नाक (सूंड़) है मेरी, भारी-भरकम मेरा शरीर है, गन्ने खाना मुझे पसंद है। बताओ मैं कौन हूँ?",
+    "opts": ["ऊंट", "हाथी", "घोड़ा", "शेर"],
+    "ans": "हाथी"
+  },
+  {
+    "q": "जंगल का मैं राजा हूँ, दहाड़ मार कर सोता हूँ, सब मुझसे डरते हैं। बताओ मैं कौन हूँ?",
+    "opts": ["भालू", "बाघ", "शेर", "लोमड़ी"],
+    "ans": "शेर"
+  },
+  {
+    "q": "पेड़ों पर मैं रहता हूँ, एक डाल से दूसरी डाल पर कूदता हूँ, केला खाना मुझे बहुत पसंद है। बताओ मैं कौन हूँ?",
+    "opts": ["बंदर", "गिलहरी", "बिल्ली", "भालू"],
+    "ans": "बंदर"
+  },
+  {
+    "q": "घर की मैं रखवाली करता हूँ, अनजान को देखकर भौंकता हूँ, इंसानों का सबसे अच्छा दोस्त हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["बिल्ली", "कुत्ता", "गाय", "बकरी"],
+    "ans": "कुत्ता"
+  },
+  {
+    "q": "लंबी गर्दन है मेरी, ऊंचे पेड़ों के पत्ते खाता हूँ, शरीर पर चित्तीदार (spots) बने हैं। बताओ मैं कौन हूँ?",
+    "opts": ["जिराफ", "हिरन", "जेब्रा", "ऊंट"],
+    "ans": "जिराफ"
+  },
+  {
+    "q": "मैं हरी-हरी घास खाती हूँ, बच्चों को मीठा दूध पिलाती हूँ, लोग मुझे माता कहते हैं। बताओ मैं कौन हूँ?",
+    "opts": ["भैंस", "गाय", "बकरी", "घोड़ा"],
+    "ans": "गाय"
+  },
+  {
+    "q": "धीमी-धीमी मेरी चाल है, पीठ पर एक मजबूत ढाल है, पानी और जमीन दोनों पर रहता हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["कछुआ", "मेढक", "मछली", "केकड़ा"],
+    "ans": "कछुआ"
+  },
+  {
+    "q": "रेगिस्तान का जहाज कहलाता हूँ, पीठ पर कूबड़ (hump) ले जाता हूँ, बिना पानी पिए कई दिन रह सकता हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["गधा", "घोड़ा", "ऊंट", "हाथी"],
+    "ans": "ऊंट"
+  },
+  {
+    "q": "सफेद और काले रंग की धारियां (stripes) हैं मेरे शरीर पर, घोड़े जैसा दिखता हूँ पर घोड़ा नहीं हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["हिरन", "जेब्रा", "बाघ", "चीता"],
+    "ans": "जेब्रा"
+  },
+  {
+    "q": "लाल-लाल मेरी चोंच है, हरे रंग का मेरा शरीर है, 'टैं-टैं' करता हूँ और हरी मिर्च खाता हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["कौआ", "कबूतर", "तोता", "चिड़िया"],
+    "ans": "तोता"
+  },
+    {
+    "q": "गोल-गोल हूँ, लाल-लाल हूँ, खाने में मैं मीठा हूँ, गर्मियों में सबका प्यारा हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["सेब", "तरबूज", "आलू", "टमाटर"],
+    "ans": "तरबूज"
+  },
+  {
+    "q": "रात में आसमान में चमकता हूँ, चंदा मामा का दोस्त हूँ, टिम-टिम करता रहता हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["सूरज", "तारा", "बादल", "चिड़िया"],
+    "ans": "तारा"
+  },
+  {
+    "q": "चार पैर हैं मेरे पर मैं चल नहीं सकती, बैठ कर तुम मुझ पर पढ़ाई या खाना खाते हो। बताओ मैं कौन हूँ?",
+    "opts": ["कुरसी", "बिल्ली", "मेज़", "गाड़ी"],
+    "ans": "मेज़"
+  },
+  {
+    "q": "म्याऊँ-म्याऊँ करती हूँ, दूध सारा पी जाती हूँ, चूहे को डराती हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["कुत्ता", "बिल्ली", "शेर", "तोता"],
+    "ans": "बिल्ली"
+  },
+  {
+    "q": "चीं-चीं करके गाती हूँ, आसमान में उड़ जाती हूँ, दाना चुग कर खुश होती हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["तितली", "मधुमक्खी", "चिड़िया", "बंदर"],
+    "ans": "चिड़िया"
+  },
+  {
+    "q": "रंग-बिरंगे पंख हैं मेरे, फूलों पर मंडराती हूँ, बच्चों को मैं बहुत भाती हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["तितली", "बतख", "मछली", "चिड़िया"],
+    "ans": "तितली"
+  },
+  {
+    "q": "काले-काले पानी से भरे, आसमान में छा जाते हैं, छम-छम पानी बरसाते हैं। बताओ वो क्या हैं?",
+    "opts": ["तारे", "बादल", "पतंग", "धुआँ"],
+    "ans": "बादल"
+  },
+  {
+    "q": "हवा में मैं उड़ती हूँ, धागे से बंधी रहती हूँ, ढील दो तो ऊपर जाती हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["चिड़िया", "गुब्बारा", "पतंग", "मक्खी"],
+    "ans": "पतंग"
+  },
+  {
+    "q": "पानी में मैं रहती हूँ, तैरना मेरा काम है, पानी से बाहर निकालो तो मर जाती हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["मेढक", "कछुआ", "मछली", "केकड़ा"],
+    "ans": "मछली"
+  },
+  {
+    "q": "सुबह-सुबह मैं आता हूँ, पूरी दुनिया में उजाला लाता हूँ, शाम को घर लौट जाता हूँ। बताओ मैं कौन हूँ?",
+    "opts": ["चाँद", "सूरज", "बल्ब", "तारा"],
+    "ans": "सूरज"
+  },
+    {
+    "q": "ऐसी कौन सी चीज है जो पानी पीते ही मर जाती है?",
+    "opts": ["पेड़", "आग", "प्यास", "नदी"],
+    "ans": "आग"
+  },
+  {
+    "q": "वह क्या है जो सुबह चार पैरों पर, दोपहर को दो पैरों पर और शाम को तीन पैरों पर चलता है?",
+    "opts": ["बचपन", "बुढ़ापा", "इंसान", "समय"],
+    "ans": "इंसान"
+  },
+  {
+    "q": "ऐसी कौन सी चीज है जो सूखी हो तो 2 किलो, गीली हो तो 1 किलो और जल जाए तो 3 किलो हो जाती है?",
+    "opts": ["लकड़ी", "सल्फर", "कोयला", "लोहा"],
+    "ans": "सल्फर"
+  },
+  {
+    "q": "एक राजा की अनोखी रानी, दुम के रास्ते पीती पानी। बताइए वह क्या है?",
+    "opts": ["मछली", "दीपक", "सांप", "पेड़"],
+    "ans": "दीपक"
+  },
+    {
+    "q": "I am big and yellow. I shine in the sky during the day and give you warmth. What am I?",
+    "opts": ["The Moon", "The Sun", "A Star", "A Cloud"],
+    "ans": "The Sun"
+  },
+  {
+    "q": "I am a fruit. I am long and yellow. Monkeys love to eat me. What am I?",
+    "opts": ["Apple", "Orange", "Banana", "Grape"],
+    "ans": "Banana"
+  },
+  {
+    "q": "Look at one of your hands. Count your fingers. How many fingers do you have on one hand?",
+    "opts": ["2", "5", "10", "4"],
+    "ans": "5"
+  },
+  {
+    "q": "I live in the water and swim around. If you take me out of the water, I cannot breathe. What am I?",
+    "opts": ["Bird", "Cat", "Fish", "Dog"],
+    "ans": "Fish"
+  },
+  {
+    "q": "You have 2 sweet candies. Your mommy gives you 1 more candy. How many candies do you have now?",
+    "opts": ["2", "3", "4", "5"],
+    "ans": "3"
+  },
+  {
+    "q": "I drop from the clouds in the sky. I make the ground wet and make a 'pitter-patter' sound. What am I?",
+    "opts": ["Snow", "Rain", "Wind", "Sunlight"],
+    "ans": "Rain"
+  },
+  {
+    "q": "I am a shape. I am perfectly round like a bouncy ball or a yummy donut. What shape am I?",
+    "opts": ["Square", "Triangle", "Circle", "Star"],
+    "ans": "Circle"
+  },
+  {
+    "q": "I am a sweet vegetable. I grow under the ground. I am orange, and rabbits love to crunch on me. What am I?",
+    "opts": ["Potato", "Carrot", "Tomato", "Onion"],
+    "ans": "Carrot"
+  },
+  {
+    "q": "If you have 4 delicious strawberries and you eat 1 of them, how many strawberries are left?",
+    "opts": ["4", "2", "3", "5"],
+    "ans": "3"
+  },
+  {
+    "q": "I am a farm animal. I am white and fluffy. I say 'Baa Baa' and give you warm wool. What am I?",
+    "opts": ["Cow", "Horse", "Sheep", "Pig"],
+    "ans": "Sheep"
+  },
+  {
+    "q": "I fly in the sky. I have beautiful, colorful wings and love to sit on pretty flowers. What am I?",
+    "opts": ["Butterfly", "Frog", "Fish", "Duck"],
+    "ans": "Butterfly"
+  },
+  {
+    "q": "What number comes right after the number 4 when you are counting out loud?",
+    "opts": ["3", "5", "6", "2"],
+    "ans": "5"
+  },
+  {
+    "q": "I am a juicy fruit. I am bright red and shaped like a little heart. I have tiny seeds on my skin. What am I?",
+    "opts": ["Banana", "Strawberry", "Mango", "Watermelon"],
+    "ans": "Strawberry"
+  },
+  {
+    "q": "Which body part do you use to listen to your favourite music or a story?",
+    "opts": ["Eyes", "Nose", "Ears", "Mouth"],
+    "ans": "Ears"
+  },
+  {
+    "q": "You have 1 toy car and your friend has 1 toy car. How many toy cars do you both have together?",
+    "opts": ["1", "2", "3", "4"],
+    "ans": "2"
+  },
+  {
+    "q": "I am a soft, white thing in the sky. I look like floating cotton candy. What am I?",
+    "opts": ["The Sun", "A Cloud", "A Tree", "An Airplane"],
+    "ans": "A Cloud"
+  },
+  {
+    "q": "I am a green vegetable. I look like a tiny tree. Mommy says I am very healthy for you. What am I?",
+    "opts": ["Carrot", "Broccoli", "Potato", "Corn"],
+    "ans": "Broccoli"
+  },
+  {
+    "q": "How many wheels does a regular bicycle have?",
+    "opts": ["1", "2", "3", "4"],
+    "ans": "2"
+  },
+  {
+    "q": "I am a very large animal. I have a long nose called a trunk and big floppy ears. What am I?",
+    "opts": ["Lion", "Monkey", "Elephant", "Giraffe"],
+    "ans": "Elephant"
+  },
+  {
+    "q": "I spin around very fast on the ceiling to blow cool air on you when it feels hot. What am I?",
+    "opts": ["A Fan", "A Lamp", "A Door", "A Window"],
+    "ans": "A Fan"
+  },
+  {
+    "q": "If you have 5 colorful balloons and 2 of them suddenly POP, how many balloons do you have left?",
+    "opts": ["5", "4", "3", "2"],
+    "ans": "3"
+  },
+  {
+    "q": "I am a fruit. I am green on the outside but bright red and watery on the inside with little black seeds. What am I?",
+    "opts": ["Apple", "Grapes", "Watermelon", "Pineapple"],
+    "ans": "Watermelon"
+  },
+  {
+    "q": "I have four legs and a soft furry coat. I am a pet that says 'Meow' and chases mice. What am I?",
+    "opts": ["Dog", "Cat", "Rabbit", "Bird"],
+    "ans": "Cat"
+  },
+  {
+    "q": "What number comes right before the number 2 when we start counting?",
+    "opts": ["0", "1", "3", "4"],
+    "ans": "1"
+  },
+  {
+    "q": "I am red, round, and juicy. You can eat me in a salad or turn me into yummy tomato ketchup. What am I?",
+    "opts": ["Potato", "Tomato", "Cucumber", "Carrot"],
+    "ans": "Tomato"
+  },
+  {
+    "q": "I am a tall plant. I have a brown trunk, green leaves, and sometimes grow yummy fruits. What am I?",
+    "opts": ["A Flower", "A Tree", "Grass", "A Bush"],
+    "ans": "A Tree"
+  },
+  {
+    "q": "Count your feet! How many feet do you use to run and jump around?",
+    "opts": ["1", "2", "3", "4"],
+    "ans": "2"
+  },
+  {
+    "q": "I am a little bird with bright green feathers and a red beak. I can repeat the words you say. What am I?",
+    "opts": ["Duck", "Parrot", "Crow", "Owl"],
+    "ans": "Parrot"
+  },
+  {
+    "q": "I am a shape. I look like a delicious slice of pizza or a birthday party hat. I have 3 corners. What shape am I?",
+    "opts": ["Square", "Circle", "Triangle", "Star"],
+    "ans": "Triangle"
+  },
+  {
+    "q": "You have 3 green apples. You get 3 more green apples. How many apples do you have in total?",
+    "opts": ["4", "5", "6", "7"],
+    "ans": "6"
+  },
+  {
+    "q": "I am a yellow vegetable. I grow in a cob with lots of tiny sweet yellow kernels. What am I?",
+    "opts": ["Peas", "Corn", "Potato", "Broccoli"],
+    "ans": "Corn"
+  },
+  {
+    "q": "I am cold, white, and fall from the sky in winter. You can use me to build a snowman! What am I?",
+    "opts": ["Rain", "Snow", "Mud", "Sand"],
+    "ans": "Snow"
+  },
+  {
+    "q": "Which body part do you use to smell a pretty flower in the garden?",
+    "opts": ["Eyes", "Ears", "Nose", "Tongue"],
+    "ans": "Nose"
+  },
+  {
+    "q": "I have 4 legs and a wagging tail. I am a friendly pet that says 'Woof Woof!' What am I?",
+    "opts": ["Cat", "Dog", "Bird", "Fish"],
+    "ans": "Dog"
+  },
+  {
+    "q": "There are 5 little birds sitting on a fence. All 5 birds fly away into the sky. How many birds are left on the fence?",
+    "opts": ["5", "1", "0", "2"],
+    "ans": "0"
+  },
+  {
+    "q": "I am an orange fruit. My name is exactly the same as my bright color. What am I?",
+    "opts": ["Apple", "Orange", "Banana", "Grape"],
+    "ans": "Orange"
+  },
+  {
+    "q": "I jump high in the garden. I am green and I make a 'Ribbit' sound. What am I?",
+    "opts": ["Frog", "Butterfly", "Worm", "Bird"],
+    "ans": "Frog"
+  },
+  {
+    "q": "How many total eyes do you have on your face to see the world?",
+    "opts": ["1", "2", "3", "4"],
+    "ans": "2"
+  },
+  {
+    "q": "I am a sweet fruit. I grow in hanging bunches. I can be green, red, or purple. What am I?",
+    "opts": ["Apple", "Grapes", "Mango", "Banana"],
+    "ans": "Grapes"
+  },
+  {
+    "q": "I shine up high in the dark night sky. I twinkle 'twinkle twinkle' like a diamond. What am I?",
+    "opts": ["The Sun", "A Star", "A Cloud", "A Bird"],
+    "ans": "A Star"
+  },
+  {
+    "q": "If you have 1 piece of cake and your mommy gives you 1 more piece, how many pieces do you have?",
+    "opts": ["1", "2", "3", "0"],
+    "ans": "2"
+  },
+  {
+    "q": "I am a round vegetable. If you peel my skin, I might make you cry, but I taste great in food! What am I?",
+    "opts": ["Potato", "Onion", "Carrot", "Corn"],
+    "ans": "Onion"
+  },
+  {
+    "q": "I live in the ocean. I have eight long arms to help me swim around. What am I?",
+    "opts": ["Fish", "Shark", "Octopus", "Crab"],
+    "ans": "Octopus"
+  },
+  {
+    "q": "What shape has 4 sides that are all exactly the same size, like a toy building block?",
+    "opts": ["Circle", "Triangle", "Square", "Star"],
+    "ans": "Square"
+  },
+  {
+    "q": "A little puppy has 4 legs. How many legs do 2 little puppies have altogether?",
+    "opts": ["4", "6", "8", "10"],
+    "ans": "8"
+  },
+  {
+    "q": "I am a red fruit. If you eat one every day, it keeps the doctor away! What am I?",
+    "opts": ["Apple", "Banana", "Orange", "Pineapple"],
+    "ans": "Apple"
+  },
+  {
+    "q": "I am a farm animal. I am big, I say 'Moo', and I give you fresh milk to drink. What am I?",
+    "opts": ["Sheep", "Horse", "Cow", "Chicken"],
+    "ans": "Cow"
+  },
+  {
+    "q": "How many thumbs do you have if you look at both of your hands together?",
+    "opts": ["1", "2", "5", "10"],
+    "ans": "2"
+  },
+  {
+    "q": "I grow inside a little green pod with my brothers. We are tiny, round, green, and sweet. What am I?",
+    "opts": ["Corn", "Peas", "Potato", "Tomato"],
+    "ans": "Peas"
+  },
+  {
+    "q": "I look like a huge, beautiful striped cat. I am the king of the jungle and I roar loudly. What am I?",
+    "opts": ["Tiger", "Bear", "Monkey", "Rabbit"],
+    "ans": "Tiger"
+  },
+  {
+    "q": "वह क्या है जिसे आप एक बार खाकर दोबारा नहीं खाना चाहते, लेकिन फिर भी खाते हैं?",
+    "opts": ["धोखा", "कड़वी दवा", "मिर्ची", "कसम"],
+    "ans": "धोखा"
+  },
+  {
+    "q": "कटोरे पे कटोरा, बेटा बाप से भी गोरा। इसका सही जवाब क्या होगा?",
+    "opts": ["तरबूज", "नारियल", "खरबूजा", "अंडा"],
+    "ans": "नारियल"
+  },
+  {
+    "q": "लाल गाय लकड़ी खाए, पानी पीए तो मर जाए। वह क्या है?",
+    "opts": ["दीमक", "आग", "लोहा", "कोयला"],
+    "ans": "आग"
+  },
+  {
+    "q": "वह कौन सी चीज है जो जितनी ज्यादा बढ़ती है, उतनी ही कम होती जाती है?",
+    "opts": ["उम्र", "दूरी", "ऊंचाई", "परछाई"],
+    "ans": "उम्र"
+  },
+  {
+    "q": "हरी थी मन भरी थी, नौ लाख मोतियों से जड़ी थी। राजा जी के खेत में दुशाला ओढ़े खड़ी थी?",
+    "opts": ["तंबाकू", "गोभी", "भुट्टा", "मेंहदी"],
+    "ans": "भुट्टा"
+  },
+  {
+    "q": "वह क्या है जिसके पास आंखें हैं पर देख नहीं सकता, पैर हैं पर चल नहीं सकता?",
+    "opts": ["अंधा आदमी", "गुड़िया", "पेड़", "चश्मा"],
+    "ans": "गुड़िया"
+  },
+    {
       "q": "ऐसी कौन सी चीज है जो पानी पीते ही मर जाती है?",
       "opts": ["पेड़", "आग", "प्यास", "नदी"],
       "ans": "आग"
@@ -56,6 +556,466 @@
       "q": "ऐसी कौन सी जगह है जहाँ समुद्र है लेकिन पानी नहीं, नदियाँ हैं लेकिन मछली नहीं, और जंगल हैं लेकिन पेड़ नहीं?",
       "ans": "नक्शा"
     },
+    {
+    "q": "ऐसी कौन सी चीज है जो ऊपर तो जाती है लेकिन कभी नीचे नहीं आती?",
+    "ans": "उम्र"
+  },
+  {
+    "q": "वह क्या है जो आपके पास जितना ज्यादा होगा, आपको उतना ही कम दिखाई देगा?",
+    "ans": "अंधेरा"
+  },
+  {
+    "q": "ऐसी कौन सी चीज है जिसके पास पंख नहीं हैं, फिर भी वह उड़ती है और हाथ नहीं हैं, फिर भी वह लड़ती है?",
+    "ans": "पतंग"
+  },
+  {
+    "q": "एक पैर है, मगर थकता नहीं, हरी टोपी पहनता है मगर चलता नहीं। बताइए वह क्या है?",
+    "ans": "पेड़"
+  },
+  {
+    "q": "वह कौन सी जगह है जहाँ नदी है पर पानी नहीं, शहर है पर मकान नहीं और जंगल है पर पेड़ नहीं?",
+    "ans": "नक्शा (Map)"
+  },
+  {
+    "q": "ऐसी कौन सी चीज है जिसे हम खाने के लिए खरीदते हैं, लेकिन उसे कभी खाते नहीं हैं?",
+    "ans": "प्लेट या चम्मच"
+  },
+  {
+    "q": "वह क्या है जो सुबह पैदा होता है, दोपहर को जवान होता है और शाम को बूढ़ा होकर मर जाता है?",
+    "ans": "अखबार"
+  },
+  {
+    "q": "एक गुफा में 32 चोर, दिन-रात करते काम, पानी पीते, खाना खाते, फिर करते आराम। बताओ क्या?",
+    "ans": "दांत"
+  },
+  {
+    "q": "वह क्या है जो रोशनी में आपके साथ रहती है, लेकिन अंधेरा होते ही गायब हो जाती है?",
+    "ans": "परछाई"
+  },
+  {
+    "q": "ऐसी कौन सी चीज है जो सूखी हो तो 2 किलो, गीली हो तो 1 किलो और जल जाए तो 3 किलो हो जाती है?",
+    "ans": "सल्फर"
+  },
+  {
+    "q": "वह कौन सी चाबी है जिससे कोई भी ताला नहीं खुलता, लेकिन वह सबको मीठी लगती है?",
+    "ans": "जलेबी"
+  },
+  {
+    "q": "एक राजा की अनोखी रानी, दुम के रास्ते पीती पानी। बताइए वह क्या है?",
+    "ans": "दीपक"
+  },
+  {
+    "q": "जितना आप इसे साफ करेंगे, यह उतना ही काला होता जाएगा। बताइए यह क्या है?",
+    "ans": "ब्लैकबोर्ड"
+  },
+  {
+    "q": "वह क्या है जिसके पैर नहीं हैं, फिर भी वह रात-दिन चलती रहती है?",
+    "ans": "घड़ी"
+  },
+  {
+    "q": "सोने की वह चीज है पर बेचे नहीं सुनार, मोल तो उसका ज्यादा नहीं, बस चादर और चारपाई का है आधार। बताओ क्या?",
+    "ans": "चारपाई (खटिया)"
+  },
+    {
+    "q": "ऐसी कौन सी चीज है जो ऊपर तो जाती है लेकिन कभी नीचे नहीं आती?",
+    "ans": "उम्र"
+  },
+  {
+    "q": "वह कौन सा नंबर है जिसे आप किसी भी नंबर से गुणा (multiply) करें, तो जवाब हमेशा वही नंबर आता है?",
+    "ans": "जीरो (0)"
+  },
+  {
+    "q": "मैं एक लिक्विड हूँ, जब बहुत ज्यादा ठंड होती है तो मैं पत्थर जैसा ठोस बन जाता हूँ। बताओ मैं कौन हूँ?",
+    "ans": "पानी (बर्फ)"
+  },
+  {
+    "q": "एक मेज पर 5 सेब हैं। आपने 3 सेब उठा लिए, तो अब आपके पास कितने सेब हैं?",
+    "ans": "3 सेब (क्योंकि जो आपने उठाए, वो आपके पास हैं)"
+  },
+  {
+    "q": "सूरज की रोशनी को धरती तक पहुँचने में कितने मिनट का समय लगता है?",
+    "ans": "लगभग 8 मिनट"
+  },
+  {
+    "q": "दो जुड़वां भाई मई के महीने में पैदा हुए थे, लेकिन उनका जन्मदिन जून में आता है। यह कैसे मुमकिन है?",
+    "ans": "क्योंकि 'मई' शहर का नाम है"
+  },
+  {
+    "q": "हमारे सौरमंडल (Solar System) का वह कौन सा ग्रह है जिसके चारों तरफ सुंदर छल्ले (Rings) बने हैं?",
+    "ans": "शनि ग्रह (Saturn)"
+  },
+  {
+    "q": "अगर 3 बिल्लियाँ 3 चूहों को 3 मिनट में पकड़ती हैं, तो 100 बिल्लियाँ 100 चूहों को कितने मिनट में पकड़ेंगी?",
+    "ans": "3 मिनट में"
+  },
+  {
+    "q": "मैं हर जगह मौजूद हूँ पर दिखाई नहीं देती, जब मैं चलती हूँ तो पत्तियां हिलती हैं और मेरे बिना कोई जिंदा नहीं रह सकता। बताओ मैं कौन हूँ?",
+    "ans": "हवा (Oxygen)"
+  },
+  {
+    "q": "एक टोकरी में 6 अंडे हैं। अगर आप 6 लोगों को 1-1 अंडा देते हैं, तो भी टोकरी में 1 अंडा कैसे बच जाता है?",
+    "ans": "क्योंकि आखिरी इंसान को अंडा टोकरी के साथ दिया गया था"
+  },
+  {
+    "q": "मैं रात में आसमान में चमकता हूँ, लेकिन मेरी अपनी कोई रोशनी नहीं होती, मैं सूरज की रोशनी से चमकता हूँ। बताओ मैं कौन हूँ?",
+    "ans": "चाँद"
+  },
+  {
+    "q": "वह कौन सी तीन संख्याएँ (numbers) हैं, जिन्हें आपस में जोड़ने (add) या गुणा (multiply) करने पर एक ही जवाब आता है?",
+    "ans": "1, 2 और 3 (1+2+3 = 6 और 1x2x3 = 6)"
+  },
+  {
+    "q": "वह कौन सा बल (Force) है जो हमें जमीन से बांधकर रखता है और जब हम हवा में कूदते हैं तो हमें नीचे खींच लेता है?",
+    "ans": "गुरुत्वाकर्षण बल (Gravity)"
+  },
+  {
+    "q": "एक पेड़ पर 10 पक्षी बैठे थे। एक शिकारी ने गोली चलाई और 1 पक्षी मर गया। अब पेड़ पर कितने पक्षी बचे हैं?",
+    "ans": "शून्य (बाकी पक्षी आवाज सुनकर उड़ गए)"
+  },
+  {
+    "q": "लाल, हरे और नीले रंग को मिलाने पर कौन सा नया रंग बनता है?",
+    "ans": "सफेद रंग (White light)"
+  },
+  {
+    "q": "अगर आपके पास 4 कोने वाली एक चौकोर (Square) लकड़ी है और आप उसके 1 कोने को काट देते हैं, तो अब उसमें कितने कोने बचे?",
+    "ans": "5 कोने"
+  },
+  {
+    "q": "पानी जब गैस (भाप) बनकर हवा में उड़ जाता है, तो विज्ञान में इस प्रक्रिया को क्या कहते हैं?",
+    "ans": "वाष्पीकरण (Evaporation)"
+  },
+  {
+    "q": "ऐसा कौन सा अंग्रेजी का अक्षर है जिसमें एक पूरी गणित की लाइन छिपी है, जिसका मतलब 'लाइन' (Line) होता है?",
+    "ans": "अक्षर 'Q' (Queue का मतलब लाइन होता है)"
+  },
+  {
+    "q": "वह कौन सा अंग (Organ) है जो हमारे पूरे शरीर में खून को पंप करने का काम करता है और कभी आराम नहीं करता?",
+    "ans": "दिल (Heart)"
+  },
+  {
+    "q": "एक कुएं में 10 मेंढक थे। उनमें से 2 मेंढक मर गए। अब कुएं में कितने मेंढक बचे हैं?",
+    "ans": "10 मेंढक (क्योंकि मरे हुए मेंढक भी कुएं के अंदर ही हैं)"
+  },
+  {
+    "q": "पेड़-पौधे अपना खाना बनाने के लिए सूरज की रोशनी का इस्तेमाल करते हैं। इस पूरी प्रक्रिया को विज्ञान में क्या कहते हैं?",
+    "ans": "प्रकाश संश्लेषण (Photosynthesis)"
+  },
+  {
+    "q": "1 से लेकर 100 के बीच में कितनी बार 9 आता है?",
+    "ans": "20 बार"
+  },
+  {
+    "q": "जब बारिश होती है और धूप भी निकली होती है, तो आसमान में 7 रंगों का क्या दिखाई देता है?",
+    "ans": "इंद्रधनुष (Rainbow)"
+  },
+  {
+    "q": "क्रिकेट के एक ओवर में 6 गेंदें होती हैं। तो बताओ 10 ओवर में कुल कितनी गेंदें फेंकी जाएंगी?",
+    "ans": "60 गेंदें"
+  },
+  {
+    "q": "इंसान के शरीर की सबसे मजबूत हड्डी कहाँ पाई जाती है?",
+    "ans": "जबड़े में (Jawbone)"
+  },
+  {
+    "q": "अगर एक डॉक्टर आपको 3 दवाइयाँ देता है और कहता है कि हर आधे घंटे में 1 दवाई खानी है, तो तीनों दवाइयाँ खत्म होने में कितना समय लगेगा?",
+    "ans": "1 घंटा (पहली अभी, दूसरी आधे घंटे बाद, तीसरी एक घंटे बाद)"
+  },
+  {
+    "q": "रात के समय पेड़-पौधों के नीचे क्यों नहीं सोना चाहिए, क्योंकि वे कौन सी गैस छोड़ते हैं?",
+    "ans": "कार्बन डाइऑक्साइड (Carbon Dioxide)"
+  },
+  {
+    "q": "ऐसी कौन सी आकृति (Shape) है जिसके पास न तो कोई कोना होता है और न ही कोई अंत होता है?",
+    "ans": "गोला या वृत्त (Circle)"
+  },
+  {
+    "q": "जब हम शीशे (Mirror) के सामने खड़े होते हैं, तो हमें अपना ही चेहरा दिखाई देता है। विज्ञान के इस नियम को क्या कहते हैं?",
+    "ans": "प्रकाश का परावर्तन (Reflection of Light)"
+  },
+  {
+    "q": "एक पासे (Dice) के आमने-सामने वाले दो पक्षों के डॉट्स को जोड़ने पर हमेशा क्या नंबर आता है?",
+    "ans": "7"
+  },
+  {
+    "q": "हमारे शरीर का वह कौन सा हिस्सा है जो कैमरे की तरह काम करता है और हमें रंग-बिरंगी दुनिया दिखाता है?",
+    "ans": "आँखें (Eyes)"
+  },
+  {
+    "q": "अगर कल से दो दिन पहले रविवार था, तो कल के दो दिन बाद कौन सा दिन होगा?",
+    "ans": "गुरुवार"
+  },
+  {
+    "q": "पानी का साइंटिफिक फार्मूला (Chemical Formula) क्या होता है?",
+    "ans": "H2O"
+  },
+  {
+    "q": "एक किलो रुई और एक किलो लोहे में से कौन सी चीज ज्यादा भारी होगी?",
+    "ans": "दोनों बराबर होंगे (क्योंकि दोनों का वजन 1 किलो ही है)"
+  },
+  {
+    "q": "हमारे सौरमंडल का सबसे छोटा और सूरज के सबसे पास वाला ग्रह कौन सा है?",
+    "ans": "बुध ग्रह (Mercury)"
+  },
+  {
+    "q": "एक मिनट में 60 सेकंड होते हैं, तो आधे घंटे में कितने मिनट होंगे?",
+    "ans": "30 मिनट"
+  },
+  {
+    "q": "आसमान से बिजली क्यों चमकती है, बादलों में ऐसा क्या टकराता है?",
+    "ans": "इलेक्ट्रिक चार्ज (Electric Charge या घर्षण)"
+  },
+  {
+    "q": "0, 1, 2, 3, 4, 5, 6, 7, 8, 9 - इन सभी नंबर्स को आपस में गुणा (multiply) करने पर क्या मिलेगा?",
+    "ans": "0 (क्योंकि किसी भी सीरीज में 0 से गुणा करने पर सब 0 हो जाता है)"
+  },
+  {
+    "q": "वह कौन सी धातु (Metal) है जो कमरे के तापमान (Room Temperature) पर भी लिक्विड रूप में रहती है और थर्मामीटर में इस्तेमाल होती है?",
+    "ans": "पारा (Mercury)"
+  },
+  {
+    "q": "एक साल में कितने हफ्ते (Weeks) होते हैं?",
+    "ans": "52 हफ्ते"
+  },
+  {
+    "q": "कौन सा विटामिन हमें सीधे सूरज की धूप (Sunlight) से मिलता है?",
+    "ans": "विटामिन डी (Vitamin D)"
+  },
+  {
+    "q": "अगर आप 50 को 0.5 से भाग (divide) करते हैं और उसमें 20 जोड़ते हैं, तो उत्तर क्या होगा?",
+    "ans": "120 (50 ÷ 0.5 = 100, और 100 + 20 = 120)"
+  },
+  {
+    "q": "मधुमक्खियां फूलों से रस चूसकर क्या मीठी चीज बनाती हैं, जो कभी खराब नहीं होती?",
+    "ans": "शहद (Honey)"
+  },
+  {
+    "q": "घड़ी में जब दोपहर के 3 बजते हैं, तो मिनट और घंटे की सुई के बीच कितने डिग्री का कोण (Angle) बनता है?",
+    "ans": "90 डिग्री (Right Angle)"
+  },
+  {
+    "q": "हमारे शरीर में ऑक्सीजन ले जाने वाले लाल रंग के लिक्विड को क्या कहते हैं?",
+    "ans": "खून (Blood)"
+  },
+  {
+    "q": "अगर आपके पास 12 चॉकलेट हैं और आप उन्हें अपने 4 दोस्तों में बराबर बांटते हैं, तो हर दोस्त को कितनी चॉकलेट मिलेंगी?",
+    "ans": "3 चॉकलेट"
+  },
+  {
+    "q": "गाड़ियों के टायर हमेशा काले रंग के ही क्यों बनाए जाते हैं, उसमें क्या मिलाया जाता है?",
+    "ans": "कार्बन ब्लैक (Carbon Black)"
+  },
+  {
+    "q": "100 में से आप 10 को कितनी बार घटा (subtract) सकते हैं?",
+    "ans": "सिर्फ 1 बार (क्योंकि अगली बार आप 90 में से घटाएंगे)"
+  },
+  {
+    "q": "बर्फ पानी के ऊपर क्यों तैरती है, वह डूबती क्यों नहीं?",
+    "ans": "क्योंकि बर्फ का घनत्व (Density) पानी से कम होता है"
+  },
+  {
+    "q": "वह कौन सी संख्या है जिसे रोमन लिपि (Roman Numerals) में नहीं लिखा जा सकता?",
+    "ans": "शून्य (0)"
+  },
+    {
+    "q": "I am an odd number. Take away one letter from me and I become even. What number am I?",
+    "ans": "Seven"
+  },
+  {
+    "q": "I have a face and two hands, but no arms or legs. In science, I measure time. What am I?",
+    "ans": "A clock"
+  },
+  {
+    "q": "What travels around the world but stays in a corner? Hint: You need it to mail a science magazine.",
+    "ans": "A stamp"
+  },
+  {
+    "q": "I am a gas that makes up most of the air we breathe on Earth, even more than oxygen. What am I?",
+    "ans": "Nitrogen"
+  },
+  {
+    "q": "I am a three-digit number. My tens digit is 5 more than my ones digit, and my hundreds digit is 8 less than my tens digit. What number am I?",
+    "ans": "194"
+  },
+  {
+    "q": "What invention lets you look right through a wall and is made of solid sand? Hint: It is a common state of matter.",
+    "ans": "A window"
+  },
+  {
+    "q": "I am a fruit, but I am also a math term. If you multiply me by myself, I stay the same. What number am I?",
+    "ans": "1"
+  },
+  {
+    "q": "Which weighs more? A pound of heavy iron or a pound of light air?",
+    "ans": "They weigh the same"
+  },
+  {
+    "q": "I am the only planet in our solar system that spins clockwise on my axis. Who am I?",
+    "ans": "Venus"
+  },
+  {
+    "q": "What can you catch but never throw? Hint: It is caused by a tiny virus.",
+    "ans": "A cold"
+  },
+  {
+    "q": "I am a geometric shape with 8 sides. You see me every time you stop your car at a crossroads. What am I?",
+    "ans": "An octagon"
+  },
+  {
+    "q": "I live in the ocean, look like a plant, but I am actually a living colony of tiny animals. What am I?",
+    "ans": "Coral"
+  },
+  {
+    "q": "If you multiply any number by me, the total sum of the digits in the answer will always add up to me. What number am I?",
+    "ans": "9"
+  },
+  {
+    "q": "I have keys but open no locks. I have space but no room. You can enter but can't go outside. What science tool am I?",
+    "ans": "A keyboard"
+  },
+  {
+    "q": "What is the only bird that can fly backwards, beating its wings up to 80 times per second?",
+    "ans": "Hummingbird"
+  },
+  {
+    "q": "What goes up and down but never moves? Hint: It is a basic unit used to measure temperature.",
+    "ans": "A degree"
+  },
+  {
+    "q": "What is the hot, liquid rock called before it erupts out of a volcano?",
+    "ans": "Magma"
+  },
+  {
+    "q": "If it takes 5 minutes to boil one egg, how long does it take to boil 5 eggs together in the same pot?",
+    "ans": "5 minutes"
+  },
+  {
+    "q": "I am a mammal that can fly in the dark using sound waves instead of eyes. What am I?",
+    "ans": "A bat"
+  },
+  {
+    "q": "Which number is considered the 'Identity Element' for multiplication because it never changes any number it multiplies?",
+    "ans": "1"
+  },
+  {
+    "q": "I look like a giant fish, breathe air through a blowhole, but I am actually a warm-blooded mammal. What am I?",
+    "ans": "A whale"
+  },
+  {
+    "q": "What has a thumb and four fingers but is not alive? Hint: It protects your hands in a science lab.",
+    "ans": "A glove"
+  },
+  {
+    "q": "What number becomes smaller when you turn it upside down?",
+    "ans": "9"
+  },
+  {
+    "q": "I am the hardest natural substance found on planet Earth. What am I?",
+    "ans": "Diamond"
+  },
+  {
+    "q": "How many seconds are there in exactly two full minutes?",
+    "ans": "120 seconds"
+  },
+  {
+    "q": "I am a force that slows down moving objects when two surfaces rub against each other. What am I?",
+    "ans": "Friction"
+  },
+  {
+    "q": "I am a polygon with 5 sides and 5 angles. What shape am I?",
+    "ans": "A pentagon"
+  },
+  {
+    "q": "Which body system uses nerves and the brain to send electric signals across your body?",
+    "ans": "Nervous system"
+  },
+  {
+    "q": "What is the name of a mathematical angle that is greater than 90 degrees but less than 180 degrees?",
+    "ans": "An obtuse angle"
+  },
+  {
+    "q": "What type of scientist studies rocks, fossils, and the history of layers of the Earth?",
+    "ans": "A geologist"
+  },
+  {
+    "q": "If you multiply the number of days in a week by the number of sides on a triangle, what do you get?",
+    "ans": "21"
+  },
+  {
+    "q": "I am a metal that is strongly attracted to magnets and turns rusty red when left in wet air. What am I?",
+    "ans": "Iron"
+  },
+  {
+    "q": "What mathematical term means the distance all the way around the outside edge of a circle?",
+    "ans": "Circumference"
+  },
+  {
+    "q": "I am the largest organ of the human body, covering you completely from head to toe. What am I?",
+    "ans": "Skin"
+  },
+  {
+    "q": "If a triangle has three equal sides, what special math name is given to it?",
+    "ans": "An equilateral triangle"
+  },
+  {
+    "q": "I am a tiny insect that can lift objects that are 50 times heavier than my own body weight. What am I?",
+    "ans": "An ant"
+  },
+  {
+    "q": "What is the answer called when you multiply two numbers together in mathematics?",
+    "ans": "The product"
+  },
+  {
+    "q": "I am the green pigment found inside plant leaves that captures light energy from the sun. What am I?",
+    "ans": "Chlorophyll"
+  },
+  {
+    "q": "What number do you get if you double the number 25 and then subtract 15?",
+    "ans": "35"
+  },
+  {
+    "q": "I am a state of matter that expands to fill up any container I am put in, and you cannot easily see me. What am I?",
+    "ans": "Gas"
+  },
+  {
+    "q": "How many years are there in a single millennium?",
+    "ans": "1000 years"
+  },
+  {
+    "q": "I am a giant ball of burning gas at the center of our solar system. Who am I?",
+    "ans": "The Sun"
+  },
+  {
+    "q": "If you have a dozen pencils, how many pencils do you actually have?",
+    "ans": "12"
+  },
+  {
+    "q": "I am an instrument used by doctors to listen to the sound of your heartbeat. What am I?",
+    "ans": "A stethoscope"
+  },
+  {
+    "q": "What number is the only even prime number in the entire world of mathematics?",
+    "ans": "2"
+  },
+  {
+    "q": "What do you call a scientist who travels into outer space in a rocket ship?",
+    "ans": "An astronaut"
+  },
+  {
+    "q": "What is the next prime number that comes right after the number 5?",
+    "ans": "7"
+  },
+  {
+    "q": "I am a frozen ball of ice and dust orbiting the sun, and I grow a long glowing tail when I get close to it. What am I?",
+    "ans": "A comet"
+  },
+  {
+    "q": "If you divide the number 81 by 9, what is the final answer?",
+    "ans": "9"
+  },
+  {
+    "q": "What type of energy do we get from plugging wires into a wall socket?",
+    "ans": "Electrical energy"
+  },
     {
       "q": "I speak without a mouth and hear without ears. What am I?",
       "ans": "An Echo"
