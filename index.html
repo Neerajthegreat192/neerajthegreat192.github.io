@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 
 <!-- डायनामिक स्टाइल -->
-<link rel="stylesheet" href="style.css?v=1.23.6" id="baseStyle">
+<link rel="stylesheet" href="style.css?v=1.24.2" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
   try {
@@ -352,7 +352,7 @@
           <span class="tray-icon">🎯</span>
           <span class="tray-label">किड्स क्विज़</span>
         </button>
-        <!-- पॉइंट #3: फन मोड ट्रे में Riddle & GK टैब जोड़ा गया -->
+        <!-- पॉइंट #3: फन मोड ट्रे में Riddle & GK टैब -->
         <button class="tray-item" id="trayBtnRiddleGk">
           <span class="tray-icon">🧩</span>
           <span class="tray-label">Riddle & GK</span>
@@ -364,6 +364,10 @@
         <button class="tray-item" id="trayBtnTictactoe">
           <span class="tray-icon">❌⭕</span>
           <span class="tray-label">टिक-टैक-टो</span>
+        </button>
+        <button class="tray-item" id="trayBtnLudo"
+        <span class="tray-icon">🎲</span>
+        <span class="tray-label">Ludo</span>
         </button>
       </div>
     </div>
@@ -388,9 +392,9 @@
     <button id="nextQuizBtn" class="quiz-next-big-btn">🔄 अगला सवाल (Next Question)</button>
   </div>
 
-  <!-- पॉइंट #3: Riddle & GK फ्लोटिंग गेम बॉक्स -->
-  <div id="kidsRiddleBox" class="quiz-floating-box" hidden>
-    <div class="quiz-header">
+  <!-- पॉइंट #3: Riddle & GK फ्लोटिंग गेम बॉक्स (Updated Layout) -->
+  <div id="kidsRiddleBox" class="quiz-floating-box riddle-box-extended" hidden>
+    <div class="quiz-header" style="margin-bottom: 6px;">
       <div class="quiz-header-title">🧩 Riddle & GK Challenge</div>
       <div class="quiz-header-actions">
         <select id="riddleModeSelect" class="quiz-cat-select" title="मोड चुनें">
@@ -400,22 +404,37 @@
         <button id="closeRiddleBtn" class="quiz-close-btn" title="बंद करें">✕</button>
       </div>
     </div>
-    <div class="quiz-timer-wrap">
+    
+    <!-- Scoreboard at the top with transparent background -->
+    <div class="riddle-score-header">
+      <span id="riddleScoreDisplay" class="riddle-score-left">✅ 0 | ❌ 0</span>
+      <span id="riddleTotalDisplay" class="riddle-score-right">प्रश्न: 0/10</span>
+    </div>
+
+    <div class="quiz-timer-wrap" style="margin-bottom: 15px;">
       <div id="riddleTimerBar" class="quiz-timer-bar"></div>
     </div>
-    <div class="riddle-status-row">
-      <div id="riddleScoreDisplay" class="riddle-score-txt">✅ 0 | ❌ 0 (0/10)</div>
-      <button id="riddleBuzzerBtn" class="riddle-buzzer-btn">🔔 बजर (Buzzer)</button>
-    </div>
-    <div id="riddleQuestionText" class="quiz-question">पहेली लोड हो रही है...</div>
+    
+    <!-- Question text -->
+    <div id="riddleQuestionText" class="quiz-question riddle-q-text">पहेली लोड हो रही है...</div>
+    
     <div id="riddleOptionsArea" class="quiz-options-grid"></div>
+    
+    <!-- Hard mode evaluation area -->
     <div id="riddleHardEvalArea" class="riddle-hard-eval" hidden>
-      <div id="riddleHiddenAnswer" class="riddle-hidden-ans"></div>
+      <button id="riddleShowAnswerBtn" class="riddle-show-ans-btn">👁️ उत्तर देखें (Show Answer)</button>
+      <div id="riddleHiddenAnswer" class="riddle-hidden-ans" hidden></div>
       <div class="riddle-eval-btns">
         <button id="evalRightBtn" class="eval-btn eval-btn-right">✅ सही (Right)</button>
         <button id="evalWrongBtn" class="eval-btn eval-btn-wrong">❌ गलत (Wrong)</button>
       </div>
     </div>
+    
+    <!-- Buzzer at the bottom (hidden in Easy mode via JS) -->
+    <div id="riddleBuzzerWrap" class="riddle-buzzer-wrap">
+      <button id="riddleBuzzerBtn" class="riddle-buzzer-btn">🔔 बजर (Buzzer)</button>
+    </div>
+
     <button id="nextRiddleBtn" class="quiz-next-big-btn">🔄 अगला मुकाबला / सवाल (Next)</button>
   </div>
 
@@ -519,17 +538,62 @@
       } else {
         const defaultScript = document.createElement('script');
         defaultScript.type = 'module';
-        defaultScript.src = 'app.js?v=1.23.6';
+        defaultScript.src = 'app.js?v=1.24.2';
         document.body.appendChild(defaultScript);
       }
     } catch(e) {
       const defaultScript = document.createElement('script');
       defaultScript.type = 'module';
-      defaultScript.src = 'app.js?v=1.23.6';
+      defaultScript.src = 'app.js?v=1.24.2';
       document.body.appendChild(defaultScript);
     }
   })();
 </script>
+  
+<!-- 🟣🟣🟣 [LUDO MODULE START (शुरू): index.html] 🟣🟣🟣 -->
+<div id="kidsLudoBox" class="quiz-floating-box ludo-box-extended" hidden>
+  <!-- सिर्फ क्लोज बटन -->
+  <div style="display:flex; justify-content:flex-end; width:100%;">
+    <button id="closeLudoBtn" class="ludo-close-btn" title="बंद करें">✕</button>
+  </div>
+
+  <!-- लूडो का बोर्ड -->
+  <div id="ludoBoardWrap">
+    <div id="ludoBoard"></div>
+  </div>
+
+  <!-- नीचे टर्न और डाइस कंट्रोल्स -->
+  <div class="ludo-bottom-controls">
+    <div id="ludoTurnLabel" class="ludo-turn-display">🔴 Waiting...</div>
+    <div class="ludo-actions">
+      <div class="diceBox" id="ludoDiceBox">🎲</div>
+      <button id="ludoRollBtn" disabled>ROLL</button>
+    </div>
+  </div>
+</div>
+
+<!-- मैटेलिक गोटियों के लिए SVG -->
+<svg id="pinDefs" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;">
+  <defs>
+    <radialGradient id="metal-grad" cx="35%" cy="25%" r="80%">
+      <stop offset="0%" stop-color="#f6f6f6"/><stop offset="35%" stop-color="#d8d8d8"/>
+      <stop offset="70%" stop-color="#9a9a9a"/><stop offset="100%" stop-color="#5a5a5a"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-r" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#ff9b8f"/><stop offset="45%" stop-color="#e74c3c"/><stop offset="100%" stop-color="#8a1c12"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-g" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#a5f0c2"/><stop offset="45%" stop-color="#2ecc71"/><stop offset="100%" stop-color="#0d5e2c"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-y" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#fff29a"/><stop offset="45%" stop-color="#f1c40f"/><stop offset="100%" stop-color="#7a5f08"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-b" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#a8d7f5"/><stop offset="45%" stop-color="#3498db"/><stop offset="100%" stop-color="#0e3f66"/>
+    </radialGradient>
+  </defs>
+</svg>
+<!-- 🟣🟣🟣 [LUDO MODULE END (समाप्त): index.html] 🟣🟣🟣 -->
 
 </body>
 </html>

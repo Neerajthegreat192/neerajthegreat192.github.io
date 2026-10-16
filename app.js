@@ -3828,15 +3828,22 @@ function initRiddleGkListener() {
 
     const rScore = state.rightScore || 0;
     const wScore = state.wrongScore || 0;
-    $('riddleScoreDisplay').textContent = `✅ ${rScore} | ❌ ${wScore} (${rScore + wScore}/10)`;
+    $('riddleScoreDisplay').textContent = `✅ ${rScore} | ❌ ${wScore}`;
+    const totalDisp = $('riddleTotalDisplay');
+    if (totalDisp) totalDisp.textContent = `प्रश्न: ${rScore + wScore}/10`;
 
     const optsArea = $('riddleOptionsArea');
     const hardEvalArea = $('riddleHardEvalArea');
+    const buzzerWrap = $('riddleBuzzerWrap'); 
     optsArea.innerHTML = '';
     hardEvalArea.hidden = true;
 
+    // Check if the current user is the parent/admin
+    const amIParent = isNeerajBadola(myUserName) || isCaller;
+
     if (rScore + wScore >= 10) {
       stopRiddleTimerBar();
+      if (buzzerWrap) buzzerWrap.hidden = true;
       optsArea.innerHTML = `<div style="text-align:center;font-size:16px;font-weight:800;color:#10b981;padding:15px;grid-column:1/-1;">🎉 मुकाबला समाप्त! सही: ${rScore}, गलत: ${wScore}</div>`;
       return;
     }
@@ -3847,54 +3854,68 @@ function initRiddleGkListener() {
       stopRiddleTimerBar();
     }
 
-    if (state.mode === 'easy_mode' && state.options) {
-      state.options.forEach(opt => {
-        const btn = document.createElement('button');
-        btn.className = 'quiz-opt-btn';
-        btn.textContent = opt;
+    if (state.mode === 'easy_mode') {
+      if (buzzerWrap) buzzerWrap.hidden = true; 
+      if (state.options) {
+        state.options.forEach(opt => {
+          const btn = document.createElement('button');
+          btn.className = 'quiz-opt-btn';
+          btn.textContent = opt;
 
-        if (state.answered) {
-          if (opt === state.answer) {
-            btn.style.background = '#10b981'; btn.style.color = '#fff'; btn.style.borderColor = '#10b981';
-          } else if (opt === state.selectedAnswer && !state.isCorrect) {
-            btn.style.background = '#ef4444'; btn.style.color = '#fff'; btn.style.borderColor = '#ef4444';
+          if (state.answered) {
+            if (opt === state.answer) {
+              btn.style.background = '#10b981'; btn.style.color = '#fff'; btn.style.borderColor = '#10b981';
+            } else if (opt === state.selectedAnswer && !state.isCorrect) {
+              btn.style.background = '#ef4444'; btn.style.color = '#fff'; btn.style.borderColor = '#ef4444';
+            }
+            btn.disabled = true;
           }
-          btn.disabled = true;
-        }
 
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          if (state.answered) return;
-          stopRiddleTimerBar();
-          const isRight = (opt === state.answer);
-          if (isRight) playCheerSound(); else playOopsSound();
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            if (state.answered) return;
+            stopRiddleTimerBar();
+            const isRight = (opt === state.answer);
+            if (isRight) playCheerSound(); else playOopsSound();
 
-          update(riddleRef, {
-            answered: true,
-            selectedAnswer: opt,
-            isCorrect: isRight,
-            rightScore: isRight ? rScore + 1 : rScore,
-            wrongScore: !isRight ? wScore + 1 : wScore,
-            updatedAt: Date.now()
-          });
-        };
-        optsArea.appendChild(btn);
-      });
+            update(riddleRef, {
+              answered: true,
+              selectedAnswer: opt,
+              isCorrect: isRight,
+              rightScore: isRight ? rScore + 1 : rScore,
+              wrongScore: !isRight ? wScore + 1 : wScore,
+              updatedAt: Date.now()
+            });
+          };
+          optsArea.appendChild(btn);
+        });
+      }
     }
     else if (state.mode === 'hard_mode') {
-      hardEvalArea.hidden = false;
-      const ansLabel = $('riddleHiddenAnswer');
+      if (buzzerWrap) buzzerWrap.hidden = false;
 
-      if (state.answered) {
-        ansLabel.textContent = `उत्तर: ${state.answer}`;
-        ansLabel.style.color = state.isCorrect ? '#10b981' : '#ef4444';
-        $('evalRightBtn').disabled = true;
-        $('evalWrongBtn').disabled = true;
+      if (amIParent) {
+        hardEvalArea.hidden = false;
+        const ansLabel = $('riddleHiddenAnswer');
+        const showAnsBtn = $('riddleShowAnswerBtn');
+
+        if (state.answered || state.timedOut) {
+          if(showAnsBtn) showAnsBtn.hidden = true;
+          ansLabel.hidden = false;
+          ansLabel.textContent = `उत्तर: ${state.answer}`;
+          ansLabel.style.color = state.isCorrect ? '#10b981' : '#ef4444';
+          $('evalRightBtn').disabled = true;
+          $('evalWrongBtn').disabled = true;
+        } else {
+          ansLabel.hidden = true;
+          if(showAnsBtn) showAnsBtn.hidden = false;
+          ansLabel.textContent = `[गुप्त उत्तर]: ${state.answer}`;
+          ansLabel.style.color = '#f59e0b';
+          $('evalRightBtn').disabled = false;
+          $('evalWrongBtn').disabled = false;
+        }
       } else {
-        ansLabel.textContent = `[गुप्त उत्तर]: ${state.answer}`;
-        ansLabel.style.color = '#f59e0b';
-        $('evalRightBtn').disabled = false;
-        $('evalWrongBtn').disabled = false;
+        hardEvalArea.hidden = true; 
       }
     }
 
@@ -3958,6 +3979,17 @@ if ($('riddleBuzzerBtn')) {
     if (!activeCallId) return;
     playMessageTickSound();
     update(ref(db, `call_sessions/${activeCallId}/riddle_state`), { buzzerPressed: true }).catch(()=>{});
+  };
+}
+
+if ($('riddleShowAnswerBtn')) {
+  $('riddleShowAnswerBtn').onclick = (e) => {
+    e.stopPropagation();
+    const ansLabel = $('riddleHiddenAnswer');
+    if (ansLabel) {
+      ansLabel.hidden = false;
+      $('riddleShowAnswerBtn').hidden = true;
+    }
   };
 }
 
@@ -5079,6 +5111,476 @@ if (document.readyState === 'loading') {
 } else {
   initApp();
 }
+
+/* 🟣🟣🟣 [LUDO MODULE START (शुरू): app.js] 🟣🟣🟣 */
+
+// --- Ludo Constants ---
+const LUDO_LOOP = [ [6,1],[6,2],[6,3],[6,4],[6,5],[5,6],[4,6],[3,6],[2,6],[1,6],[0,6],[0,7], [0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[6,9],[6,10],[6,11],[6,12],[6,13], [6,14],[7,14],[8,14],[8,13],[8,12],[8,11],[8,10],[8,9],[9,8],[10,8], [11,8],[12,8],[13,8],[14,8],[14,7],[14,6],[13,6],[12,6],[11,6],[10,6], [9,6],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0],[7,0],[6,0] ];
+const LUDO_SAFE_IDX = [0, 8, 13, 21, 26, 34, 39, 47];
+const LUDO_START_IDX = { r: 0, g: 13, y: 26, b: 39 };
+const LUDO_HOME_COL = { r: [[7,1],[7,2],[7,3],[7,4],[7,5]], g: [[1,7],[2,7],[3,7],[4,7],[5,7]], y: [[7,13],[7,12],[7,11],[7,10],[7,9]], b: [[13,7],[12,7],[11,7],[10,7],[9,7]] };
+const LUDO_HOME_POS = { r:[7,6], g:[6,7], y:[7,8], b:[8,7] };
+const LUDO_YARD_POS = { r: [[1,1],[1,4],[4,1],[4,4]], g: [[1,10],[1,13],[4,10],[4,13]], y: [[10,10],[10,13],[13,10],[13,13]], b: [[10,1],[10,4],[13,1],[13,4]] };
+
+let ludoState = null;
+let ludoSessionUnsub = null;
+let ludoMyColor = 'r';
+let ludoOpponentColor = 'y';
+let ludoAnimating = false;
+let ludoVisualTokens = null;
+
+let ludoAutoMoveTimer = null;
+let ludoAutoMoveKey = '';
+
+// --- Helpers ---
+function ludoNextColor(current) { return current === 'r' ? 'y' : 'r'; }
+function ludoAbsLoopIdx(color, rel) { return (LUDO_START_IDX[color] + rel) % 52; }
+function ludoPositionOf(color, rel) {
+  if (rel < 0) return null;
+  if (rel <= 50) return LUDO_LOOP[(LUDO_START_IDX[color] + rel) % 52];
+  if (rel <= 55) return LUDO_HOME_COL[color][rel - 51];
+  return LUDO_HOME_POS[color];
+}
+function ludoNormalizeTokens(arr) {
+  const out = [-1,-1,-1,-1];
+  if (Array.isArray(arr)) { for (let i=0;i<4;i++) out[i] = (typeof arr[i] === 'number') ? arr[i] : -1; }
+  return out;
+}
+function ludoGetTokensFor(color) {
+  if (ludoVisualTokens && ludoVisualTokens[color]) return ludoVisualTokens[color];
+  return ludoState ? ludoNormalizeTokens(ludoState.tokens[color]) : [-1,-1,-1,-1];
+}
+function ludoCanMove(color, tokenIdx, roll) {
+  if (!ludoState) return false;
+  const rel = ludoNormalizeTokens(ludoState.tokens[color])[tokenIdx];
+  if (rel === 56) return false;
+  if (rel === -1) return roll === 6;
+  return (rel + roll) <= 56;
+}
+
+// --- Render Board ---
+function renderLudoBoard() {
+  const boardEl = $('ludoBoard');
+  if (!boardEl) return;
+  boardEl.innerHTML = '';
+  for (let r = 0; r < 15; r++) {
+    for (let c = 0; c < 15; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'lc ' + getLudoCellClass(r, c);
+      boardEl.appendChild(cell);
+    }
+  }
+  const center = document.createElement('div');
+  center.className = 'center-home';
+  center.innerHTML = '<div class="ctri top"></div><div class="ctri right"></div><div class="ctri bottom"></div><div class="ctri left"></div>';
+  boardEl.appendChild(center);
+}
+
+function getLudoCellClass(r, c) {
+  if (r < 6 && c < 6) return ludoYardCell('r', r, c);
+  if (r < 6 && c > 8) return ludoYardCell('g', r, c);
+  if (r > 8 && c > 8) return ludoYardCell('y', r, c);
+  if (r > 8 && c < 6) return ludoYardCell('b', r, c);
+  if (r >= 6 && r <= 8 && c >= 6 && c <= 8) return 'empty';
+  for (const color of ['r','g','y','b']) {
+    for (const [hr,hc] of LUDO_HOME_COL[color]) if (hr === r && hc === c) return 'home-' + color;
+  }
+  if (r === 6 && c === 1) return 'start-r';
+  if (r === 1 && c === 8) return 'start-g';
+  if (r === 8 && c === 13) return 'start-y';
+  if (r === 13 && c === 6) return 'start-b';
+  for (let i=0; i<LUDO_LOOP.length; i++) {
+    if (LUDO_LOOP[i][0] === r && LUDO_LOOP[i][1] === c) return LUDO_SAFE_IDX.includes(i) ? 'safe' : 'path';
+  }
+  return 'empty';
+}
+function ludoYardCell(color, r, c) {
+  const yardOrigin = { r:[0,0], g:[0,9], y:[9,9], b:[9,0] }[color];
+  const lr = r - yardOrigin[0], lc = c - yardOrigin[1];
+  const isInner = lr >= 1 && lr <= 4 && lc >= 1 && lc <= 4;
+  const isSlot = LUDO_YARD_POS[color].some(([sr,sc]) => sr === r && sc === c);
+  let cls = 'yard-' + color;
+  if (isInner) cls += ' yd-inner';
+  if (isSlot) cls += ' slot-' + color;
+  return cls;
+}
+
+// --- Render Tokens (सटीक अलाइनमेंट के साथ) ---
+function renderLudoTokens() {
+  const boardEl = $('ludoBoard');
+  if (!boardEl) return;
+  boardEl.querySelectorAll('.tk').forEach(el => el.remove());
+
+  // Board और Cell के असल (Actual) DOM Size से गणित लगाना
+  const firstCell = boardEl.querySelector('.lc');
+  if (!firstCell) return;
+  
+  const boardRect = boardEl.getBoundingClientRect();
+  const cellRect = firstCell.getBoundingClientRect();
+  const cellPx = cellRect.width;
+  const offsetX = cellRect.left - boardRect.left;
+  const offsetY = cellRect.top - boardRect.top;
+
+  if (cellPx <= 0) return;
+
+  const byCell = {};
+  for (const color of ['r', 'y']) {
+    const arr = ludoGetTokensFor(color);
+    for (let i=0; i<4; i++) {
+      const rel = arr[i];
+      const pos = (rel < 0) ? LUDO_YARD_POS[color][i] : ludoPositionOf(color, rel);
+      if (!pos) continue;
+      const key = pos[0] + '_' + pos[1];
+      if (!byCell[key]) byCell[key] = { r: pos[0], c: pos[1], list: [] };
+      byCell[key].list.push({ color, idx: i, rel });
+    }
+  }
+
+  for (const key in byCell) {
+    const g = byCell[key];
+    const n = g.list.length;
+    const inYard = (n === 1 && g.list[0].rel < 0);
+    let size = cellPx * (inYard ? 1.4 : (n === 1 ? 0.95 : (n === 2 ? 0.62 : 0.46)));
+    const slots = n === 1 ? [[0.5,0.5]] : n === 2 ? [[0.3,0.5],[0.7,0.5]] : [[0.28,0.28],[0.72,0.28],[0.28,0.72],[0.72,0.72]];
+    
+    for (let k=0; k<n; k++) {
+      const tk = g.list[k];
+      const slot = slots[k] || [0.5, 0.5];
+      const el = document.createElement('div');
+      el.className = 'tk ' + tk.color;
+      el.innerHTML = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 50 96 C 24 78 8 60 8 44 A 42 42 0 0 1 92 44 C 92 60 76 78 50 96 Z" fill="url(#metal-grad)" stroke="rgba(40,40,40,.85)" stroke-width="1.4" stroke-linejoin="round"/><path d="M 50 88 C 30 72 18 56 18 44 A 32 32 0 0 1 82 44 C 82 56 70 72 50 88 Z" fill="url(#pinGrad-${tk.color})" stroke="rgba(0,0,0,.28)" stroke-width="0.9"/><ellipse cx="36" cy="30" rx="9" ry="5.5" fill="rgba(255,255,255,.55)"/><ellipse cx="33" cy="27" rx="3.5" ry="2" fill="rgba(255,255,255,.92)"/></svg>`;
+      
+      // सटीक पोज़िशनिंग
+      const cx = offsetX + (g.c + slot[0]) * cellPx;
+      const cy = offsetY + (g.r + slot[1]) * cellPx;
+      
+      el.style.width = size + 'px'; el.style.height = size + 'px';
+      el.style.left = (cx - size/2) + 'px'; 
+      el.style.top  = (cy - size/2 - (size * 0.06)) + 'px';
+      
+      if (!ludoAnimating && ludoState && ludoState.turn === ludoMyColor && tk.color === ludoMyColor && ludoState.phase === 'move' && ludoState.dice) {
+        if (ludoCanMove(tk.color, tk.idx, ludoState.dice)) {
+          el.classList.add('movable');
+          el.onclick = (ev) => { ev.stopPropagation(); ludoTryMove(tk.idx); };
+        }
+      }
+      boardEl.appendChild(el);
+    }
+  }
+}
+
+// --- Auto-Move Logic (अगर सिर्फ एक ही गोटी चल सकती है) ---
+function maybeLudoAutoMove() {
+  if (!ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'move' || ludoAnimating || ludoState.gameOver) return;
+  const roll = ludoState.dice;
+  if (!roll) return;
+  
+  const opts = [];
+  for (let i=0; i<4; i++) {
+    if (ludoCanMove(ludoMyColor, i, roll)) opts.push(i);
+  }
+  
+  // अगर सिर्फ 1 ही विकल्प है
+  if (opts.length === 1) {
+    const key = ludoState.updatedAt + '_' + roll + '_' + opts[0];
+    if (ludoAutoMoveKey === key) return;
+    ludoAutoMoveKey = key;
+    
+    if (ludoAutoMoveTimer) clearTimeout(ludoAutoMoveTimer);
+    ludoAutoMoveTimer = setTimeout(() => {
+      ludoAutoMoveTimer = null;
+      if (!ludoAnimating && ludoState.turn === ludoMyColor && ludoState.phase === 'move') {
+        ludoTryMove(opts[0]);
+      }
+    }, 350); // 350ms का डिले ताकि एनीमेशन स्मूथ दिखे
+  }
+}
+
+// --- Sync & Initialization ---
+async function startOrToggleLudo() {
+  if (!activeCallId || !isCallConnected) { 
+    if(typeof toast === 'function') toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही लूडो खेलें' : 'Connect call to play'); 
+    return; 
+  }
+
+  // 1. दोनों का वीडियो ऑफ करें 2. लाउडस्पीकर चालू रखें
+  if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = false);
+  if (typeof camEnabled !== 'undefined') camEnabled = false;
+  if (typeof updateCallModeVisuals === 'function') updateCallModeVisuals(true);
+  
+  // स्पीकर फोर्सफुली ON रखना
+  if (typeof setHardwareSpeaker === 'function') {
+    setTimeout(() => setHardwareSpeaker(true), 300);
+    setTimeout(() => setHardwareSpeaker(true), 1000); 
+  }
+  update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
+
+  ludoMyColor = isCaller ? 'r' : 'y';
+  ludoOpponentColor = isCaller ? 'y' : 'r';
+
+  const ludoRef = ref(db, `call_sessions/${activeCallId}/ludo_state`);
+  const snap = await get(ludoRef);
+  const cur = snap.val();
+
+  if (!cur || !cur.active) {
+    await set(ludoRef, {
+      active: true, turn: 'r', dice: null, phase: 'roll', consecutiveSixes: 0,
+      tokens: { r: [-1,-1,-1,-1], y: [-1,-1,-1,-1] },
+      gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
+    });
+  } else {
+    const box = $('kidsLudoBox');
+    if (box) {
+      box.hidden = !box.hidden;
+      if (!box.hidden) renderLudoBoard();
+    }
+  }
+}
+
+function listenLudoSession() {
+  if (!activeCallId) return;
+  if (ludoSessionUnsub) ludoSessionUnsub();
+  
+  const ludoRef = ref(db, `call_sessions/${activeCallId}/ludo_state`);
+  ludoSessionUnsub = onValue(ludoRef, async snap => {
+    const state = snap.val();
+    const box = $('kidsLudoBox');
+    if (!box) return;
+    
+    if (!state || !state.active) { box.hidden = true; return; }
+
+    if (box.hidden) {
+      box.hidden = false;
+      if ($('funModeTray'))$('funModeTray').hidden = true;
+      if (typeof controlsBar !== 'undefined' && controlsBar) controlsBar.classList.add('fade-out');
+      
+      // रिसीवर साइड पर भी गेम खुलते ही वीडियो ऑफ और लाउडस्पीकर ऑन
+      if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = false);
+      if (typeof camEnabled !== 'undefined') camEnabled = false;
+      if (typeof updateCallModeVisuals === 'function') updateCallModeVisuals(true);
+      if (typeof setHardwareSpeaker === 'function') {
+        setTimeout(() => setHardwareSpeaker(true), 300);
+      }
+      update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
+
+      ludoMyColor = isCaller ? 'r' : 'y';
+      ludoOpponentColor = isCaller ? 'y' : 'r';
+      renderLudoBoard();
+    }
+
+    if (ludoState && state.lastMove && state.lastMove.color !== ludoMyColor && state.lastMove.ts !== (ludoState.lastMove?.ts)) {
+      await animateLudoRemoteMove(state.lastMove, ludoState.tokens);
+    }
+
+    ludoState = state;
+    updateLudoUI();
+  });
+}
+
+function updateLudoUI() {
+  if (!ludoState) return;
+  renderLudoTokens();
+  
+  const turnLabel = $('ludoTurnLabel');
+  const rollBtn = $('ludoRollBtn');
+  const diceBox = $('ludoDiceBox');
+  if (!turnLabel || !rollBtn || !diceBox) return;
+
+  if (ludoState.gameOver) {
+    rollBtn.disabled = true;
+    turnLabel.textContent = "🏆 Game Over!";
+    turnLabel.style.color = '#f5c542';
+    return;
+  }
+
+  const isMyTurn = ludoState.turn === ludoMyColor;
+  const turnColorEmoji = ludoState.turn === 'r' ? '🔴' : '🟡';
+  const turnName = isMyTurn ? (typeof myUserName !== 'undefined' ? myUserName : 'You') : (typeof currentCallTargetName !== 'undefined' ? currentCallTargetName : 'Opponent');
+  
+  turnLabel.textContent = `${turnColorEmoji} ${turnName} ka turn hai`;
+  turnLabel.style.color = isMyTurn ? '#10b981' : '#a89e8a';
+
+  if (isMyTurn && ludoState.phase === 'roll') {
+    rollBtn.disabled = false;
+  } else {
+    rollBtn.disabled = true;
+  }
+
+  if (ludoState.dice) {
+    diceBox.textContent = ludoState.dice;
+    diceBox.classList.add('hot');
+  } else {
+    diceBox.textContent = '🎲';
+    diceBox.classList.remove('hot');
+  }
+
+  maybeLudoAutoMove(); // ऑटो-मूव चेक
+}
+
+// --- Gameplay Actions ---
+async function ludoRollDice() {
+  if (!ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'roll' || ludoState.gameOver || ludoAnimating) return;
+  if (typeof playMessageTickSound === 'function') playMessageTickSound();
+
+  const rollBtn = $('ludoRollBtn');
+  const diceBox = $('ludoDiceBox');
+  if (rollBtn) rollBtn.disabled = true;
+  if (diceBox) {
+    diceBox.classList.add('rolling');
+    setTimeout(() => diceBox.classList.remove('rolling'), 550);
+  }
+
+  const roll = 1 + Math.floor(Math.random() * 6);
+  const newSixes = roll === 6 ? (ludoState.consecutiveSixes + 1) : 0;
+  
+  if (roll === 6 && newSixes >= 3) {
+    await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
+      dice: roll, consecutiveSixes: 0, phase: 'roll',
+      turn: ludoNextColor(ludoMyColor), updatedAt: Date.now(),
+      lastMove: { color: ludoMyColor, skip: true, ts: Date.now() }
+    });
+    return;
+  }
+
+  let movable = false;
+  for (let i=0; i<4; i++) if (ludoCanMove(ludoMyColor, i, roll)) movable = true;
+
+  await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
+    dice: roll, consecutiveSixes: newSixes,
+    phase: movable ? 'move' : 'roll',
+    lastMove: { color: ludoMyColor, skip: !movable, ts: Date.now() },
+    updatedAt: Date.now()
+  });
+
+  if (!movable) {
+    setTimeout(() => {
+      if (ludoState && ludoState.turn === ludoMyColor) {
+        update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
+          turn: ludoNextColor(ludoMyColor), dice: null, consecutiveSixes: 0, phase: 'roll', updatedAt: Date.now()
+        }).catch(()=>{});
+      }
+    }, 1200);
+  } else {
+    maybeLudoAutoMove();
+  }
+}
+
+async function ludoTryMove(tokenIdx) {
+  if (ludoAnimating || !ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'move') return;
+  const roll = ludoState.dice;
+  if (!roll || !ludoCanMove(ludoMyColor, tokenIdx, roll)) return;
+  
+  ludoAnimating = true;
+  const startArr = ludoNormalizeTokens(ludoState.tokens[ludoMyColor]);
+  const currentRel = startArr[tokenIdx];
+  const finalRel = currentRel === -1 ? 0 : currentRel + roll;
+
+  ludoVisualTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
+  if (currentRel === -1) {
+    ludoVisualTokens[ludoMyColor][tokenIdx] = 0;
+    renderLudoTokens();
+    await new Promise(r => setTimeout(r, 300));
+  } else {
+    for (let r = currentRel + 1; r <= finalRel; r++) {
+      ludoVisualTokens[ludoMyColor][tokenIdx] = r;
+      renderLudoTokens();
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+
+  const newTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
+  newTokens[ludoMyColor][tokenIdx] = finalRel;
+  let captured = 0;
+
+  if (finalRel >= 0 && finalRel <= 50) {
+    const myGlobalIdx = ludoAbsLoopIdx(ludoMyColor, finalRel);
+    if (!LUDO_SAFE_IDX.includes(myGlobalIdx)) {
+      const opp = ludoOpponentColor;
+      for (let j=0; j<4; j++) {
+        const orel = newTokens[opp][j];
+        if (orel >= 0 && orel <= 50 && ludoAbsLoopIdx(opp, orel) === myGlobalIdx) {
+          newTokens[opp][j] = -1; 
+          captured++;
+          if (typeof playOopsSound === 'function') playOopsSound();
+        }
+      }
+    }
+  }
+
+  const reachedHome = (finalRel === 56);
+  if (reachedHome && typeof playCheerSound === 'function') playCheerSound();
+
+  const allHome = newTokens[ludoMyColor].every(r => r === 56);
+  const extraTurn = (roll === 6) || (captured > 0) || reachedHome;
+  const newTurn = (allHome || extraTurn) ? ludoMyColor : ludoOpponentColor;
+
+  ludoVisualTokens = null;
+  ludoAnimating = false;
+
+  await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
+    tokens: newTokens, turn: newTurn, dice: null, phase: 'roll',
+    consecutiveSixes: extraTurn ? ludoState.consecutiveSixes : 0,
+    gameOver: allHome, winner: allHome ? ludoMyColor : null,
+    lastMove: { color: ludoMyColor, token: tokenIdx, from: currentRel, to: finalRel, ts: Date.now() },
+    updatedAt: Date.now()
+  });
+}
+
+async function animateLudoRemoteMove(move, oldTokens) {
+  if (!move || move.skip || move.from === undefined || move.to === undefined) return;
+  ludoAnimating = true;
+  ludoVisualTokens = { r: ludoNormalizeTokens(oldTokens.r), y: ludoNormalizeTokens(oldTokens.y) };
+  
+  if (move.from === -1) {
+    ludoVisualTokens[move.color][move.token] = 0;
+    renderLudoTokens();
+    await new Promise(r => setTimeout(r, 300));
+  } else {
+    for (let r = move.from + 1; r <= move.to; r++) {
+      ludoVisualTokens[move.color][move.token] = r;
+      renderLudoTokens();
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+  ludoVisualTokens = null;
+  ludoAnimating = false;
+}
+
+// --- Events Connection ---
+if ($('ludoRollBtn'))$('ludoRollBtn').onclick = (e) => { e.stopPropagation(); ludoRollDice(); };
+if ($('closeLudoBtn'))$('closeLudoBtn').onclick = (e) => {
+  e.stopPropagation();
+  if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/ludo_state`), { active: false }).catch(()=>{});
+  if ($('kidsLudoBox'))$('kidsLudoBox').hidden = true;
+};
+window.addEventListener('resize', () => {
+  if ($('kidsLudoBox') && !$('kidsLudoBox').hidden) renderLudoTokens();
+});
+
+if ($('trayBtnLudo')) {$('trayBtnLudo').onclick = (e) => {
+    e.stopPropagation();
+    if ($('funModeTray'))$('funModeTray').hidden = true;
+    startOrToggleLudo();
+    if (typeof scheduleAutoHide === 'function') scheduleAutoHide();
+  };
+}
+
+const originalLudoCleanup = typeof cleanupKidsModules === 'function' ? cleanupKidsModules : null;
+cleanupKidsModules = function() {
+  if (originalLudoCleanup) originalLudoCleanup();
+  if (ludoSessionUnsub) { ludoSessionUnsub(); ludoSessionUnsub = null; }
+  const lBox = $('kidsLudoBox');
+  if (lBox) lBox.hidden = true;
+};
+
+const originalJoinCallSession = typeof joinCallSession === 'function' ? joinCallSession : null;
+joinCallSession = async function() {
+  if (originalJoinCallSession) await originalJoinCallSession();
+  listenLudoSession(); 
+};
+
+/* 🟣🟣🟣 [LUDO MODULE END (समाप्त): app.js] 🟣🟣🟣 */
+
 
 /* =========================================================================
    🔴🔴🔴 [PART 3 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴

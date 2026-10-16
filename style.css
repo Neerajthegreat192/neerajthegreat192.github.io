@@ -1,6 +1,6 @@
 /* ===================================================
-   🟢🟢🟢 [START (शुरू): style.css — v1.24.1] 🟢🟢🟢
-   🎨 RESTORED WORKING CHAT LAYOUT + SINGLE-LINE TOAST & INPUT FIX
+   🟢🟢🟢 [START (शुरू): style.css — v1.24.2] 🟢🟢🟢
+   🎨 RESTORED WORKING CHAT LAYOUT + NEW RIDDLE UI
    =================================================== */
 
 :root {
@@ -40,7 +40,6 @@ input, textarea {
   display: none !important;
 }
 
-/* ✅ Working style_2.css html, body */
 html, body {
   width: 100%;
   height: 100%;
@@ -128,7 +127,7 @@ html, body {
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 
 /* ===================================================
-   ✅ SCREENS (Exact working style_2.css structure)
+   SCREENS
    =================================================== */
 .screen {
   position: fixed;
@@ -206,7 +205,6 @@ html, body {
   fill: currentColor;
 }
 
-/* पॉइंट #2: WhatsApp शेयरिंग बटन स्टाइल */
 .btn-whatsapp-share {
   background: rgba(37, 211, 102, 0.12) !important;
   border: 1px solid rgba(37, 211, 102, 0.35) !important;
@@ -382,7 +380,6 @@ html, body {
 .empty-emoji { font-size: 42px; margin-bottom: 10px; opacity: 0.6; }
 .empty-text { color: var(--text-muted); font-size: 13px; }
 
-/* Call logs */
 .call-log-badge {
   font-size: 11px; font-weight: 700;
   padding: 2px 6px;
@@ -403,7 +400,7 @@ html, body {
 .call-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* ===================================================
-   ✅ CHAT SCREEN (Restored from working style_2.css)
+   CHAT SCREEN
    =================================================== */
 #chatScreen {
   background: var(--bg, #090d10);
@@ -770,7 +767,7 @@ html, body {
 .reaction-pick-btn.mine { background: rgba(245,158,11,0.3); }
 
 /* ===================================================
-   ATTACH MENU
+   ATTACH MENU & QUEUE & MEDIA VIEWER
    =================================================== */
 #attachMenu {
   position: absolute;
@@ -808,9 +805,6 @@ html, body {
 .attach-menu-icon.contact { background: #d97706; }
 .attach-menu-icon.phone { background: #0ea5e9; }
 
-/* ===================================================
-   TRANSFER QUEUE
-   =================================================== */
 #transferQueue {
   position: fixed;
   top: 75px; right: 12px;
@@ -840,9 +834,6 @@ html, body {
   width: 0%; transition: width 0.2s;
 }
 
-/* ===================================================
-   MEDIA BUBBLE & VIEWER
-   =================================================== */
 .media-bubble img {
   max-width: 100%; max-height: 220px;
   border-radius: 8px; cursor: pointer;
@@ -1079,7 +1070,7 @@ html, body {
   border: none; border-radius: 0; z-index: 1;
 }
 
-/* पॉइंट #4: Android Native Picture-in-Picture (PiP) एक्टिव मोड */
+/* PiP Mode Native */
 body.in-pip-mode #callTopBar,
 body.in-pip-mode #controlsBar,
 body.in-pip-mode #funModeTray,
@@ -1171,7 +1162,7 @@ body.in-pip-mode #remoteGrid {
 .fade-out { opacity: 0; pointer-events: none; }
 
 /* ===================================================
-   MODALS (✅ FIX: Single-tap input focus unlocked)
+   MODALS 
    =================================================== */
 .modal-overlay {
   position: fixed; inset: 0;
@@ -1338,7 +1329,7 @@ body.in-pip-mode #remoteGrid {
 .pc-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ===================================================
-   ✅ TOAST (Single-line full width fix)
+   TOAST 
    =================================================== */
 #toast {
   position: fixed;
@@ -1367,7 +1358,7 @@ body.in-pip-mode #remoteGrid {
 }
 
 /* ===================================================
-   FUN MODE & RIDDLE / GK
+   FUN MODE & QUIZ
    =================================================== */
 .fun-tray-modal {
   position: absolute; inset: 0;
@@ -1449,65 +1440,109 @@ body.in-pip-mode #remoteGrid {
   cursor: pointer;
 }
 
-/* पॉइंट #3: Riddle & GK विशिष्ट स्टाइल */
-.riddle-status-row {
+/* ===================================================
+   🔥 पॉइंट #3: Riddle & GK विशिष्ट स्टाइल (NEW LAYOUT)
+   =================================================== */
+.riddle-box-extended {
+  min-height: 380px; /* थोड़ा लंबा बॉक्स */
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  padding: 4px 6px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 8px;
+  flex-direction: column;
 }
-.riddle-score-txt {
-  font-size: 12px;
+.riddle-score-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+.riddle-score-left {
+  font-size: 13px;
   font-weight: 800;
   color: var(--success);
+}
+.riddle-score-right {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.riddle-q-text {
+  font-size: 18px !important; /* फॉन्ट थोड़ा बड़ा */
+  line-height: 1.4;
+  margin-top: 10px;
+  margin-bottom: 20px;
+  color: var(--gold);
+}
+.riddle-buzzer-wrap {
+  margin-top: auto; /* बॉक्स में सबसे नीचे धकेलने के लिए */
+  text-align: center;
+  padding-top: 15px;
+  margin-bottom: 12px;
 }
 .riddle-buzzer-btn {
   background: #dc2626;
   color: #fff;
   border: none;
-  padding: 4px 10px;
+  padding: 10px 30px;
   border-radius: 12px;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4);
   animation: pulseBuzzer 1.5s infinite;
+  width: 100%;
+  max-width: 220px;
 }
 @keyframes pulseBuzzer {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }
 }
 .riddle-hard-eval {
-  margin-top: 10px;
+  margin-top: auto;
   text-align: center;
+  margin-bottom: 12px;
 }
-.riddle-hidden-ans {
-  font-size: 12px;
+.riddle-show-ans-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--line);
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 15px;
+  transition: background 0.15s;
+}
+.riddle-show-ans-btn:active { background: rgba(255,255,255,0.2); }
+
+.riddle-hidden-ans {
+  font-size: 15px;
+  font-weight: 800;
   color: var(--gold);
-  margin-bottom: 8px;
+  margin-bottom: 15px;
 }
 .riddle-eval-btns {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
 }
 .eval-btn {
   border: none;
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
   font-weight: 800;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: transform 0.1s;
+  flex: 1;
 }
 .eval-btn:active { transform: scale(0.95); }
 .eval-btn-right { background: var(--success); color: #fff; }
 .eval-btn-wrong { background: var(--danger); color: #fff; }
 
+/* ===================================================
+   TIC-TAC-TOE & WHITEBOARD
+   =================================================== */
 .ttt-status-bar { font-size: 12px; font-weight: 700; text-align: center; margin-bottom: 10px; color: var(--text-muted); }
 .ttt-status-bar.my-turn { color: var(--success); }
 .ttt-status-bar.their-turn { color: var(--gold); }
@@ -1576,7 +1611,7 @@ body.in-pip-mode #remoteGrid {
 }
 
 /* ===================================================
-   🔥 APK BUNDLED-CSS OVERRIDE (Header visibility only)
+   🔥 APK BUNDLED-CSS OVERRIDE
    =================================================== */
 .header,
 .chat-header {
@@ -1626,6 +1661,250 @@ body.in-pip-mode #remoteGrid {
 :root[data-theme="light"] .chat-header #chatTargetName { color: #0f172a !important; }
 :root[data-theme="light"] .chat-header #chatTargetStatus { color: #64748b !important; }
 
+/* ========================================================================= */
+/* 🟣🟣🟣 [LUDO MODULE START (शुरू): style.css] 🟣🟣🟣 */
+/* ========================================================================= */
+
+.ludo-box-extended {
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: #14130f;
+  border-radius: 18px;
+  border: 1px solid rgba(245, 197, 66, 0.25);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+}
+
+.ludo-player-strip {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 6px 10px;
+  flex: 0 0 auto;
+}
+
+.ludo-player-strip.top { justify-content: flex-start; }
+.ludo-player-strip.bottom { justify-content: flex-end; }
+
+/* Player Cards (Names & Indicators) */
+.pcard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, #2a2118, #15100a);
+  border: 1px solid rgba(245, 197, 66, 0.2);
+  transition: .25s;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pcard.turn {
+  border-color: var(--turn-color, #f5c542);
+  box-shadow: inset 0 0 0 1px var(--turn-color, #f5c542), 
+              0 0 14px var(--turn-glow, rgba(245,197,66,.4)), 
+              inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.pdot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.pdot.r { background: radial-gradient(circle at 35% 28%, #ff9084 0%, #e74c3c 55%, #8a1c12 100%); }
+.pdot.g { background: radial-gradient(circle at 35% 28%, #a5f0c2 0%, #2ecc71 55%, #0d5e2c 100%); }
+.pdot.y { background: radial-gradient(circle at 35% 28%, #fff29a 0%, #f1c40f 55%, #7a5f08 100%); }
+.pdot.b { background: radial-gradient(circle at 35% 28%, #a8d7f5 0%, #3498db 55%, #0e3f66 100%); }
+
+.pname {
+  color: #ffe9b8;
+  font-weight: 800;
+  font-size: 13px;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 🎲 Ludo Board (Responsive Fit) */
+#ludoBoardWrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 6px;
+}
+
+#ludoBoard {
+  /* Box ke hisaab se square board adjust karein */
+  --bs: min(90vw, 280px);
+  width: var(--bs);
+  height: var(--bs);
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  grid-template-rows: repeat(15, 1fr);
+  position: relative;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 4px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.55), 
+              0 0 0 3px rgba(255,255,255,.5), 
+              0 0 0 6px rgba(0,0,0,.35);
+}
+
+.lc { position: relative; background: #ffffff; display: flex; align-items: center; justify-content: center; }
+.lc.empty { background: #ffffff; }
+.lc.path, .lc.safe { background: #ffffff; box-shadow: inset 0 0 0 .5px rgba(150,150,150,.55); }
+.lc.safe::before { content: "★"; color: #c9b56c; font-size: calc(var(--bs)/15*.78); line-height: 1; position: absolute; text-shadow: 0 1px 0 rgba(255,255,255,.9), 0 -1px 1px rgba(0,0,0,.18); font-weight: 900; }
+.lc.start-r { background: #e74c3c; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lc.start-g { background: #2ecc71; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lc.start-y { background: #f1c40f; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lc.start-b { background: #3498db; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+
+/* Center Box */
+.center-home {
+  position: absolute;
+  left: calc(4px + (100% - 8px) * 6 / 15);
+  top: calc(4px + (100% - 8px) * 6 / 15);
+  width: calc((100% - 8px) * 3 / 15);
+  height: calc((100% - 8px) * 3 / 15);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
+}
+
+/* 🟣🟣🟣 [LUDO MODULE START (शुरू): style.css] 🟣🟣🟣 */
+.ludo-box-extended {
+  background: #0f172a;
+  padding: 12px 8px; /* पैडिंग कम की गई है ताकि बोर्ड को ज्यादा जगह मिले */
+  width: 96vw; /* स्क्रीन की 96% चौड़ाई लेगा */
+  max-width: 460px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.95);
+  border: 1px solid rgba(245, 197, 66, 0.3);
+}
+
+.ludo-close-btn {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  margin-right: 4px;
+}
+
+/* Board Wrap (Maximum Square Size) */
+#ludoBoardWrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 10px 0;
+  width: 100%;
+}
+
+#ludoBoard {
+  --bs: min(92vw, 440px); /* बोर्ड का साइज 88vw से बढ़ाकर 92vw कर दिया गया है */
+  width: var(--bs);
+  height: var(--bs);
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  grid-template-rows: repeat(15, 1fr);
+  position: relative;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 4px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.6), 0 0 0 4px rgba(0,0,0,0.4);
+}
+
+/* Original Board Colors & Cells */
+.lc { position: relative; background: #ffffff; display: flex; align-items: center; justify-content: center; }
+.lc.empty { background: #ffffff; }
+.lc.path, .lc.safe { background: #ffffff; box-shadow: inset 0 0 0 .5px rgba(150,150,150,.55); }
+.lc.safe::before { content: "★"; color: #c9b56c; font-size: calc(var(--bs)/15*.78); line-height: 1; position: absolute; text-shadow: 0 1px 0 rgba(255,255,255,.9); font-weight: 900; }
+.lc.start-r { background: #e74c3c; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lc.start-g { background: #2ecc71; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lc.start-y { background: #f1c40f; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lc.start-b { background: #3498db; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+.lc.start-r::after, .lc.start-g::after, .lc.start-y::after, .lc.start-b::after { content: ""; position: absolute; width: 62%; height: 62%; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffffff, #f3eeda 70%, #ddd6be); box-shadow: inset 0 1px 2px rgba(0,0,0,.18), 0 1px 2px rgba(255,255,255,.45); }
+.lc.home-r { background: #e74c3c; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.18); }
+.lc.home-g { background: #2ecc71; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.18); }
+.lc.home-y { background: #f1c40f; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.18); }
+.lc.home-b { background: #3498db; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.18); }
+.lc.yard-r { background: #e74c3c; }
+.lc.yard-g { background: #2ecc71; }
+.lc.yard-y { background: #f1c40f; }
+.lc.yard-b { background: #3498db; }
+.lc.yd-inner { background: #fbfaf2; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.08); }
+.lc.slot-r::before, .lc.slot-g::before, .lc.slot-y::before, .lc.slot-b::before { content: ""; width: 52%; height: 52%; border-radius: 50%; box-shadow: inset 0 1px 2px rgba(0,0,0,.18), 0 1px 1px rgba(255,255,255,.6); }
+.lc.slot-r::before { background: #e74c3c; }
+.lc.slot-g::before { background: #2ecc71; }
+.lc.slot-y::before { background: #f1c40f; }
+.lc.slot-b::before { background: #3498db; }
+
+/* Center Box */
+.center-home { position: absolute; left: calc(4px + (100% - 8px) * 6 / 15); top: calc(4px + (100% - 8px) * 6 / 15); width: calc((100% - 8px) * 3 / 15); height: calc((100% - 8px) * 3 / 15); pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
+.ctri { position: absolute; inset: 0; }
+.ctri.top { background: linear-gradient(to bottom, #4cd88a, #1e8f4e); clip-path: polygon(0 0, 100% 0, 50% 50%); }
+.ctri.right { background: linear-gradient(to left, #ffd633, #b7950b); clip-path: polygon(100% 0, 100% 100%, 50% 50%); }
+.ctri.bottom { background: linear-gradient(to top, #4aa8ea, #185b91); clip-path: polygon(0 100%, 100% 100%, 50% 50%); }
+.ctri.left { background: linear-gradient(to right, #f0665a, #a0291e); clip-path: polygon(0 0, 0 100%, 50% 50%); }
+
+/* Tokens */
+.tk { position: absolute; z-index: 5; transition: top .14s ease, left .14s ease; filter: drop-shadow(0 3px 3px rgba(0,0,0,.5)); pointer-events: none; }
+.tk svg { width: 100%; height: 100%; display: block; pointer-events: none; }
+.tk.movable { cursor: pointer; pointer-events: auto; z-index: 10; }
+.tk.movable svg { animation: tkpulse 1.05s ease-in-out infinite; }
+@keyframes tkpulse { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6%) scale(1.08); filter: drop-shadow(0 0 7px rgba(255,255,255,.9)); } }
+
+/* Bottom Controls */
+.ludo-bottom-controls {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 12px;
+  margin-top: 10px;
+}
+.ludo-turn-display {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+}
+.ludo-actions { display: flex; align-items: center; gap: 12px; }
+
+.diceBox {
+  width: 48px; height: 48px; border-radius: 12px;
+  background: linear-gradient(160deg, #3a352b, #221f19);
+  border: 2px solid #4a4437; display: grid; place-items: center;
+  font-size: 26px; font-weight: 900; color: #fff; transition: .15s;
+  box-shadow: 0 4px 12px rgba(0,0,0,.55);
+}
+.diceBox.hot { border-color: #f5c542; box-shadow: 0 0 0 3px rgba(245,197,66,.4), 0 6px 18px rgba(0,0,0,.55); color: #201306; background: linear-gradient(145deg, #fff5c9, #f0c343); }
+.diceBox.rolling { animation: roll .55s ease-out; }
+
+#ludoRollBtn {
+  padding: 10px 18px; font-size: 14px; font-weight: 900; border-radius: 10px;
+  background: linear-gradient(180deg, #f7d67a, #e3b64c 45%, #a8760f);
+  color: #2b1608; border: none; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.4); text-transform: uppercase;
+}
+#ludoRollBtn:disabled { opacity: 0.4; filter: saturate(0.4); cursor: not-allowed; }
+/* 🟣🟣🟣 [LUDO MODULE END (समाप्त): style.css] 🟣🟣🟣 */
+
 /* ===================================================
-   🔴🔴🔴 [END (समाप्त): style.css — v1.24.1] 🔴🔴🔴
+   🔴🔴🔴 [END (समाप्त): style.css — v1.24.2] 🔴🔴🔴
    =================================================== */
