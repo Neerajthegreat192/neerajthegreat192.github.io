@@ -552,9 +552,13 @@
   
 <!-- 🟣🟣🟣 [LUDO MODULE START (शुरू): index.html] 🟣🟣🟣 -->
 <div id="kidsLudoBox" class="quiz-floating-box ludo-box-extended" hidden>
-  <!-- सिर्फ क्लोज बटन -->
-  <div style="display:flex; justify-content:flex-end; width:100%;">
-    <button id="closeLudoBtn" class="ludo-close-btn" title="बंद करें">✕</button>
+  <!-- हेडर (गेम का नाम, रीसेट और क्लोज बटन) -->
+  <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom:8px;">
+    <div style="color:#f5c542; font-size:13px; font-weight:800; padding-left:4px; letter-spacing:0.5px;">🎲 LUDO</div>
+    <div style="display:flex; gap:10px;">
+      <button id="ludoResetBtn" class="ludo-action-btn" title="गेम रीसेट करें">🔄</button>
+      <button id="closeLudoBtn" class="ludo-action-btn" title="हाइड करें">✕</button>
+    </div>
   </div>
 
   <!-- लूडो का बोर्ड -->
@@ -572,7 +576,7 @@
   </div>
 </div>
 
-<!-- मैटेलिक गोटियों के लिए SVG -->
+<!-- मैटेलिक गोटियों के लिए SVG (यह पहले जैसा ही रहेगा) -->
 <svg id="pinDefs" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;">
   <defs>
     <radialGradient id="metal-grad" cx="35%" cy="25%" r="80%">
@@ -594,6 +598,7 @@
   </defs>
 </svg>
 <!-- 🟣🟣🟣 [LUDO MODULE END (समाप्त): index.html] 🟣🟣🟣 -->
+
 
 </body>
 </html>

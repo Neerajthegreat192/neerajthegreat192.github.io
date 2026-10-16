@@ -1793,16 +1793,24 @@ body.in-pip-mode #remoteGrid {
   border: 1px solid rgba(245, 197, 66, 0.3);
 }
 
-.ludo-close-btn {
-  background: rgba(255,255,255,0.1);
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
+/* हेडर के एक्शन बटन्स (रीसेट और क्लोज) */
+.ludo-action-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(245, 197, 66, 0.3);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
   color: #fff;
   font-size: 16px;
   cursor: pointer;
-  margin-right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.15s;
+}
+.ludo-action-btn:active {
+  background: rgba(245, 197, 66, 0.3);
+  transform: scale(0.92);
 }
 
 /* Board Wrap (Maximum Square Size) */

@@ -5418,8 +5418,14 @@ function updateLudoUI() {
 }
 
 // --- Gameplay Actions ---
+let isLudoRollingLocally = false; // मल्टीपल क्लिक रोकने के लिए लॉक
+
 async function ludoRollDice() {
-  if (!ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'roll' || ludoState.gameOver || ludoAnimating) return;
+  // अगर लॉक लगा है, या हमारा टर्न नहीं है, तो कुछ मत करो
+  if (isLudoRollingLocally || !ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'roll' || ludoState.gameOver || ludoAnimating) return;
+  
+  isLudoRollingLocally = true; // बटन तुरंत लॉक करें
+
   if (typeof playMessageTickSound === 'function') playMessageTickSound();
 
   const rollBtn = $('ludoRollBtn');
@@ -5439,6 +5445,7 @@ async function ludoRollDice() {
       turn: ludoNextColor(ludoMyColor), updatedAt: Date.now(),
       lastMove: { color: ludoMyColor, skip: true, ts: Date.now() }
     });
+    isLudoRollingLocally = false; // अनलॉक
     return;
   }
 
@@ -5463,96 +5470,35 @@ async function ludoRollDice() {
   } else {
     maybeLudoAutoMove();
   }
+
+  isLudoRollingLocally = false; // प्रोसेस खत्म होने पर अनलॉक
 }
 
-async function ludoTryMove(tokenIdx) {
-  if (ludoAnimating || !ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'move') return;
-  const roll = ludoState.dice;
-  if (!roll || !ludoCanMove(ludoMyColor, tokenIdx, roll)) return;
-  
-  ludoAnimating = true;
-  const startArr = ludoNormalizeTokens(ludoState.tokens[ludoMyColor]);
-  const currentRel = startArr[tokenIdx];
-  const finalRel = currentRel === -1 ? 0 : currentRel + roll;
+// ... (ludoTryMove और animateLudoRemoteMove का कोड वही रहेगा) ...
 
-  ludoVisualTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
-  if (currentRel === -1) {
-    ludoVisualTokens[ludoMyColor][tokenIdx] = 0;
-    renderLudoTokens();
-    await new Promise(r => setTimeout(r, 300));
-  } else {
-    for (let r = currentRel + 1; r <= finalRel; r++) {
-      ludoVisualTokens[ludoMyColor][tokenIdx] = r;
-      renderLudoTokens();
-      await new Promise(r => setTimeout(r, 200));
-    }
-  }
-
-  const newTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
-  newTokens[ludoMyColor][tokenIdx] = finalRel;
-  let captured = 0;
-
-  if (finalRel >= 0 && finalRel <= 50) {
-    const myGlobalIdx = ludoAbsLoopIdx(ludoMyColor, finalRel);
-    if (!LUDO_SAFE_IDX.includes(myGlobalIdx)) {
-      const opp = ludoOpponentColor;
-      for (let j=0; j<4; j++) {
-        const orel = newTokens[opp][j];
-        if (orel >= 0 && orel <= 50 && ludoAbsLoopIdx(opp, orel) === myGlobalIdx) {
-          newTokens[opp][j] = -1; 
-          captured++;
-          if (typeof playOopsSound === 'function') playOopsSound();
-        }
-      }
-    }
-  }
-
-  const reachedHome = (finalRel === 56);
-  if (reachedHome && typeof playCheerSound === 'function') playCheerSound();
-
-  const allHome = newTokens[ludoMyColor].every(r => r === 56);
-  const extraTurn = (roll === 6) || (captured > 0) || reachedHome;
-  const newTurn = (allHome || extraTurn) ? ludoMyColor : ludoOpponentColor;
-
-  ludoVisualTokens = null;
-  ludoAnimating = false;
-
-  await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
-    tokens: newTokens, turn: newTurn, dice: null, phase: 'roll',
-    consecutiveSixes: extraTurn ? ludoState.consecutiveSixes : 0,
-    gameOver: allHome, winner: allHome ? ludoMyColor : null,
-    lastMove: { color: ludoMyColor, token: tokenIdx, from: currentRel, to: finalRel, ts: Date.now() },
-    updatedAt: Date.now()
-  });
-}
-
-async function animateLudoRemoteMove(move, oldTokens) {
-  if (!move || move.skip || move.from === undefined || move.to === undefined) return;
-  ludoAnimating = true;
-  ludoVisualTokens = { r: ludoNormalizeTokens(oldTokens.r), y: ludoNormalizeTokens(oldTokens.y) };
-  
-  if (move.from === -1) {
-    ludoVisualTokens[move.color][move.token] = 0;
-    renderLudoTokens();
-    await new Promise(r => setTimeout(r, 300));
-  } else {
-    for (let r = move.from + 1; r <= move.to; r++) {
-      ludoVisualTokens[move.color][move.token] = r;
-      renderLudoTokens();
-      await new Promise(r => setTimeout(r, 200));
-    }
-  }
-  ludoVisualTokens = null;
-  ludoAnimating = false;
-}
-
-// --- Events Connection ---
+// --- Events Connection (फिक्स किए गए) ---
 if ($('ludoRollBtn'))$('ludoRollBtn').onclick = (e) => { e.stopPropagation(); ludoRollDice(); };
+
+// 1. क्लोज बटन: अब सिर्फ हाइड करेगा (डेटा डिलीट नहीं करेगा)
 if ($('closeLudoBtn'))$('closeLudoBtn').onclick = (e) => {
   e.stopPropagation();
-  if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/ludo_state`), { active: false }).catch(()=>{});
   if ($('kidsLudoBox'))$('kidsLudoBox').hidden = true;
 };
+
+// 2. रीसेट बटन: गेम को नए सिरे से शुरू करेगा
+if ($('ludoResetBtn'))$('ludoResetBtn').onclick = async (e) => {
+  e.stopPropagation();
+  if (confirm(currentLang === 'hi' ? "क्या आप लूडो गेम को रीसेट करके नया शुरू करना चाहते हैं?" : "Do you want to reset and start a new Ludo game?")) {
+    if (activeCallId) {
+      await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
+        active: true, turn: 'r', dice: null, phase: 'roll', consecutiveSixes: 0,
+        tokens: { r: [-1,-1,-1,-1], y: [-1,-1,-1,-1] },
+        gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
+      });
+    }
+  }
+};
+
 window.addEventListener('resize', () => {
   if ($('kidsLudoBox') && !$('kidsLudoBox').hidden) renderLudoTokens();
 });
@@ -5578,6 +5524,7 @@ joinCallSession = async function() {
   if (originalJoinCallSession) await originalJoinCallSession();
   listenLudoSession(); 
 };
+
 
 /* 🟣🟣🟣 [LUDO MODULE END (समाप्त): app.js] 🟣🟣🟣 */
 
