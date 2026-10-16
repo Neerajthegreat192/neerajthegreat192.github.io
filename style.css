@@ -1,6 +1,6 @@
 /* ===================================================
    🟢🟢🟢 [START (शुरू): style.css — v1.24.2] 🟢🟢🟢
-   🎨 RESTORED WORKING CHAT LAYOUT + NEW RIDDLE UI
+   🎨 PREMIUM GOLD THEME + NEW QUIZ/RIDDLE UI
    =================================================== */
 
 :root {
@@ -15,9 +15,9 @@
   --gold-hover: #d97706;
   --success: #10b981;
   --danger: #f43f5e;
-  --c-call-tab: #0284c7;
+  --c-call-tab: #d97706; /* नीले से बदलकर डार्क गोल्ड किया गया */
   --c-user: #e2e8f0;
-  --bubble-me: #054640;
+  --bubble-me: #2c1e09; /* प्रीमियम डीप डार्क गोल्ड */
   --bubble-them: #1f2c34;
 }
 
@@ -52,7 +52,7 @@ html, body {
 }
 
 /* ===================================================
-   LIGHT THEME
+   LIGHT THEME (प्रीमियम लाइट गोल्ड)
    =================================================== */
 :root[data-theme="light"] {
   --bg: #f0f2f5;
@@ -66,9 +66,9 @@ html, body {
   --gold-hover: #b45309;
   --success: #059669;
   --danger: #dc2626;
-  --c-call-tab: #0284c7;
+  --c-call-tab: #d97706;
   --c-user: #0f172a;
-  --bubble-me: #d9fdd3;
+  --bubble-me: #fef3c7; /* लाइट अम्बर/गोल्ड */
   --bubble-them: #ffffff;
 }
 :root[data-theme="light"] body { background: #e5e7eb; }
@@ -86,7 +86,7 @@ html, body {
 :root[data-theme="light"] .search-input { color: #0f172a; }
 :root[data-theme="light"] .modal-box { background: #ffffff; }
 :root[data-theme="light"] .modal-input { background: #f0f2f5; color: #0f172a; }
-:root[data-theme="light"] .chat-bubble.me { color: #0f172a; }
+:root[data-theme="light"] .chat-bubble.me { color: #0f172a; border: 1px solid rgba(217, 119, 6, 0.2); }
 :root[data-theme="light"] .chat-bubble.them { color: #0f172a; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
 :root[data-theme="light"] .chat-bubble.me::after { border-left-color: var(--bubble-me); }
 :root[data-theme="light"] .chat-bubble.them::after { border-right-color: var(--bubble-them); }
@@ -165,7 +165,7 @@ html, body {
 .user-title {
   font-size: 18px;
   font-weight: 900;
-  color: var(--c-user);
+  color: var(--gold); /* हेडर नाम को गोल्डन टच */
   letter-spacing: 0.3px;
 }
 
@@ -197,6 +197,13 @@ html, body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-hdr-btn:active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .icon-hdr-btn svg {
@@ -237,7 +244,7 @@ html, body {
 .online-avatar-circle {
   position: relative;
   width: 48px; height: 48px; border-radius: 50%;
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, #10b981, #059669); /* स्टेटस ग्रीन ही सही है */
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; font-weight: 900;
@@ -274,7 +281,7 @@ html, body {
   border: 1px solid var(--line);
   flex-shrink: 0;
 }
-.search-icon { font-size: 14px; margin-right: 8px; }
+.search-icon { font-size: 14px; margin-right: 8px; color: var(--gold); }
 .search-input {
   flex: 1; height: 38px;
   background: none; border: none;
@@ -325,6 +332,7 @@ html, body {
   flex-shrink: 0;
   position: relative;
   overflow: visible;
+  border: 1px solid rgba(245, 197, 66, 0.2);
 }
 .contact-avatar svg { width: 24px; height: 24px; fill: #94a3b8; }
 .avatar-initial { font-size: 17px; font-weight: 900; color: #fff; }
@@ -388,7 +396,7 @@ html, body {
 }
 .call-missed { background: rgba(244, 63, 94, 0.15); color: var(--danger); }
 .call-incoming { background: rgba(16, 185, 129, 0.15); color: var(--success); }
-.call-outgoing { background: rgba(2, 132, 199, 0.15); color: #38bdf8; }
+.call-outgoing { background: rgba(245, 158, 11, 0.15); color: var(--gold); } /* आउटगोइंग कॉल गोल्ड */
 .call-action-btn {
   width: 36px; height: 36px; border-radius: 50%;
   background: rgba(255, 255, 255, 0.06);
@@ -396,7 +404,9 @@ html, body {
   color: var(--text);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
+  transition: 0.2s;
 }
+.call-action-btn:active { background: rgba(245, 158, 11, 0.15); border-color: var(--gold); color: var(--gold); }
 .call-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* ===================================================
@@ -437,8 +447,11 @@ html, body {
   background: rgba(255, 255, 255, 0.05);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+  transition: 0.2s;
 }
-.wp-call-btn svg { width: 18px; height: 18px; fill: var(--text); }
+.wp-call-btn:active { border-color: var(--gold); }
+.wp-call-btn svg { width: 18px; height: 18px; fill: var(--text); transition: 0.2s; }
+.wp-call-btn:active svg { fill: var(--gold); }
 
 .chat-body {
   flex: 1 1 auto;
@@ -469,6 +482,7 @@ html, body {
   background: var(--bubble-me);
   color: #fff;
   border-bottom-right-radius: 3px;
+  border: 1px solid rgba(245, 197, 66, 0.15); /* हल्का गोल्डन बॉर्डर */
 }
 .chat-bubble.them {
   align-self: flex-start;
@@ -478,7 +492,7 @@ html, body {
 }
 .chat-bubble.me::after {
   content: ''; position: absolute;
-  right: -7px; bottom: 0;
+  right: -7px; bottom: -1px;
   width: 0; height: 0;
   border-left: 8px solid var(--bubble-me);
   border-top: 8px solid transparent;
@@ -555,8 +569,9 @@ html, body {
   padding: 3px 12px;
   border-radius: 12px;
   font-size: 11px; font-weight: 700;
-  color: var(--text-muted);
+  color: var(--gold); /* डेट को गोल्डन टच */
   letter-spacing: 0.3px;
+  border: 1px solid rgba(245, 197, 66, 0.15);
 }
 
 /* BUBBLE REACTIONS */
@@ -642,7 +657,9 @@ html, body {
   font-size: 18px; color: var(--text);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
+  transition: 0.2s;
 }
+.attach-btn:active { background: rgba(245, 158, 11, 0.15); border-color: var(--gold); color: var(--gold); }
 .input-wrap {
   flex: 1 1 auto;
   min-width: 0;
@@ -676,8 +693,8 @@ html, body {
   cursor: pointer; flex-shrink: 0;
 }
 .action-btn svg { width: 20px; height: 20px; fill: #000; }
-.action-btn.send-mode { background: var(--success) !important; }
-.action-btn.send-mode svg { fill: #fff !important; }
+.action-btn.send-mode { background: var(--gold) !important; } /* सेंड बटन भी अब गोल्ड होगा */
+.action-btn.send-mode svg { fill: #000 !important; }
 
 /* SCROLL FAB */
 .scroll-fab {
@@ -830,7 +847,7 @@ html, body {
   border-radius: 2px; overflow: hidden;
 }
 .transfer-item-fill {
-  height: 100%; background: var(--success);
+  height: 100%; background: var(--gold); /* प्रोग्रेस बार भी गोल्ड */
   width: 0%; transition: width 0.2s;
 }
 
@@ -857,7 +874,7 @@ html, body {
   background: rgba(0,0,0,0.2);
   padding: 8px 12px; border-radius: 8px; cursor: pointer;
 }
-.media-doc-icon { font-size: 24px; }
+.media-doc-icon { font-size: 24px; color: var(--gold); }
 .media-doc-name { font-weight: 700; font-size: 13px; }
 .media-doc-size { font-size: 10px; color: var(--text-muted); }
 .media-download-overlay {
@@ -915,7 +932,7 @@ html, body {
   background: rgba(255,255,255,0.2);
   border-radius: 2px; cursor: pointer; margin-bottom: 4px;
 }
-.voice-progress-bar { height: 100%; background: #fff; width: 0%; border-radius: 2px; }
+.voice-progress-bar { height: 100%; background: var(--gold); width: 0%; border-radius: 2px; } /* वॉइस प्रोग्रेस भी गोल्ड */
 .voice-meta-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); }
 .voice-spd-btn { background: none; border: none; color: var(--gold); font-size: 10px; cursor: pointer; }
 
@@ -923,7 +940,7 @@ html, body {
   position: absolute;
   bottom: 0; left: 0; right: 0;
   background: #11171f;
-  border-top: 2px solid #10b981;
+  border-top: 2px solid var(--gold); /* हरा डॉक बॉर्डर गोल्ड किया गया */
   padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
   z-index: 90;
   display: flex;
@@ -960,11 +977,11 @@ html, body {
 }
 .dock-btn-send {
   width: 36px; height: 36px; border-radius: 50%;
-  background: var(--success); border: none;
+  background: var(--gold); border: none; /* डॉक का सेंड बटन भी गोल्ड */
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
-.dock-btn-send svg { width: 18px; height: 18px; fill: #fff; }
+.dock-btn-send svg { width: 18px; height: 18px; fill: #000; }
 
 /* ===================================================
    CALL SCREEN
@@ -1029,13 +1046,13 @@ html, body {
 }
 .voice-avatar-ring {
   width: 120px; height: 120px; border-radius: 50%;
-  border: 2px solid var(--c-call-tab);
+  border: 2px solid var(--gold); /* वॉइस रिंग नीले से गोल्ड हो गया */
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 16px;
   animation: pulse 2s infinite;
 }
 .voice-avatar { font-size: 54px; }
-.voice-target-name { font-size: 22px; font-weight: 800; }
+.voice-target-name { font-size: 22px; font-weight: 800; color: var(--gold); }
 .voice-call-substatus { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 
 .pip-wrap {
@@ -1045,7 +1062,7 @@ html, body {
   width: 90px; height: 135px;
   border-radius: 12px;
   overflow: hidden;
-  border: 2px solid rgba(255,255,255,0.3);
+  border: 2px solid rgba(245, 197, 66, 0.4); /* PiP बॉर्डर को हल्का गोल्ड टोन */
   z-index: 30; background: #000;
   transition: transform 0.2s, opacity 0.2s;
 }
@@ -1151,12 +1168,14 @@ body.in-pip-mode #remoteGrid {
   background: rgba(255,255,255,0.08);
   display: flex; align-items: center; justify-content: center;
   font-size: 18px;
+  transition: 0.15s;
 }
+.ctl-box:active .ctl-ic { background: rgba(245, 158, 11, 0.2); }
 .ctl-ic svg { width: 20px; height: 20px; fill: #fff; }
 .ctl-box.off .ctl-ic { background: rgba(244,63,94,0.25); color: var(--danger); }
 .ctl-box.off .ctl-ic svg { fill: var(--danger); }
 .ctl-box.hang .ctl-ic { background: var(--danger); }
-.ctl-box.fun-btn .ctl-ic { background: rgba(245,158,11,0.2); }
+.ctl-box.fun-btn .ctl-ic { background: rgba(245,158,11,0.2); border: 1px solid rgba(245, 158, 11, 0.4); }
 .ctl-txt { font-size: 10px; font-weight: 700; color: #94a3b8; }
 
 .fade-out { opacity: 0; pointer-events: none; }
@@ -1181,7 +1200,7 @@ body.in-pip-mode #remoteGrid {
   text-align: center;
   box-shadow: 0 10px 30px rgba(0,0,0,0.8);
 }
-.modal-box h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; color: var(--text); }
+.modal-box h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; color: var(--gold); } /* हेडिंग गोल्ड */
 .modal-box p { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
 .modal-input {
   width: 100%; height: 42px;
@@ -1240,7 +1259,7 @@ body.in-pip-mode #remoteGrid {
   border: 1px solid var(--line);
   border-radius: 16px;
   font-size: 16px; cursor: pointer;
-  color: var(--text);
+  color: var(--gold); /* टॉगल बटन में गोल्ड हिंट */
 }
 .settings-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -1271,7 +1290,7 @@ body.in-pip-mode #remoteGrid {
   display: flex; justify-content: space-between;
   align-items: center; margin-bottom: 12px;
 }
-.pc-modal-header h2 { margin: 0; font-size: 16px; }
+.pc-modal-header h2 { margin: 0; font-size: 16px; color: var(--gold); }
 .pc-close-btn {
   background: none; border: none;
   color: var(--text-muted);
@@ -1337,7 +1356,7 @@ body.in-pip-mode #remoteGrid {
   left: 50%;
   transform: translateX(-50%) translateY(20px);
   background: rgba(15, 23, 42, 0.95);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--gold); /* टोस्ट बॉर्डर को गोल्डन बनाया */
   color: #fff;
   padding: 8px 18px;
   border-radius: 20px;
@@ -1358,7 +1377,7 @@ body.in-pip-mode #remoteGrid {
 }
 
 /* ===================================================
-   FUN MODE & QUIZ
+   FUN MODE & QUIZ (NEW QUIZ LAYOUT)
    =================================================== */
 .fun-tray-modal {
   position: absolute; inset: 0;
@@ -1371,13 +1390,13 @@ body.in-pip-mode #remoteGrid {
   background: #1e293b;
   border-radius: 20px 20px 0 0;
   padding: 16px 20px max(24px, env(safe-area-inset-bottom, 24px));
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--gold); /* फन मोड ट्रे का बॉर्डर गोल्ड */
 }
 .fun-tray-header {
   display: flex; justify-content: space-between;
   align-items: center; margin-bottom: 16px;
 }
-.fun-tray-title { font-weight: 800; font-size: 15px; color: #fff; }
+.fun-tray-title { font-weight: 800; font-size: 15px; color: var(--gold); }
 .fun-tray-close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
 .fun-tray-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .tray-item {
@@ -1388,10 +1407,13 @@ body.in-pip-mode #remoteGrid {
   padding: 12px 4px;
   border-radius: 12px;
   color: #fff; cursor: pointer;
+  transition: 0.15s;
 }
+.tray-item:active { background: rgba(245, 158, 11, 0.2); border-color: var(--gold); }
 .tray-icon { font-size: 26px; }
 .tray-label { font-size: 11px; font-weight: 700; }
 
+/* 🔥 क्विज़ बॉक्स को रिडल बॉक्स जैसा लंबा (Tall) बनाना */
 .quiz-floating-box, .ttt-floating-box {
   position: absolute;
   bottom: 85px; left: 14px; right: 14px;
@@ -1401,6 +1423,11 @@ body.in-pip-mode #remoteGrid {
   padding: 14px;
   z-index: 45;
   box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+}
+.quiz-floating-box {
+  min-height: 380px !important;
+  display: flex;
+  flex-direction: column;
 }
 .quiz-header, .ttt-header {
   display: flex; justify-content: space-between;
@@ -1421,8 +1448,26 @@ body.in-pip-mode #remoteGrid {
   margin-bottom: 10px;
 }
 .quiz-timer-bar { width: 100%; height: 100%; background: var(--gold); transition: width 1s linear; }
-.quiz-question { font-size: 14px; font-weight: 700; margin-bottom: 10px; text-align: center; color: #fff; }
-.quiz-options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+
+/* 🔥 क्विज़ के सवाल (Question) को रिडल की तरह गोल्डन और बड़ा बनाना */
+.quiz-question { 
+  font-size: 18px !important; 
+  font-weight: 800 !important; 
+  color: var(--gold) !important; 
+  line-height: 1.4 !important; 
+  margin-top: 15px !important; 
+  margin-bottom: 20px !important; 
+  text-align: center; 
+}
+
+/* 🔥 क्विज़ के विकल्पों (Options) को नीचे धकेलने के लिए */
+.quiz-options-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 8px; 
+  margin-top: auto !important; 
+  margin-bottom: 15px !important; 
+}
 .quiz-opt-btn {
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--line);
@@ -1441,10 +1486,10 @@ body.in-pip-mode #remoteGrid {
 }
 
 /* ===================================================
-   🔥 पॉइंट #3: Riddle & GK विशिष्ट स्टाइल (NEW LAYOUT)
+   RIDDLE UI
    =================================================== */
 .riddle-box-extended {
-  min-height: 380px; /* थोड़ा लंबा बॉक्स */
+  min-height: 380px; 
   display: flex;
   flex-direction: column;
 }
@@ -1466,14 +1511,14 @@ body.in-pip-mode #remoteGrid {
   color: var(--text-muted);
 }
 .riddle-q-text {
-  font-size: 18px !important; /* फॉन्ट थोड़ा बड़ा */
+  font-size: 18px !important; 
   line-height: 1.4;
   margin-top: 10px;
   margin-bottom: 20px;
   color: var(--gold);
 }
 .riddle-buzzer-wrap {
-  margin-top: auto; /* बॉक्स में सबसे नीचे धकेलने के लिए */
+  margin-top: auto; 
   text-align: center;
   padding-top: 15px;
   margin-bottom: 12px;
@@ -1634,7 +1679,7 @@ body.in-pip-mode #remoteGrid {
 
 .header .user-title,
 .chat-header #chatTargetName {
-  color: var(--c-user) !important;
+  color: var(--gold) !important; /* हेडर नाम ओवरराइड में भी गोल्ड */
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
@@ -1666,124 +1711,9 @@ body.in-pip-mode #remoteGrid {
 /* ========================================================================= */
 
 .ludo-box-extended {
-  min-height: 400px;
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-  background: #14130f;
-  border-radius: 18px;
-  border: 1px solid rgba(245, 197, 66, 0.25);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
-}
-
-.ludo-player-strip {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  padding: 6px 10px;
-  flex: 0 0 auto;
-}
-
-.ludo-player-strip.top { justify-content: flex-start; }
-.ludo-player-strip.bottom { justify-content: flex-end; }
-
-/* Player Cards (Names & Indicators) */
-.pcard {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px 6px 8px;
-  border-radius: 11px;
-  background: linear-gradient(160deg, #2a2118, #15100a);
-  border: 1px solid rgba(245, 197, 66, 0.2);
-  transition: .25s;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.pcard.turn {
-  border-color: var(--turn-color, #f5c542);
-  box-shadow: inset 0 0 0 1px var(--turn-color, #f5c542), 
-              0 0 14px var(--turn-glow, rgba(245,197,66,.4)), 
-              inset 0 1px 0 rgba(255,255,255,.08);
-}
-
-.pdot {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-.pdot.r { background: radial-gradient(circle at 35% 28%, #ff9084 0%, #e74c3c 55%, #8a1c12 100%); }
-.pdot.g { background: radial-gradient(circle at 35% 28%, #a5f0c2 0%, #2ecc71 55%, #0d5e2c 100%); }
-.pdot.y { background: radial-gradient(circle at 35% 28%, #fff29a 0%, #f1c40f 55%, #7a5f08 100%); }
-.pdot.b { background: radial-gradient(circle at 35% 28%, #a8d7f5 0%, #3498db 55%, #0e3f66 100%); }
-
-.pname {
-  color: #ffe9b8;
-  font-weight: 800;
-  font-size: 13px;
-  max-width: 100px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 🎲 Ludo Board (Responsive Fit) */
-#ludoBoardWrap {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: 6px;
-}
-
-#ludoBoard {
-  /* Box ke hisaab se square board adjust karein */
-  --bs: min(90vw, 280px);
-  width: var(--bs);
-  height: var(--bs);
-  display: grid;
-  grid-template-columns: repeat(15, 1fr);
-  grid-template-rows: repeat(15, 1fr);
-  position: relative;
-  background: #ffffff;
-  border-radius: 12px;
-  overflow: hidden;
-  padding: 4px;
-  box-shadow: 0 14px 40px rgba(0,0,0,.55), 
-              0 0 0 3px rgba(255,255,255,.5), 
-              0 0 0 6px rgba(0,0,0,.35);
-}
-
-.lc { position: relative; background: #ffffff; display: flex; align-items: center; justify-content: center; }
-.lc.empty { background: #ffffff; }
-.lc.path, .lc.safe { background: #ffffff; box-shadow: inset 0 0 0 .5px rgba(150,150,150,.55); }
-.lc.safe::before { content: "★"; color: #c9b56c; font-size: calc(var(--bs)/15*.78); line-height: 1; position: absolute; text-shadow: 0 1px 0 rgba(255,255,255,.9), 0 -1px 1px rgba(0,0,0,.18); font-weight: 900; }
-.lc.start-r { background: #e74c3c; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
-.lc.start-g { background: #2ecc71; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
-.lc.start-y { background: #f1c40f; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
-.lc.start-b { background: #3498db; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
-
-/* Center Box */
-.center-home {
-  position: absolute;
-  left: calc(4px + (100% - 8px) * 6 / 15);
-  top: calc(4px + (100% - 8px) * 6 / 15);
-  width: calc((100% - 8px) * 3 / 15);
-  height: calc((100% - 8px) * 3 / 15);
-  pointer-events: none;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
-}
-
-/* 🟣🟣🟣 [LUDO MODULE START (शुरू): style.css] 🟣🟣🟣 */
-.ludo-box-extended {
   background: #0f172a;
-  padding: 12px 8px; /* पैडिंग कम की गई है ताकि बोर्ड को ज्यादा जगह मिले */
-  width: 96vw; /* स्क्रीन की 96% चौड़ाई लेगा */
+  padding: 12px 8px; 
+  width: 96vw; 
   max-width: 460px;
   border-radius: 20px;
   display: flex;
@@ -1793,7 +1723,6 @@ body.in-pip-mode #remoteGrid {
   border: 1px solid rgba(245, 197, 66, 0.3);
 }
 
-/* हेडर के एक्शन बटन्स (रीसेट और क्लोज) */
 .ludo-action-btn {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(245, 197, 66, 0.3);
@@ -1813,7 +1742,6 @@ body.in-pip-mode #remoteGrid {
   transform: scale(0.92);
 }
 
-/* Board Wrap (Maximum Square Size) */
 #ludoBoardWrap {
   display: flex;
   justify-content: center;
@@ -1823,7 +1751,7 @@ body.in-pip-mode #remoteGrid {
 }
 
 #ludoBoard {
-  --bs: min(92vw, 440px); /* बोर्ड का साइज 88vw से बढ़ाकर 92vw कर दिया गया है */
+  --bs: min(92vw, 440px); 
   width: var(--bs);
   height: var(--bs);
   display: grid;
@@ -1837,7 +1765,6 @@ body.in-pip-mode #remoteGrid {
   box-shadow: 0 10px 25px rgba(0,0,0,0.6), 0 0 0 4px rgba(0,0,0,0.4);
 }
 
-/* Original Board Colors & Cells */
 .lc { position: relative; background: #ffffff; display: flex; align-items: center; justify-content: center; }
 .lc.empty { background: #ffffff; }
 .lc.path, .lc.safe { background: #ffffff; box-shadow: inset 0 0 0 .5px rgba(150,150,150,.55); }
@@ -1862,7 +1789,6 @@ body.in-pip-mode #remoteGrid {
 .lc.slot-y::before { background: #f1c40f; }
 .lc.slot-b::before { background: #3498db; }
 
-/* Center Box */
 .center-home { position: absolute; left: calc(4px + (100% - 8px) * 6 / 15); top: calc(4px + (100% - 8px) * 6 / 15); width: calc((100% - 8px) * 3 / 15); height: calc((100% - 8px) * 3 / 15); pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
 .ctri { position: absolute; inset: 0; }
 .ctri.top { background: linear-gradient(to bottom, #4cd88a, #1e8f4e); clip-path: polygon(0 0, 100% 0, 50% 50%); }
@@ -1870,14 +1796,12 @@ body.in-pip-mode #remoteGrid {
 .ctri.bottom { background: linear-gradient(to top, #4aa8ea, #185b91); clip-path: polygon(0 100%, 100% 100%, 50% 50%); }
 .ctri.left { background: linear-gradient(to right, #f0665a, #a0291e); clip-path: polygon(0 0, 0 100%, 50% 50%); }
 
-/* Tokens */
 .tk { position: absolute; z-index: 5; transition: top .14s ease, left .14s ease; filter: drop-shadow(0 3px 3px rgba(0,0,0,.5)); pointer-events: none; }
 .tk svg { width: 100%; height: 100%; display: block; pointer-events: none; }
 .tk.movable { cursor: pointer; pointer-events: auto; z-index: 10; }
 .tk.movable svg { animation: tkpulse 1.05s ease-in-out infinite; }
 @keyframes tkpulse { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6%) scale(1.08); filter: drop-shadow(0 0 7px rgba(255,255,255,.9)); } }
 
-/* Bottom Controls */
 .ludo-bottom-controls {
   width: 100%;
   display: flex;

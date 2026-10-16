@@ -807,6 +807,50 @@ function updateHeaderTitle() {
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
 
+// --- Call Audio Tones Manager ---
+const CallAudioManager = {
+  connecting: new Audio('sounds/connecting.mp3'),
+  ringing: new Audio('sounds/ringing.mp3'),
+  busy: new Audio('sounds/busy.mp3'),
+  end: new Audio('sounds/end.mp3'),
+  
+  init() {
+    this.connecting.loop = true;
+    this.ringing.loop = true;
+    this.busy.loop = false;
+    this.end.loop = false;
+  },
+
+  stopAll() {
+    this.connecting.pause(); this.connecting.currentTime = 0;
+    this.ringing.pause(); this.ringing.currentTime = 0;
+    this.busy.pause(); this.busy.currentTime = 0;
+  },
+
+  playConnecting() {
+    this.stopAll();
+    this.connecting.play().catch(e => console.log("Audio play blocked", e));
+  },
+
+  playRinging() {
+    this.stopAll();
+    this.ringing.play().catch(e => console.log("Audio play blocked", e));
+  },
+
+  playBusy() {
+    this.stopAll();
+    this.busy.play().catch(e => console.log("Audio play blocked", e));
+    setTimeout(() => this.stopAll(), 3000); 
+  },
+
+  playEnd() {
+    this.stopAll();
+    this.end.play().catch(e => console.log("Audio play blocked", e));
+  }
+};
+
+CallAudioManager.init(); // इसे शुरू करना ज़रूरी है
+
 // ===================================================
 // ✅ PRESENCE & LISTENERS (GHOST USER & OTA WIPE FIX)
 // ===================================================
@@ -1160,15 +1204,23 @@ function renderCallLogs() {
     callLogsList.innerHTML = `<div style="text-align:center;padding:28px;color:#94a3b8;font-size:13px">${currentLang==='hi'?'कोई कॉल लॉग नहीं है':'No call logs yet'}</div>`;
     return;
   }
+  
   allCallLogs.forEach(l => {
     const card = document.createElement('div');
     card.className = 'contact-card';
     let iconHtml = '';
     const isVoice = l.callMode === 'audio';
-    const tag = isVoice ? '📞 ' : '📹 ';
-    if (l.type === 'missed') iconHtml = `<span class="call-log-badge call-missed">↙ ${tag} ${currentLang==='hi'?'मिस्ड कॉल':'Missed Call'}</span>`;
-    else if (l.type === 'incoming') iconHtml = `<span class="call-log-badge call-incoming">↙ ${tag} (${l.duration || '00:00'})</span>`;
-    else iconHtml = `<span class="call-log-badge call-outgoing">↗ ${tag} (${l.duration || '00:00'})</span>`;
+    
+    // स्मार्ट चेक: अगर ड्यूरेशन 00:00 है या टाइप missed है
+    const isMissed = l.type === 'missed' || (l.type === 'incoming' && (!l.duration || l.duration === '00:00' || l.duration === '0'));
+
+    if (isMissed) {
+      iconHtml = `<span class="call-log-badge call-missed">${currentLang==='hi'?'मिस्ड कॉल':'Missed Call'}</span>`;
+    } else if (l.type === 'incoming') {
+      iconHtml = `<span class="call-log-badge call-incoming">${currentLang==='hi'?'रिसीव कॉल':'Received Call'} (${l.duration || '00:00'})</span>`;
+    } else {
+      iconHtml = `<span class="call-log-badge call-outgoing">${currentLang==='hi'?'आउटगोइंग कॉल':'Outgoing Call'} (${l.duration || '00:00'})</span>`;
+    }
 
     const actionIconSvg = isVoice
       ? `<svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>`
@@ -3210,9 +3262,13 @@ async function sendPushNotification(token, callerName, isVoice = false) {
 }
 
 async function startCall(remoteId, remoteName, audioOnly = false) {
+  // कॉल मिलाते ही कनेक्टिंग टोन चालू करें
+  CallAudioManager.playConnecting();
+  
   try {
     const bSnap = await get(ref(db, `users/${remoteId}/activeCallId`));
     if (bSnap.exists() && bSnap.val()) {
+      CallAudioManager.stopAll(); // अगर बिज़ी है तो टोन बंद कर दें
       toast(`${remoteName} ${currentLang==='hi'?'अभी दूसरी कॉल में व्यस्त है':'is busy on another call'}`);
       return;
     }
@@ -3220,7 +3276,10 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 
   isAudioOnlyCall = audioOnly;
   const stream = await acquireCallMedia(audioOnly);
-  if (!stream) return;
+  if (!stream) {
+    CallAudioManager.stopAll();
+    return;
+  }
 
   activeCallId = `call_${Date.now()}_${Math.floor(Math.random()*1000)}`;
   isCaller = true;
@@ -3231,7 +3290,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   $('outgoingName').textContent = remoteName + (audioOnly ? (currentLang==='hi'?' (ऑडियो)...':' (Audio)...') : (currentLang==='hi'?' (वीडियो)...':' (Video)...'));
   $('outgoingStatusText').textContent = currentLang==='hi'?'कनेक्ट किया जा रहा है...':'Connecting...';
   outgoingDialog.hidden = false;
-  startOutgoingCallTone();
 
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
 
@@ -3257,16 +3315,54 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   const unsubSession = onValue(sessionRef, (snap) => {
     const d = snap.val();
     if (!d) return;
-    if (d.status === 'ringing') $('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
-    if (d.status === 'busy') { stopAllCallTones(); unsubSession(); outgoingDialog.hidden = true; toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy'); hangup(true); }
-    if (d.status === 'rejected') { stopAllCallTones(); unsubSession(); outgoingDialog.hidden = true; toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined'); hangup(true); }
-    if (d.status === 'ended' && isCallConnected) { unsubSession(); toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); hangup(true); }
+    
+    // jab samne wala ringing status set kare
+    if (d.status === 'ringing' && !isCallConnected) {
+      $('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
+      CallAudioManager.playRinging();
+    }
+    
+    // jab samne wale ne call utha li ho
+    if (d.status === 'answered') {
+      CallAudioManager.stopAll();
+    }
+    // जब सामने वाला बिज़ी हो 
+    if (d.status === 'busy') { 
+      unsubSession(); 
+      toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy'); 
+      CallAudioManager.playBusy();
+      setTimeout(() => {
+        outgoingDialog.hidden = true; 
+        hangup(true);
+      }, 2500); // 2.5 सेकंड बिज़ी टोन बजाकर काट दें
+    }
+    
+    // जब सामने वाला कॉल काट (Reject) दे
+    if (d.status === 'rejected') { 
+      unsubSession(); 
+      toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined'); 
+      CallAudioManager.playBusy();
+      setTimeout(() => {
+        outgoingDialog.hidden = true; 
+        hangup(true);
+      }, 2500); // 2.5 सेकंड बिज़ी टोन बजाकर काट दें
+    }
+    
+    if (d.status === 'ended' && isCallConnected) { 
+      unsubSession(); 
+      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); 
+      hangup(true); 
+    }
   });
   unsubs.push(unsubSession);
 
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = setTimeout(() => {
-    if (activeCallId && !isCallConnected) { toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer'); hangup(true); }
+    if (activeCallId && !isCallConnected) { 
+      CallAudioManager.stopAll();
+      toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer'); 
+      hangup(true); 
+    }
   }, 45000);
 
   try {
@@ -3276,13 +3372,18 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   } catch(e) {}
 
   const unsubAns = onValue(ref(db, `call_sessions/${activeCallId}/members/${remoteId}`), (snap) => {
-    if (snap.exists()) { stopAllCallTones(); outgoingDialog.hidden = true; unsubAns(); joinCallSession(); }
+    if (snap.exists()) { 
+      CallAudioManager.stopAll(); // बात शुरू होते ही सारी टोन्स बंद
+      outgoingDialog.hidden = true; 
+      unsubAns(); 
+      joinCallSession(); 
+    }
   });
   unsubs.push(unsubAns);
 }
 
 $('btnCancelCall').onclick = () => {
-  stopAllCallTones();
+  CallAudioManager.stopAll(); // कैंसिल करते ही टोन बंद
   outgoingDialog.hidden = true;
   if (currentCallTargetId) {
     const roomId = getChatRoomId(myUserId, currentCallTargetId);
@@ -3313,13 +3414,13 @@ $('btnCancelCall').onclick = () => {
 };
 
 $('btnAccept').onclick = async () => {
-  stopAllCallTones();
+  CallAudioManager.stopAll(); // उठाते ही रिंग टोन बंद
   incomingDialog.hidden = true;
   if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
 };
 
 $('btnReject').onclick = async () => {
-  stopAllCallTones();
+  CallAudioManager.stopAll();
   incomingDialog.hidden = true;
   clearOngoingCallNotification();
 
@@ -4366,6 +4467,19 @@ function cleanupKidsModules() {
 
 // Call Session & Peer WebRTC
 async function joinCallSession() {
+  CallAudioManager.stopAll(); // Sabse pehle saari ringtones forcefully band karo
+  
+  // Agar main call receive karne wala hoon, toh Firebase mein status 'answered' kar do
+  // taaki caller ko pata chal jaye ki call uth chuki hai aur wo ringtone dobara na bajaye
+  if (!isCaller && activeCallId) {
+    update(ref(db, `call_sessions/${activeCallId}`), { status: 'answered' }).catch(()=>{});
+  }
+  // --- NAYA CODE YAHAN TAK ---
+
+  isCallConnected = true;
+  callStartTime = Date.now();
+  // ... aapka baaki ka code yahan se niche same rahega ...
+     
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = null;
   stopAllCallTones();
@@ -4715,7 +4829,15 @@ async function hangup(silent = false) {
     }
 
     clearOngoingCallNotification();
-    stopAllCallTones();
+    
+    // --- Call End Tone Logic ---
+    if (isCallConnected && !silent) {
+      CallAudioManager.playEnd(); // अगर बात हो रही थी (कॉल कनेक्टेड थी), तो एंड टोन बजाएं
+    } else {
+      CallAudioManager.stopAll(); // अगर बात नहीं हुई (जैसे मिस्ड/रिजेक्ट), तो सब आवाज़ें बंद कर दें
+    }
+    // ---------------------------
+
     stopTimer();
     releaseWakeLock();
     clearTimeout(autoHideTimer);
@@ -4724,7 +4846,7 @@ async function hangup(silent = false) {
     stopNetworkQualityMonitor();
     cleanupKidsModules();
     resetHardwareAudio();
-
+   
     // --- पॉइंट #1: Call Foreground Service Stop ---
     if (window.AndroidBridge && typeof window.AndroidBridge.stopCallForegroundService === 'function') {
       window.AndroidBridge.stopCallForegroundService();
@@ -5421,12 +5543,12 @@ function updateLudoUI() {
 async function ludoRollDice() {
   if (!ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'roll' || ludoState.gameOver || ludoAnimating) return;
   
-  ludoState.phase = 'locked'; 
+  ludoState.phase = 'locked'; // मास्टर लॉक (ताकि डबल क्लिक काम न करे)
 
   const rollBtn = $('ludoRollBtn');
   if (rollBtn) {
-    rollBtn.disabled = true;
-    rollBtn.style.pointerEvents = 'none';
+    rollBtn.disabled = true; 
+    // pointerEvents = 'none' वाली लाइन यहाँ से हटा दी गई है
   }
 
   if (typeof playMessageTickSound === 'function') playMessageTickSound();
