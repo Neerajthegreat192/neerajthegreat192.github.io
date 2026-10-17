@@ -1591,15 +1591,10 @@ function renderCallLogs() {
 
 /* ───────── 🟦 [SECTION 26: CALL LOGS] — END ───────── */
 
-
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 27: CONTACT LIST & CHAT PREVIEWS] — START
-   📌 क्या: live chat snippets (last message preview), unread counts,
-           delivered ticks auto-update, notification trigger,
-           contacts list render, online strip, whatsapp share
-   🔗 कहाँ से: initPresence() → listenForLatestChatPreviews()
-   ⚠️ डिपेंड: latestChatSnippets, unreadCounts, renderContacts
-   🎯 Real-time tick sync (✓, ✓✓, ✓✓ blue) + unread badge
+   📌 क्या: live chat snippets, unread counts, delivered ticks,
+           notification trigger, contacts list render, online strip
    ═══════════════════════════════════════════════════════════════════════ */
 
 const getChatRoomId = (a, b) => [a, b].sort().join('__');
@@ -1612,43 +1607,57 @@ function getTickBadge(snippet) {
 }
 
 let isInitialLoad = true;
+const lastKnownMessageTimes = {};
 
-// ✅ FIX: Real-time Lobby Snippet, Instant Delivery Ticks & Unread Count Sync
+// ✅ FIX: सटीक targetId एक्सट्रैक्शन और गारंटीड लॉबी रेंडर
 function listenForLatestChatPreviews() {
   onValue(ref(db, 'chats'), snap => {
     try {
       const rooms = snap.val() || {};
-      let hasUpdates = false;
+      const currentUid = String(myUserId || '').trim();
+      if (!currentUid) return;
 
       Object.keys(rooms).forEach(key => {
         try {
-          if (!key.includes(myUserId)) return;
-          const parts = key.split('__');
-          const targetId = parts[0] === myUserId ? parts[1] : parts[0];
+          // केवल वही रूम देखें जो वर्तमान यूजर से जुड़े हों
+          let targetId = null;
+          if (key.startsWith(currentUid + '__')) {
+            targetId = key.substring(currentUid.length + 2);
+          } else if (key.endsWith('__' + currentUid)) {
+            targetId = key.substring(0, key.length - currentUid.length - 2);
+          }
+
+          // अगर यह रूम हमारे यूजर का नहीं है, तो आगे बढ़ें
+          if (!targetId) return;
+
           const msgs = rooms[key]?.messages || {};
           const msgKeys = Object.keys(msgs);
           if (!msgKeys.length) return;
 
-          const sortedKeys = msgKeys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
+          // मैसेजेस को टाइम के अनुसार सॉर्ट करें (नंबर कन्वर्जन के साथ)
+          const sortedKeys = msgKeys.sort((a, b) => (Number(msgs[a]?.time) || 0) - (Number(msgs[b]?.time) || 0));
           const lastMsg = msgs[sortedKeys[sortedKeys.length - 1]];
-          if (!lastMsg) return; // सुरक्षा के लिए
+          if (!lastMsg) return;
 
+          // 1. Unread Count और Delivered Ticks सिंक
           let unread = 0;
           msgKeys.forEach(k => {
             const m = msgs[k];
             if (!m) return;
-            if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) {
+            const isFromOther = String(m.senderId) !== currentUid;
+            
+            // अगर मैसेज सामने वाले का है, अनरीड है, और अभी उसकी चैट नहीं खुली है
+            if (isFromOther && !m.read && currentChatTargetId !== targetId) {
               unread++;
             }
-            if (m.senderId !== myUserId && !m.delivered) {
-              update(ref(db, `chats/${key}/messages/${k}`), { delivered: true }).catch(()=>{});
+            // डिलीवरी टिक अपडेट
+            if (isFromOther && !m.delivered) {
+              update(ref(db, `chats/${key}/messages/${k}`), { delivered: true }).catch(() => {});
             }
           });
           unreadCounts[targetId] = unread;
 
-          const prevTime = latestChatSnippets[targetId]?.time || 0;
-          const isNew = !isInitialLoad && lastMsg.time > prevTime && lastMsg.senderId !== myUserId && currentChatTargetId !== targetId;
-
+          // 2. लेटेस्ट मैसेज स्निपेट तैयार करना
           let msgText = lastMsg.text || '';
           if (lastMsg.deleted || lastMsg.type === 'deleted') {
             msgText = '🚫 यह संदेश हटा दिया गया है';
@@ -1664,47 +1673,72 @@ function listenForLatestChatPreviews() {
             msgText = lastMsg.text;
           }
 
-          latestChatSnippets[targetId] = { 
-            text: msgText, 
-            time: lastMsg.time || Date.now(), 
-            senderId: lastMsg.senderId, 
-            read: !!lastMsg.read, 
-            delivered: !!lastMsg.delivered 
-          };
-          hasUpdates = true;
+          const lastTime = Number(lastMsg.time) || Date.now();
 
-          // यहाँ try-catch लगाया है ताकि नोटिफिकेशन फेल होने पर भी नीचे का renderContacts() चले
-          if (isNew) {
+          latestChatSnippets[targetId] = {
+            text: msgText,
+            time: lastTime,
+            senderId: lastMsg.senderId,
+            read: !!lastMsg.read,
+            delivered: !!lastMsg.delivered
+          };
+
+          // 3. केवल आने वाले नए मैसेज पर नोटिफिकेशन (खुद के भेजे मैसेज पर कभी नहीं)
+          const prevTime = lastKnownMessageTimes[targetId] || 0;
+          const isIncomingNew = 
+            !isInitialLoad &&
+            lastTime > prevTime &&
+            String(lastMsg.senderId) !== currentUid &&
+            currentChatTargetId !== targetId;
+
+          if (isIncomingNew) {
             try {
               triggerSystemMessageNotification(lastMsg.senderName || 'New message', msgText, targetId);
-            } catch(nErr) {}
+            } catch (nErr) {}
           }
-        } catch(roomErr) {
+          lastKnownMessageTimes[targetId] = Math.max(prevTime, lastTime);
+
+        } catch (roomErr) {
           console.warn('Error in room:', key, roomErr);
         }
       });
 
       isInitialLoad = false;
-      if (hasUpdates) {
-        try {
-          localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
-          localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
-        } catch(e) {}
-        renderContacts(); // यह UI को अपडेट करेगा
-      }
+
+      // लोकल कैश सुरक्षित करें
+      try {
+        localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
+        localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
+      } catch (e) {}
+
+      // 🔴 लॉबी लिस्ट को बिना किसी रुकावट के तुरंत अपडेट करें
+      renderContacts();
+
     } catch (err) {
-      console.warn('Chat listener error:', err);
+      console.warn('Chat listener root error:', err);
     }
   });
 }
 
 function triggerSystemMessageNotification(sender, text, targetId) {
+  if (currentChatTargetId === targetId) return;
+
   playMessageBeep();
-  if ('Notification' in window && Notification.permission === 'granted') {
+
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
     navigator.serviceWorker?.ready.then(reg => {
-      reg.showNotification(sender, { body: text, icon: 'icon.png', badge: 'icon.png', data: { targetId, senderName: sender } });
-    }).catch(() => { new Notification(sender, { body: text }); });
-  } else {
+      reg.showNotification(sender, { 
+        body: text, 
+        icon: 'icon.png', 
+        badge: 'icon.png', 
+        tag: `chat_${targetId}`, 
+        renotify: true, 
+        data: { targetId, senderName: sender } 
+      });
+    }).catch(() => { 
+      new Notification(sender, { body: text, icon: 'icon.png' }); 
+    });
+  } else if (!document.hidden && currentChatTargetId !== targetId) {
     toast(`💬 ${sender}: ${text}`);
   }
 }
@@ -1748,6 +1782,8 @@ function renderContacts() {
     contactsList.innerHTML = `<div style="text-align:center;padding:28px;color:#94a3b8;font-size:13px">${currentLang==='hi'?'कोई संपर्क उपलब्ध नहीं है':'No contacts available'}</div>`;
     return;
   }
+
+  // जिन संपर्कों में ताज़ा मैसेज आया हो वे सबसे ऊपर दिखें
   userIds.sort((a, b) => {
     const pinA = pinnedChats[a] ? 1 : 0;
     const pinB = pinnedChats[b] ? 1 : 0;
@@ -1760,7 +1796,7 @@ function renderContacts() {
   userIds.forEach(id => {
     const u = allOnlineUsers[id], isOnline = !!u.online;
     const isTyping = u.typingTo === myUserId;
-    const unread = unreadCounts[id] || 0;
+    const unread = Number(unreadCounts[id]) || 0;
     const snippet = latestChatSnippets[id];
     const isPinned = !!pinnedChats[id];
     const card = document.createElement('div');
@@ -1788,7 +1824,6 @@ function renderContacts() {
 searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
 
-// WhatsApp share button
 if ($('shareAppWhatsappBtn')) {$('shareAppWhatsappBtn').onclick = () => {
     const promoMsg = currentLang === 'hi'
       ? `📱 कमाल का वीडियो कॉलिंग ऐप! इसमें फन-मोड, वाइटबोर्ड और पहेलियां (Riddles) भी हैं। अभी डाउनलोड करें: \n${GITHUB_APK_URL}`
@@ -2377,7 +2412,7 @@ function openChat(tId, tName) {
     loadChatMessages();
   } catch (err) {
     console.error("openChat error:", err);
-    closeChat();
+    toast("चैट लोड करने में समस्या आई");
   }
 }
 

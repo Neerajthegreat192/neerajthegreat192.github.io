@@ -1,8 +1,21 @@
-/* ===================================================
-   🟢🟢🟢 [START (शुरू): style.css — v1.24.2] 🟢🟢🟢
-   🎨 PREMIUM GOLD THEME + NEW QUIZ/RIDDLE UI
-   =================================================== */
+/* =========================================================================
+   🟢🟢🟢 [START: style.css — v1.24.3 (PART 1)] 🟢🟢🟢
+   =========================================================================
+   🎨 COLOR PALETTE DIRECTORY (कलर कोडिंग डायरेक्टरी):
+   -------------------------------------------------------------------------
+   🟡 Gold Primary     : #f59e0b (बटन, हेडर हाइलाइट, एक्टिव टैब्स)
+   🟠 Gold Deep/Hover  : #d97706 (कॉल टैब, बॉर्डर्स, डार्क एक्सेंट्स)
+   🟢 Success Green    : #10b981 / #34d399 (ऑनलाइन, एक्सेप्ट कॉल, सही उत्तर)
+   🔴 Danger / Red     : #f43f5e / #dc2626 (कॉल कट, गलत उत्तर, बजर)
+   🔵 Sky / Accent     : #38bdf8 (रीड टिक्स ✓✓, टिक-टैक-टो X)
+   🟣 Purple / Media   : #8b5cf6 (इमेज/मीडिया बैकग्राउंड्स)
+   ⬛ Dark Core        : #090d10 (ऐप बैकग्राउंड), #131b22 (कार्ड्स)
+   💬 Chat Bubbles     : Me -> #2c1e09 (डार्क गोल्ड) | Them -> #1f2c34
+   ========================================================================= */
 
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 01: VARIABLES & ROOT THEMES] — START
+   ───────────────────────────────────────────────────────────────────────── */
 :root {
   --bg: #090d10;
   --card: #131b22;
@@ -15,45 +28,13 @@
   --gold-hover: #d97706;
   --success: #10b981;
   --danger: #f43f5e;
-  --c-call-tab: #d97706; /* नीले से बदलकर डार्क गोल्ड किया गया */
+  --c-call-tab: #d97706; /* नीले से बदलकर डार्क गोल्ड */
   --c-user: #e2e8f0;
-  --bubble-me: #2c1e09; /* प्रीमियम डीप डार्क गोल्ड */
+  --bubble-me: #2c1e09;  /* प्रीमियम डीप डार्क गोल्ड */
   --bubble-them: #1f2c34;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
-
-input, textarea {
-  user-select: text !important;
-  -webkit-user-select: text !important;
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-}
-
-[hidden], #lobby[hidden], #chatScreen[hidden], #call[hidden], .screen[hidden], .modal-overlay[hidden], #kidsQuizBox[hidden], #kidsRiddleBox[hidden], #kidsWhiteboardModal[hidden], #voiceCallArea[hidden], #funModeTray[hidden], #kidsTictactoeBox[hidden] {
-  display: none !important;
-}
-
-html, body {
-  width: 100%;
-  height: 100%;
-  height: 100dvh;
-  background-color: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-/* ===================================================
-   LIGHT THEME (प्रीमियम लाइट गोल्ड)
-   =================================================== */
+/* लाइट थीम वेरिएबल्स */
 :root[data-theme="light"] {
   --bg: #f0f2f5;
   --card: #ffffff;
@@ -71,6 +52,7 @@ html, body {
   --bubble-me: #fef3c7; /* लाइट अम्बर/गोल्ड */
   --bubble-them: #ffffff;
 }
+
 :root[data-theme="light"] body { background: #e5e7eb; }
 :root[data-theme="light"] .header,
 :root[data-theme="light"] .chat-header { background: #ffffff !important; }
@@ -101,34 +83,54 @@ html, body {
 :root[data-theme="light"] .online-avatar-name { color: #0f172a; }
 :root[data-theme="light"] .attach-menu-item { color: #0f172a; }
 :root[data-theme="light"] .settings-row { background: rgba(0,0,0,0.03); }
+/* ──────────────── [SECTION 01: VARIABLES] — END ──────────────────────── */
 
-/* ===================================================
-   SPLASH
-   =================================================== */
-#splashScreen {
-  position: fixed; inset: 0;
-  background: #090d10;
-  display: flex; align-items: center; justify-content: center;
-  z-index: 999999;
-  transition: opacity 0.4s ease, visibility 0.4s ease;
-}
-#splashScreen.hide { opacity: 0; visibility: hidden; pointer-events: none; }
-.splash-content { text-align: center; }
-.splash-logo { font-size: 56px; margin-bottom: 12px; animation: pulse 1.5s infinite; }
-.splash-title { font-size: 24px; font-weight: 900; letter-spacing: 0.5px; color: #f1f5f9; margin-bottom: 20px; }
-.splash-loader span {
-  display: inline-block; width: 10px; height: 10px;
-  background: #f59e0b; border-radius: 50%;
-  margin: 0 4px; animation: bounce 0.6s infinite alternate;
-}
-.splash-loader span:nth-child(2) { animation-delay: 0.2s; }
-.splash-loader span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes bounce { to { transform: translateY(-10px); opacity: 0.4; } }
-@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 
-/* ===================================================
-   SCREENS
-   =================================================== */
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 02: CSS RESET & BASE STYLES] — START
+   ───────────────────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+input, textarea {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+}
+
+[hidden], 
+#lobby[hidden], 
+#chatScreen[hidden], 
+#call[hidden], 
+.screen[hidden], 
+.modal-overlay[hidden], 
+#kidsQuizBox[hidden], 
+#kidsRiddleBox[hidden], 
+#kidsWhiteboardModal[hidden], 
+#kidsLudoBox[hidden],
+#voiceCallArea[hidden], 
+#funModeTray[hidden], 
+#kidsTictactoeBox[hidden] {
+  display: none !important;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .screen {
   position: fixed;
   inset: 0;
@@ -142,16 +144,45 @@ html, body {
 }
 
 #networkBanner {
-  position: fixed; top: 0; left: 0; width: 100%;
+  position: fixed; 
+  top: 0; left: 0; width: 100%;
   background: #dc2626; color: #fff;
   font-size: 12px; font-weight: 700;
   text-align: center; padding: 6px;
   z-index: 99999;
 }
+/* ──────────────── [SECTION 02: BASE STYLES] — END ─────────────────────── */
 
-/* ===================================================
-   HEADER
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 03: SPLASH SCREEN] — START
+   ───────────────────────────────────────────────────────────────────────── */
+#splashScreen {
+  position: fixed; inset: 0;
+  background: #090d10;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999999;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+#splashScreen.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+.splash-content { text-align: center; }
+.splash-logo { font-size: 56px; margin-bottom: 12px; animation: pulse 1.5s infinite; }
+.splash-title { font-size: 24px; font-weight: 900; letter-spacing: 0.5px; color: #f1f5f9; margin-bottom: 20px; }
+.splash-loader span {
+  display: inline-block; width: 10px; height: 10px;
+  background: var(--gold); border-radius: 50%;
+  margin: 0 4px; animation: bounce 0.6s infinite alternate;
+}
+.splash-loader span:nth-child(2) { animation-delay: 0.2s; }
+.splash-loader span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { to { transform: translateY(-10px); opacity: 0.4; } }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+/* ──────────────── [SECTION 03: SPLASH SCREEN] — END ───────────────────── */
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 04: MAIN APP HEADER] — START
+   ───────────────────────────────────────────────────────────────────────── */
 .header {
   padding: calc(12px + env(safe-area-inset-top, 24px)) 14px 12px;
   background: #11171f;
@@ -165,7 +196,7 @@ html, body {
 .user-title {
   font-size: 18px;
   font-weight: 900;
-  color: var(--gold); /* हेडर नाम को गोल्डन टच */
+  color: var(--gold);
   letter-spacing: 0.3px;
 }
 
@@ -221,10 +252,12 @@ html, body {
   transform: scale(0.92);
   background: rgba(37, 211, 102, 0.25) !important;
 }
+/* ──────────────── [SECTION 04: MAIN HEADER] — END ─────────────────────── */
 
-/* ===================================================
-   ONLINE STRIP
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 05: ONLINE USERS STRIP] — START
+   ───────────────────────────────────────────────────────────────────────── */
 .online-strip {
   display: flex;
   gap: 12px;
@@ -244,7 +277,7 @@ html, body {
 .online-avatar-circle {
   position: relative;
   width: 48px; height: 48px; border-radius: 50%;
-  background: linear-gradient(135deg, #10b981, #059669); /* स्टेटस ग्रीन ही सही है */
+  background: linear-gradient(135deg, #10b981, #059669);
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; font-weight: 900;
@@ -268,10 +301,12 @@ html, body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   text-align: center;
 }
+/* ──────────────── [SECTION 05: ONLINE STRIP] — END ────────────────────── */
 
-/* ===================================================
-   SEARCH & TABS
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 06: LOBBY SEARCH & TABS] — START
+   ───────────────────────────────────────────────────────────────────────── */
 .search-wrap {
   display: flex; align-items: center;
   background: var(--card);
@@ -303,10 +338,13 @@ html, body {
 .tab-btn.active-chat { background: var(--gold); color: #000; border-color: var(--gold); }
 .tab-btn.active-call { background: var(--c-call-tab); color: #fff; border-color: var(--c-call-tab); }
 .tab-content { flex: 1; overflow-y: auto; padding: 8px 14px 20px; }
+/* ──────────────── [SECTION 06: SEARCH & TABS] — END ───────────────────── */
 
-/* ===================================================
-   CONTACT CARD
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 07: CONTACT CARDS & CALL LOGS] — START
+   📌 फ़ॉन्ट साइज़ 16px, क्रिस्प व्हाइट नेम, गोल्ड टाइम, एमराल्ड ऑनलाइन
+   ───────────────────────────────────────────────────────────────────────── */
 .contact-card {
   display: flex;
   align-items: center;
@@ -317,33 +355,23 @@ html, body {
   border-radius: 14px;
   margin-bottom: 8px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 .contact-card:active { background: var(--card-hover); }
 .contact-card.pinned {
-  border-color: rgba(245,158,11,0.4);
-  background: linear-gradient(90deg, rgba(245,158,11,0.06), transparent 60%);
+  border-color: rgba(245, 158, 11, 0.4);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent 60%);
 }
 .contact-avatar {
-  width: 44px; height: 44px;
+  width: 46px; height: 46px;
   border-radius: 50%;
-  background: #334155;
+  background: #1e293b;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   position: relative;
-  overflow: visible;
-  border: 1px solid rgba(245, 197, 66, 0.2);
+  border: 1.5px solid rgba(245, 158, 11, 0.3);
 }
-.contact-avatar svg { width: 24px; height: 24px; fill: #94a3b8; }
-.avatar-initial { font-size: 17px; font-weight: 900; color: #fff; }
-.avatar-online-dot {
-  position: absolute;
-  bottom: -1px; right: -1px;
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  background: #10b981;
-  border: 2px solid var(--card);
-}
+.contact-avatar svg { width: 24px; height: 24px; fill: #cbd5e1; }
 .contact-content {
   flex: 1; display: flex;
   justify-content: space-between;
@@ -353,14 +381,19 @@ html, body {
 }
 .contact-left-col {
   display: flex; flex-direction: column;
-  gap: 2px; overflow: hidden;
+  gap: 3px; overflow: hidden;
   flex: 1; min-width: 0;
 }
+
+/* 🌟 संपर्क का नाम: स्पष्ट, 16px एवं प्रीमियम कंट्रास्ट */
 .contact-name {
-  font-size: 15px; font-weight: 800;
-  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: 0.2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
 .contact-last-msg {
   font-size: 13px;
   color: var(--text-muted);
@@ -372,31 +405,52 @@ html, body {
   align-items: flex-end; gap: 4px;
   flex-shrink: 0;
 }
-.msg-time-label { font-size: 10px; color: var(--text-muted); }
-.contact-live-status { font-size: 10px; color: var(--text-muted); }
-.contact-live-status.online { color: var(--success); font-weight: 700; }
+
+/* 🌟 मैसेज टाइम: 11px + वॉर्म गोल्ड टिंट */
+.msg-time-label { 
+  font-size: 11px; 
+  font-weight: 700;
+  color: #fbbf24; 
+  letter-spacing: 0.2px;
+}
+
+/* 🌟 लास्ट सीन एवं ऑनलाइन स्टेटस: 11px + वाइब्रेंट ग्रीन */
+.contact-live-status { 
+  font-size: 11px; 
+  font-weight: 600;
+  color: #94a3b8; 
+}
+.contact-live-status.online { 
+  color: #34d399; 
+  font-weight: 800; 
+  text-shadow: 0 0 8px rgba(52, 211, 153, 0.35);
+}
+
 .badge-unread {
   background: var(--gold);
   color: #000;
   font-size: 10px; font-weight: 900;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 10px;
   min-width: 20px;
   text-align: center;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
 }
+
 .empty-state { padding: 40px 20px; text-align: center; }
 .empty-emoji { font-size: 42px; margin-bottom: 10px; opacity: 0.6; }
 .empty-text { color: var(--text-muted); font-size: 13px; }
 
+/* कॉल लॉग बैज */
 .call-log-badge {
   font-size: 11px; font-weight: 700;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 6px;
   display: inline-block; margin-top: 2px;
 }
 .call-missed { background: rgba(244, 63, 94, 0.15); color: var(--danger); }
 .call-incoming { background: rgba(16, 185, 129, 0.15); color: var(--success); }
-.call-outgoing { background: rgba(245, 158, 11, 0.15); color: var(--gold); } /* आउटगोइंग कॉल गोल्ड */
+.call-outgoing { background: rgba(245, 158, 11, 0.15); color: var(--gold); }
 .call-action-btn {
   width: 36px; height: 36px; border-radius: 50%;
   background: rgba(255, 255, 255, 0.06);
@@ -408,10 +462,12 @@ html, body {
 }
 .call-action-btn:active { background: rgba(245, 158, 11, 0.15); border-color: var(--gold); color: var(--gold); }
 .call-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
+/* ──────────────── [SECTION 07: CONTACT CARDS] — END ────────────────────── */
 
-/* ===================================================
-   CHAT SCREEN
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 08: CHAT SCREEN & CHAT HEADER] — START
+   ───────────────────────────────────────────────────────────────────────── */
 #chatScreen {
   background: var(--bg, #090d10);
   z-index: 50;
@@ -464,7 +520,12 @@ html, body {
   flex-direction: column;
   gap: 8px;
 }
+/* ──────────────── [SECTION 08: CHAT HEADER] — END ─────────────────────── */
 
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 09: CHAT BUBBLES & INTERACTIONS] — START
+   ───────────────────────────────────────────────────────────────────────── */
 .chat-bubble {
   max-width: 78%;
   padding: 8px 12px;
@@ -482,13 +543,14 @@ html, body {
   background: var(--bubble-me);
   color: #fff;
   border-bottom-right-radius: 3px;
-  border: 1px solid rgba(245, 197, 66, 0.15); /* हल्का गोल्डन बॉर्डर */
+  border: 1px solid rgba(245, 197, 66, 0.2);
 }
 .chat-bubble.them {
   align-self: flex-start;
   background: var(--bubble-them);
   color: #fff;
   border-bottom-left-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 .chat-bubble.me::after {
   content: ''; position: absolute;
@@ -539,7 +601,6 @@ html, body {
   color: rgba(255, 255, 255, 0.5);
   margin-top: 4px;
 }
-:root[data-theme="light"] .chat-meta { color: rgba(0,0,0,0.45); }
 .tick-mark { font-size: 11px; font-weight: 900; }
 .tick-sent { color: #94a3b8; }
 .tick-delivered { color: #cbd5e1; }
@@ -557,7 +618,7 @@ html, body {
 .chat-reply-sender { font-weight: 800; color: var(--gold); margin-bottom: 2px; }
 .chat-reply-text { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* DATE SEPARATOR */
+/* दिनांक विभाजक */
 .date-separator {
   display: flex; justify-content: center;
   align-items: center;
@@ -569,12 +630,12 @@ html, body {
   padding: 3px 12px;
   border-radius: 12px;
   font-size: 11px; font-weight: 700;
-  color: var(--gold); /* डेट को गोल्डन टच */
+  color: var(--gold);
   letter-spacing: 0.3px;
   border: 1px solid rgba(245, 197, 66, 0.15);
 }
 
-/* BUBBLE REACTIONS */
+/* रिएक्शन्स */
 .bubble-reactions {
   display: flex; gap: 4px;
   margin-top: 5px;
@@ -600,10 +661,12 @@ html, body {
   font-size: 10px; font-weight: 800;
   color: var(--text-muted);
 }
+/* ──────────────── [SECTION 09: CHAT BUBBLES] — END ─────────────────────── */
 
-/* ===================================================
-   CHAT FOOTER
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 10: CHAT FOOTER & INPUT DOCK] — START
+   ───────────────────────────────────────────────────────────────────────── */
 .chat-footer {
   display: flex;
   flex-direction: column;
@@ -629,7 +692,6 @@ html, body {
   width: 100%; box-sizing: border-box;
   animation: slideDown 0.15s ease-out;
 }
-:root[data-theme="light"] .reply-preview-box { background: rgba(0,0,0,0.05); }
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
@@ -669,7 +731,6 @@ html, body {
   padding: 2px 10px;
   display: flex; align-items: center;
 }
-:root[data-theme="light"] .input-wrap { background: #f0f2f5; }
 .chat-input {
   width: 100%;
   min-height: 38px;
@@ -693,10 +754,10 @@ html, body {
   cursor: pointer; flex-shrink: 0;
 }
 .action-btn svg { width: 20px; height: 20px; fill: #000; }
-.action-btn.send-mode { background: var(--gold) !important; } /* सेंड बटन भी अब गोल्ड होगा */
+.action-btn.send-mode { background: var(--gold) !important; }
 .action-btn.send-mode svg { fill: #000 !important; }
 
-/* SCROLL FAB */
+/* स्क्रोल डाउन फ्लोटिंग बटन */
 .scroll-fab {
   position: absolute;
   bottom: 80px; right: 16px;
@@ -715,10 +776,12 @@ html, body {
   from { opacity: 0; transform: translateY(10px) scale(0.9); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+/* ──────────────── [SECTION 10: CHAT FOOTER] — END ──────────────────────── */
 
-/* ===================================================
-   LONG-PRESS MENU
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 11: LONG-PRESS CONTEXT MENU] — START
+   ───────────────────────────────────────────────────────────────────────── */
 .msg-long-press-menu {
   position: fixed; inset: 0;
   width: 100%; height: 100%;
@@ -766,7 +829,6 @@ html, body {
 .menu-item.danger { color: var(--danger); }
 .menu-item-ic { font-size: 16px; }
 
-/* REACTIONS ROW */
 .reactions-row {
   display: flex; justify-content: space-around;
   padding: 10px 8px;
@@ -782,10 +844,12 @@ html, body {
 }
 .reaction-pick-btn:active { transform: scale(1.25); background: rgba(245,158,11,0.3); }
 .reaction-pick-btn.mine { background: rgba(245,158,11,0.3); }
+/* ──────────────── [SECTION 11: LONG-PRESS MENU] — END ──────────────────── */
 
-/* ===================================================
-   ATTACH MENU & QUEUE & MEDIA VIEWER
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 12: ATTACH MENU, TRANSFER & MEDIA VIEWER] — START
+   ───────────────────────────────────────────────────────────────────────── */
 #attachMenu {
   position: absolute;
   bottom: 65px; left: 12px;
@@ -847,7 +911,7 @@ html, body {
   border-radius: 2px; overflow: hidden;
 }
 .transfer-item-fill {
-  height: 100%; background: var(--gold); /* प्रोग्रेस बार भी गोल्ड */
+  height: 100%; background: var(--gold);
   width: 0%; transition: width 0.2s;
 }
 
@@ -914,10 +978,12 @@ html, body {
   max-width: 100%; max-height: 100%;
   object-fit: contain;
 }
+/* ──────────────── [SECTION 12: MEDIA VIEWER] — END ────────────────────── */
 
-/* ===================================================
-   VOICE
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 13: VOICE NOTES & DOCK RECORDER] — START
+   ───────────────────────────────────────────────────────────────────────── */
 .voice-note-bubble { display: flex; align-items: center; gap: 10px; min-width: 180px; }
 .voice-play-circle {
   width: 36px; height: 36px; border-radius: 50%;
@@ -932,7 +998,7 @@ html, body {
   background: rgba(255,255,255,0.2);
   border-radius: 2px; cursor: pointer; margin-bottom: 4px;
 }
-.voice-progress-bar { height: 100%; background: var(--gold); width: 0%; border-radius: 2px; } /* वॉइस प्रोग्रेस भी गोल्ड */
+.voice-progress-bar { height: 100%; background: var(--gold); width: 0%; border-radius: 2px; }
 .voice-meta-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); }
 .voice-spd-btn { background: none; border: none; color: var(--gold); font-size: 10px; cursor: pointer; }
 
@@ -940,7 +1006,7 @@ html, body {
   position: absolute;
   bottom: 0; left: 0; right: 0;
   background: #11171f;
-  border-top: 2px solid var(--gold); /* हरा डॉक बॉर्डर गोल्ड किया गया */
+  border-top: 2px solid var(--gold);
   padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
   z-index: 90;
   display: flex;
@@ -977,15 +1043,17 @@ html, body {
 }
 .dock-btn-send {
   width: 36px; height: 36px; border-radius: 50%;
-  background: var(--gold); border: none; /* डॉक का सेंड बटन भी गोल्ड */
+  background: var(--gold); border: none;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
 .dock-btn-send svg { width: 18px; height: 18px; fill: #000; }
+/* ──────────────── [SECTION 13: VOICE NOTES] — END ──────────────────────── */
 
-/* ===================================================
-   CALL SCREEN
-   =================================================== */
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 14: AUDIO & VIDEO CALL SCREEN] — START
+   🎨 COLOR THEME: Dark Void (#090d10 / #000) & Gold Highlights (#f59e0b)
+   ───────────────────────────────────────────────────────────────────────── */
 .call-dialog {
   position: fixed; inset: 0;
   background: #090d10;
@@ -1046,7 +1114,7 @@ html, body {
 }
 .voice-avatar-ring {
   width: 120px; height: 120px; border-radius: 50%;
-  border: 2px solid var(--gold); /* वॉइस रिंग नीले से गोल्ड हो गया */
+  border: 2px solid var(--gold);
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 16px;
   animation: pulse 2s infinite;
@@ -1062,7 +1130,7 @@ html, body {
   width: 90px; height: 135px;
   border-radius: 12px;
   overflow: hidden;
-  border: 2px solid rgba(245, 197, 66, 0.4); /* PiP बॉर्डर को हल्का गोल्ड टोन */
+  border: 2px solid rgba(245, 197, 66, 0.4);
   z-index: 30; background: #000;
   transition: transform 0.2s, opacity 0.2s;
 }
@@ -1085,28 +1153,6 @@ html, body {
   width: 100%; height: 100%;
   top: 0; right: 0;
   border: none; border-radius: 0; z-index: 1;
-}
-
-/* PiP Mode Native */
-body.in-pip-mode #callTopBar,
-body.in-pip-mode #controlsBar,
-body.in-pip-mode #funModeTray,
-body.in-pip-mode #kidsQuizBox,
-body.in-pip-mode #kidsRiddleBox,
-body.in-pip-mode #kidsWhiteboardModal,
-body.in-pip-mode .pip-restore-btn {
-  display: none !important;
-}
-body.in-pip-mode .pip-wrap {
-  top: 8px !important;
-  right: 8px !important;
-  width: 60px !important;
-  height: 90px !important;
-  border-radius: 8px !important;
-}
-body.in-pip-mode #remoteGrid {
-  width: 100vw !important;
-  height: 100vh !important;
 }
 
 .call-top-bar {
@@ -1179,10 +1225,13 @@ body.in-pip-mode #remoteGrid {
 .ctl-txt { font-size: 10px; font-weight: 700; color: #94a3b8; }
 
 .fade-out { opacity: 0; pointer-events: none; }
+/* ──────────────── [SECTION 14: CALL SCREEN] — END ──────────────────────── */
 
-/* ===================================================
-   MODALS 
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 15: MODALS & POPUPS] — START
+   🎨 COLOR THEME: Charcoal Modal Box with Gold Accent Buttons
+   ───────────────────────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.75);
@@ -1200,7 +1249,7 @@ body.in-pip-mode #remoteGrid {
   text-align: center;
   box-shadow: 0 10px 30px rgba(0,0,0,0.8);
 }
-.modal-box h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; color: var(--gold); } /* हेडिंग गोल्ड */
+.modal-box h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; color: var(--gold); }
 .modal-box p { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
 .modal-input {
   width: 100%; height: 42px;
@@ -1252,14 +1301,14 @@ body.in-pip-mode #remoteGrid {
 .perm-item { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text); }
 .perm-ic { font-size: 20px; }
 
-/* THEME TOGGLE */
+/* थीम सेटिंग्स एवं टॉगल */
 .theme-toggle-btn {
   width: 44px; height: 32px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
   font-size: 16px; cursor: pointer;
-  color: var(--gold); /* टॉगल बटन में गोल्ड हिंट */
+  color: var(--gold);
 }
 .settings-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -1280,7 +1329,7 @@ body.in-pip-mode #remoteGrid {
   outline: none;
 }
 
-/* PHONE CONTACTS PICKER */
+/* फ़ोन संपर्क पिकर मोडल */
 .phone-contacts-box {
   max-width: 380px !important;
   max-height: 85vh;
@@ -1346,17 +1395,19 @@ body.in-pip-mode #remoteGrid {
   border-color: var(--gold);
 }
 .pc-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* ──────────────── [SECTION 15: MODALS] — END ───────────────────────────── */
 
-/* ===================================================
-   TOAST 
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 16: TOAST NOTIFICATIONS] — START
+   ───────────────────────────────────────────────────────────────────────── */
 #toast {
   position: fixed;
   bottom: max(80px, calc(env(safe-area-inset-bottom, 20px) + 60px));
   left: 50%;
   transform: translateX(-50%) translateY(20px);
   background: rgba(15, 23, 42, 0.95);
-  border: 1px solid var(--gold); /* टोस्ट बॉर्डर को गोल्डन बनाया */
+  border: 1px solid var(--gold);
   color: #fff;
   padding: 8px 18px;
   border-radius: 20px;
@@ -1375,10 +1426,13 @@ body.in-pip-mode #remoteGrid {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* ──────────────── [SECTION 16: TOAST] — END ────────────────────────────── */
 
-/* ===================================================
-   FUN MODE & QUIZ (NEW QUIZ LAYOUT)
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟨 [SECTION 17: GAME MODULE — FUN MODE TRAY] — START
+   🎨 COLOR THEME: Amber Gold & Charcoal
+   ───────────────────────────────────────────────────────────────────────── */
 .fun-tray-modal {
   position: absolute; inset: 0;
   background: rgba(0,0,0,0.6);
@@ -1390,7 +1444,7 @@ body.in-pip-mode #remoteGrid {
   background: #1e293b;
   border-radius: 20px 20px 0 0;
   padding: 16px 20px max(24px, env(safe-area-inset-bottom, 24px));
-  border-top: 1px solid var(--gold); /* फन मोड ट्रे का बॉर्डर गोल्ड */
+  border-top: 1px solid var(--gold);
 }
 .fun-tray-header {
   display: flex; justify-content: space-between;
@@ -1412,8 +1466,13 @@ body.in-pip-mode #remoteGrid {
 .tray-item:active { background: rgba(245, 158, 11, 0.2); border-color: var(--gold); }
 .tray-icon { font-size: 26px; }
 .tray-label { font-size: 11px; font-weight: 700; }
+/* ──────────────── [SECTION 17: FUN MODE TRAY] — END ────────────────────── */
 
-/* 🔥 क्विज़ बॉक्स को रिडल बॉक्स जैसा लंबा (Tall) बनाना */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟨 [SECTION 18: GAME MODULE — KIDS QUIZ] — START
+   🎨 COLOR THEME: Vibrant Gold (#f59e0b)
+   ───────────────────────────────────────────────────────────────────────── */
 .quiz-floating-box, .ttt-floating-box {
   position: absolute;
   bottom: 85px; left: 14px; right: 14px;
@@ -1449,7 +1508,6 @@ body.in-pip-mode #remoteGrid {
 }
 .quiz-timer-bar { width: 100%; height: 100%; background: var(--gold); transition: width 1s linear; }
 
-/* 🔥 क्विज़ के सवाल (Question) को रिडल की तरह गोल्डन और बड़ा बनाना */
 .quiz-question { 
   font-size: 18px !important; 
   font-weight: 800 !important; 
@@ -1460,7 +1518,6 @@ body.in-pip-mode #remoteGrid {
   text-align: center; 
 }
 
-/* 🔥 क्विज़ के विकल्पों (Options) को नीचे धकेलने के लिए */
 .quiz-options-grid { 
   display: grid; 
   grid-template-columns: 1fr 1fr; 
@@ -1484,10 +1541,13 @@ body.in-pip-mode #remoteGrid {
   font-size: 12px; font-weight: 800;
   cursor: pointer;
 }
+/* ──────────────── [SECTION 18: KIDS QUIZ] — END ────────────────────────── */
 
-/* ===================================================
-   RIDDLE UI
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟨 [SECTION 19: GAME MODULE — RIDDLE & GK] — START
+   🎨 COLOR THEME: Crimson Buzzer (#dc2626) & Gold Highlight (#f59e0b)
+   ───────────────────────────────────────────────────────────────────────── */
 .riddle-box-extended {
   min-height: 380px; 
   display: flex;
@@ -1516,6 +1576,7 @@ body.in-pip-mode #remoteGrid {
   margin-top: 10px;
   margin-bottom: 20px;
   color: var(--gold);
+  text-align: center;
 }
 .riddle-buzzer-wrap {
   margin-top: auto; 
@@ -1584,10 +1645,13 @@ body.in-pip-mode #remoteGrid {
 .eval-btn:active { transform: scale(0.95); }
 .eval-btn-right { background: var(--success); color: #fff; }
 .eval-btn-wrong { background: var(--danger); color: #fff; }
+/* ──────────────── [SECTION 19: RIDDLE & GK] — END ──────────────────────── */
 
-/* ===================================================
-   TIC-TAC-TOE & WHITEBOARD
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟨 [SECTION 20: GAME MODULE — TIC-TAC-TOE] — START
+   🎨 COLOR THEME: Cyan X (#38bdf8) & Rose O (#f43f5e)
+   ───────────────────────────────────────────────────────────────────────── */
 .ttt-status-bar { font-size: 12px; font-weight: 700; text-align: center; margin-bottom: 10px; color: var(--text-muted); }
 .ttt-status-bar.my-turn { color: var(--success); }
 .ttt-status-bar.their-turn { color: var(--gold); }
@@ -1605,7 +1669,13 @@ body.in-pip-mode #remoteGrid {
 .ttt-cell.val-x { color: #38bdf8; }
 .ttt-cell.val-o { color: var(--danger); }
 .ttt-cell.win-highlight { background: rgba(245,158,11,0.25); border-color: var(--gold); }
+/* ──────────────── [SECTION 20: TIC-TAC-TOE] — END ──────────────────────── */
 
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟨 [SECTION 21: GAME MODULE — LIVE WHITEBOARD] — START
+   🎨 COLOR THEME: Canvas Pure Black (#05070a) & Multi-Color Inks
+   ───────────────────────────────────────────────────────────────────────── */
 .whiteboard-overlay {
   position: absolute; inset: 0;
   background: #05070a;
@@ -1643,73 +1713,13 @@ body.in-pip-mode #remoteGrid {
     linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
 }
+/* ──────────────── [SECTION 21: WHITEBOARD] — END ───────────────────────── */
 
-/* ===================================================
-   RESPONSIVE
-   =================================================== */
-@media (max-width: 380px) {
-  .online-avatar-circle { width: 44px; height: 44px; font-size: 17px; }
-  .online-avatar-name { max-width: 52px; font-size: 9px; }
-  .contact-name { font-size: 14px; }
-  .pc-name { font-size: 13px; }
-  .fun-tray-grid { grid-template-columns: repeat(2, 1fr); }
-}
 
-/* ===================================================
-   🔥 APK BUNDLED-CSS OVERRIDE
-   =================================================== */
-.header,
-.chat-header {
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  padding: calc(12px + env(safe-area-inset-top, 24px)) 14px 12px !important;
-  background: #11171f !important;
-  border-bottom: 1px solid var(--line) !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  flex-shrink: 0 !important;
-  position: relative !important;
-  z-index: 60 !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.35) !important;
-}
-
-.header .user-title,
-.chat-header #chatTargetName {
-  color: var(--gold) !important; /* हेडर नाम ओवरराइड में भी गोल्ड */
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-.chat-header #chatTargetStatus {
-  color: var(--text-muted) !important;
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-.chat-header .contact-avatar,
-.chat-header-actions,
-.chat-header > div {
-  display: flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-:root[data-theme="light"] .header,
-:root[data-theme="light"] .chat-header { background: #ffffff !important; }
-:root[data-theme="light"] .header .user-title,
-:root[data-theme="light"] .chat-header #chatTargetName { color: #0f172a !important; }
-:root[data-theme="light"] .chat-header #chatTargetStatus { color: #64748b !important; }
-
-/* ========================================================================= */
-/* 🟣🟣🟣 [LUDO MODULE START (शुरू): style.css] 🟣🟣🟣 */
-/* ========================================================================= */
-
+/* ─────────────────────────────────────────────────────────────────────────
+   🟨 [SECTION 22: GAME MODULE — LUDO ENGINE] — START
+   🎨 COLOR THEME: Red, Green, Yellow, Blue Quadrants + Metallic Pins
+   ───────────────────────────────────────────────────────────────────────── */
 .ludo-box-extended {
   background: #0f172a;
   padding: 12px 8px; 
@@ -1835,8 +1845,90 @@ body.in-pip-mode #remoteGrid {
   color: #2b1608; border: none; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.4); text-transform: uppercase;
 }
 #ludoRollBtn:disabled { opacity: 0.4; filter: saturate(0.4); cursor: not-allowed; }
-/* 🟣🟣🟣 [LUDO MODULE END (समाप्त): style.css] 🟣🟣🟣 */
+/* ──────────────── [SECTION 22: LUDO ENGINE] — END ──────────────────────── */
 
-/* ===================================================
-   🔴🔴🔴 [END (समाप्त): style.css — v1.24.2] 🔴🔴🔴
-   =================================================== */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 23: RESPONSIVE MEDIA QUERIES] — START
+   ───────────────────────────────────────────────────────────────────────── */
+@media (max-width: 380px) {
+  .online-avatar-circle { width: 44px; height: 44px; font-size: 17px; }
+  .online-avatar-name { max-width: 52px; font-size: 9px; }
+  .contact-name { font-size: 15px; }
+  .pc-name { font-size: 13px; }
+  .fun-tray-grid { grid-template-columns: repeat(2, 1fr); }
+  .quiz-floating-box, .riddle-box-extended { min-height: 350px !important; }
+}
+/* ──────────────── [SECTION 23: RESPONSIVE] — END ───────────────────────── */
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 24: NATIVE APK & PIP OVERRIDES] — START
+   ───────────────────────────────────────────────────────────────────────── */
+body.in-pip-mode #callTopBar,
+body.in-pip-mode #controlsBar,
+body.in-pip-mode #funModeTray,
+body.in-pip-mode #kidsQuizBox,
+body.in-pip-mode #kidsRiddleBox,
+body.in-pip-mode #kidsTictactoeBox,
+body.in-pip-mode #kidsLudoBox,
+body.in-pip-mode #kidsWhiteboardModal,
+body.in-pip-mode .pip-restore-btn {
+  display: none !important;
+}
+body.in-pip-mode .pip-wrap {
+  top: 8px !important; right: 8px !important;
+  width: 60px !important; height: 90px !important;
+  border-radius: 8px !important;
+}
+body.in-pip-mode #remoteGrid { width: 100vw !important; height: 100vh !important; }
+
+/* APK Header Protected Overrides */
+.header,
+.chat-header {
+  height: auto !important; min-height: 0 !important; max-height: none !important;
+  padding: calc(12px + env(safe-area-inset-top, 24px)) 14px 12px !important;
+  background: #11171f !important; border-bottom: 1px solid var(--line) !important;
+  display: flex !important; align-items: center !important; justify-content: space-between !important;
+  flex-shrink: 0 !important; position: relative !important; z-index: 60 !important;
+  visibility: visible !important; opacity: 1 !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35) !important;
+}
+.header .user-title,
+.chat-header #chatTargetName {
+  color: var(--gold) !important;
+  display: block !important; visibility: visible !important; opacity: 1 !important;
+}
+.chat-header #chatTargetStatus {
+  color: var(--text-muted) !important;
+  display: block !important; visibility: visible !important; opacity: 1 !important;
+}
+.chat-header .contact-avatar,
+.chat-header-actions,
+.chat-header > div {
+  display: flex !important; visibility: visible !important; opacity: 1 !important;
+}
+
+:root[data-theme="light"] .header,
+:root[data-theme="light"] .chat-header { background: #ffffff !important; }
+:root[data-theme="light"] .header .user-title,
+:root[data-theme="light"] .chat-header #chatTargetName { color: #0f172a !important; }
+:root[data-theme="light"] .chat-header #chatTargetStatus { color: #64748b !important; }
+/* ──────────────── [SECTION 24: APK OVERRIDES] — END ────────────────────── */
+
+
+/* =========================================================================
+   🔴🔴🔴 [END: style.css — v1.24.3 (PART 2)] 🔴🔴🔴
+   =========================================================================
+   📌 QUICK COLOR REFERENCE CHEATSHEET (रंगों का त्वरित संदर्भ):
+   -------------------------------------------------------------------------
+   • .contact-name          : #f8fafc (16px, 800 weight) — Crisp Snow White
+   • .msg-time-label        : #fbbf24 (11px, 700 weight) — Warm Amber Gold
+   • .contact-live-status   : #94a3b8 (11px, Slate Grey) | .online: #34d399 (Emerald Green)
+   • .badge-unread          : #f59e0b (Pure Gold) on #000 (Black text)
+   • .riddle-buzzer-btn     : #dc2626 (Bright Red Pulse)
+   • .ttt-cell.val-x        : #38bdf8 (Cyan) | .val-o: #f43f5e (Rose Red)
+   • .chat-bubble.me        : #2c1e09 (Dark Roasted Gold)
+   • .chat-bubble.them      : #1f2c34 (WhatsApp Deep Teal-Black)
+   • #ludoBoard             : Full 15x15 Quadrants (Red, Green, Yellow, Blue)
+   ========================================================================= */
