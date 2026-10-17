@@ -1,13 +1,49 @@
-/* =========================================================================
-   🟢🟢🟢 [PART 1 OF 3 — START (शुरू): app.js v1.24.1] 🟢🟢🟢
-   Configuration, State, Native Bridge, Ghost-User Fix, Presence & Lobby
-   ========================================================================= */
+/* ═════════════════════════════════════════════════════════════════════════
+   📦 app.js v1.24.1 — REFACTORED (Comments + Firebase PIN + Network Reconnect)
+   📅 Structure:
+      1A → Config / Native / DOM / Translations / State
+      1B → Presence / Lobby / Admin PIN (Firebase) / Call Logs / Contacts
+      2A → Long-press / Reactions / Chat Engine / Ticks
+      2B → Media / File transfer / Voice Dock / Location / VCF
+      3A → Call Engine / WebRTC / Controls / Network Reconnect
+      3B → Init / Back button / OTA / Deep links
+      4  → Fun Mode & Games (Quiz, Riddle, Whiteboard, TicTacToe, Ludo)
+   ═════════════════════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 01: IMPORTS & FIREBASE SDK] — START
+   📌 क्या: Firebase v10.12.0 से सभी ज़रूरी functions import
+   🔗 कहाँ से: app.js का सबसे पहला executable code
+   ⚠️ डिपेंड: कोई नहीं
+   ═══════════════════════════════════════════════════════════════════════ */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+/* ───────── 🟦 [SECTION 01: IMPORTS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 02: GLOBAL CONSTANTS] — START
+   📌 क्या: App version + APK download URL
+   🔗 कहाँ से: checkWebOtaUpdate(), WhatsApp share button
+   ⚠️ डिपेंड: कोई नहीं
+   ═══════════════════════════════════════════════════════════════════════ */
+
 const CURRENT_APP_VERSION = "1.24.1";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
+
+/* ───────── 🟦 [SECTION 02: GLOBAL CONSTANTS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 03: OTA CACHE CLEANUP] — START
+   📌 क्या: पुराने/corrupt OTA cached JS/CSS को localStorage से हटाता है
+           अगर version flag है लेकिन actual JS/CSS खाली है
+   🔗 कहाँ से: App boot पर स्वतः चलता है
+   ⚠️ डिपेंड: localStorage
+   ═══════════════════════════════════════════════════════════════════════ */
 
 try {
   const cachedJs = localStorage.getItem('ota_cached_js');
@@ -21,7 +57,16 @@ try {
   }
 } catch(e) {}
 
-// Dynamic Capacitor Helpers
+/* ───────── 🟦 [SECTION 03: OTA CACHE CLEANUP] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 04: NATIVE CAPACITOR BRIDGE HELPERS] — START
+   📌 क्या: Capacitor plugin को safe तरीके से access करने के helpers
+   🔗 कहाँ से: isNativeApp(), setupNativePushListeners(), getAppPlugin()
+   ⚠️ डिपेंड: window.Capacitor (optional)
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function getCapacitor() {
   return window.Capacitor || null;
 }
@@ -42,7 +87,17 @@ function isNativeApp() {
   return false;
 }
 
-// --- पॉइंट #4: Android PiP Mode से वापस आने या जाने पर UI को एडजस्ट करने का ग्लोबल फंक्शन ---
+/* ───────── 🟦 [SECTION 04: NATIVE BRIDGE HELPERS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 05: PiP MODE UI HANDLER] — START
+   📌 क्या: Android PiP (Picture-in-Picture) में जाने/वापस आने पर
+           body को class देता है ताकि CSS adjust हो सके
+   🔗 कहाँ से: Native layer से window.onPipModeChanged(bool) call होता है
+   ⚠️ डिपेंड: CSS class .in-pip-mode
+   ═══════════════════════════════════════════════════════════════════════ */
+
 window.onPipModeChanged = function(isInPipMode) {
   if (isInPipMode) {
     document.body.classList.add('in-pip-mode');
@@ -51,7 +106,19 @@ window.onPipModeChanged = function(isInPipMode) {
   }
 };
 
-// Firebase & WebRTC Setup
+/* ───────── 🟦 [SECTION 05: PiP MODE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 06: FIREBASE INIT + CORE CONFIG] — START
+   📌 क्या: Firebase app/database initialize, VAPID key, ICE servers
+   🔗 कहाँ से: पूरी app का सारा Firebase call इसी db पर जाता है
+   ⚠️ डिपेंड: Firebase project chess-e4910
+   🔥 नोट: ADMIN_SECRET_PIN यहाँ से हटा दिया गया है।
+           अब PIN Firebase (admin_config/pin) से पढ़ा जाएगा।
+           देखें SECTION 1B — verifyAdminPinAsync()
+   ═══════════════════════════════════════════════════════════════════════ */
+
 const firebaseConfig = {
   apiKey: "AIzaSyBg1VC0cd1FmGiXTkMvFFG-eSL46FmgtZU",
   authDomain: "chess-e4910.firebaseapp.com",
@@ -65,8 +132,8 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 const VAPID_KEY = "BP5A9KX5MNPnhmwSm_lqNcO9I52Nhwprf7uknXmAiXOZmoO2jDk2dTNUhUtZ7XTv9qxM2Osz7g5KAxsO6afD7Ro";
-const ADMIN_SECRET_PIN = "1990";
 
+// 🌐 STUN/TURN servers — WebRTC के लिए
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -76,6 +143,16 @@ const ICE_SERVERS = {
   ],
   iceCandidatePoolSize: 10
 };
+
+/* ───────── 🟦 [SECTION 06: FIREBASE INIT] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 07: DOM ELEMENT REFS] — START
+   📌 क्या: सभी major screen / dialog / button elements को एक बार cache
+   🔗 कहाँ से: पूरी app में इस्तेमाल (lobbyScreen, chatScreen, callScreen आदि)
+   ⚠️ डिपेंड: index.html में ये IDs मौजूद होनी चाहिए
+   ═══════════════════════════════════════════════════════════════════════ */
 
 const $ = id => document.getElementById(id);
 const lobbyScreen = $('lobby'), callScreen = $('call'), chatScreen = $('chatScreen');
@@ -87,7 +164,17 @@ const pipRestoreBtn = $('pipRestoreBtn');
 const chatInput = $('chatInput'), actionBtn = $('actionBtn'), micSvg = $('micSvg'), sendSvg = $('sendSvg');
 const networkBanner = $('networkBanner'), searchInput = $('searchInput');
 
-// ✅ FIX: नाम लिखने वाले बॉक्स में हिंदी कीबोर्ड और सिंगल-टैप अनलॉक करें
+/* ───────── 🟦 [SECTION 07: DOM REFS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 08: NAME INPUT ATTRIBUTES FIX] — START
+   📌 क्या: नाम वाले input से autocorrect/spellcheck/etc हटाता है
+           ताकि हिंदी कीबोर्ड और single-tap सही काम करे
+   🔗 कहाँ से: App boot पर स्वतः
+   ⚠️ डिपेंड: nameInput, editNameInput IDs
+   ═══════════════════════════════════════════════════════════════════════ */
+
 ['nameInput', 'editNameInput'].forEach(id => {
   const el = $(id);
   if (el) {
@@ -98,7 +185,16 @@ const networkBanner = $('networkBanner'), searchInput = $('searchInput');
   }
 });
 
-// Translations
+/* ───────── 🟦 [SECTION 08: NAME INPUT FIX] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 09: TRANSLATIONS (hi / en)] — START
+   📌 क्या: दोनों भाषाओं के सभी UI strings
+   🔗 कहाँ से: applyLanguage() इसका उपयोग करता है
+   ⚠️ डिपेंड: कोई नहीं
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let currentLang = localStorage.getItem('vc_lang') || 'hi';
 const translations = {
   hi: {
@@ -130,6 +226,16 @@ const translations = {
     phoneContacts: "📱 Phone Contacts", searchContact: "Search name or number...", sendSelected: "Send Selected"
   }
 };
+
+/* ───────── 🟦 [SECTION 09: TRANSLATIONS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 10: LANGUAGE APPLY] — START
+   📌 क्या: चुनी हुई भाषा के अनुसार सभी UI elements का text set करता है
+   🔗 कहाँ से: langSelect dropdown, initApp()
+   ⚠️ डिपेंड: translations, सभी UI element IDs
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function applyLanguage(lang) {
   currentLang = lang;
@@ -163,20 +269,34 @@ function applyLanguage(lang) {
 }
 if ($('langSelect')) $('langSelect').onchange = (e) => applyLanguage(e.target.value);
 
-// User & Call States
+/* ───────── 🟦 [SECTION 10: LANGUAGE APPLY] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 11: USER & CALL STATE VARIABLES] — START
+   📌 क्या: पूरी app का runtime state — user identity, chat state,
+           call state, media state, quality state
+   🔗 कहाँ से: लगभग हर function इन variables को पढ़ता/लिखता है
+   ⚠️ डिपेंड: localStorage (persist), Firebase (sync)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// 👤 Current user identity (localStorage से restore होती है)
 let myUserId = localStorage.getItem('vc_user_id') || '';
 let myUserName = localStorage.getItem('vc_user_name') || '';
 let myFcmToken = localStorage.getItem('vc_fcm_token') || null;
 
+// 👥 Lobby data (Firebase से live sync होता है)
 let allOnlineUsers = {};
 let latestChatSnippets = {};
 let unreadCounts = {};
 let allCallLogs = [];
 
+// 📌 Chat pin/archive flags (per-user localStorage)
 let pinnedChats = {};
 let archivedChats = {};
 let currentTheme = localStorage.getItem('vc_theme') || 'dark';
 
+// 🧊 Cold-start cache restore (offline-first UX)
 try {
   allOnlineUsers = JSON.parse(localStorage.getItem('cached_users') || '{}');
   latestChatSnippets = JSON.parse(localStorage.getItem('cached_snippets') || '{}');
@@ -188,21 +308,25 @@ try {
   }
 } catch(e) {}
 
+// 🎨 Theme apply helper
 function applyTheme(theme) {
   currentTheme = theme;
   localStorage.setItem('vc_theme', theme);
   document.documentElement.setAttribute('data-theme', theme);
 }
 
+// 🏷️ Header में नाम दिखाना + Admin button visibility
 if (myUserName) {
   myHeaderName.textContent = myUserName;
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
 
+// 🎥 Media & call state
 let localStream = null, activeCallId = null;
 let currentChatTargetId = null, currentChatTargetName = null;
 let currentCallType = 'outgoing', currentCallTargetId = null, currentCallTargetName = null;
 
+// 🎛️ Call control flags
 let isCaller = false, callStartTime = 0, timerTimer = null, facingMode = 'user';
 let micEnabled = true, camEnabled = true, speakerEnabled = true, isCallConnected = false;
 let isAudioOnlyCall = false;
@@ -215,7 +339,7 @@ let isHangingUp = false, typingTimeout = null;
 let ignoreBackUntil = 0;
 let callJoinedViaDirectAccept = false;
 
-// Media States
+// 📦 Media transfer state (P2P file sharing)
 let activeTransfers = {};
 let mediaDataChannels = {};
 let mediaPeerConnections = {};
@@ -227,9 +351,21 @@ const DIRECT_SEND_MAX_SIZE = 3.5 * 1024 * 1024;
 const BUFFER_HIGH_THRESHOLD = 8 * 1024 * 1024;
 const BUFFER_LOW_THRESHOLD = 1 * 1024 * 1024;
 
+// 🔐 Permission callbacks tracking
 let permissionCallbackCounter = 0;
 let permissionCallbacks = {};
 let splashHidden = false;
+
+/* ───────── 🟦 [SECTION 11: STATE VARIABLES] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 12: SPLASH & NATIVE AUDIO HELPERS] — START
+   📌 क्या: Splash screen hide करना, Native ringing/audio mode/speaker,
+           lock detect, phone contacts load
+   🔗 कहाँ से: App init, call lifecycle
+   ⚠️ डिपेंड: window.AndroidAudio (native bridge, optional)
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function hideSplashScreen() {
   if (splashHidden) return;
@@ -288,6 +424,17 @@ async function loadPhoneContacts() {
     } else { resolve([]); }
   });
 }
+
+/* ───────── 🟦 [SECTION 12: SPLASH & NATIVE HELPERS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 13: MEDIA SAVE HELPERS] — START
+   📌 क्या: फ़ाइल का सही extension guarantee, Android Downloads में सेव,
+           Web fallback (a.download), VCF contact open
+   🔗 कहाँ से: autoSaveMediaToDownloads(), media bubbles, VCF messages
+   ⚠️ डिपेंड: window.AndroidAudio.saveMediaToDownloads (native)
+   ═══════════════════════════════════════════════════════════════════════ */
 
 // ✅ FIX: फ़ाइल का सही एक्सटेंशन सुनिश्चित करें ताकि Downloads फोल्डर में इमेज/फ़ाइल सही से खुले
 function ensureFileExtension(fileName, mimeType, base64Data) {
@@ -374,6 +521,18 @@ function openContactVcfNative(base64Vcf, fileName) {
   return false;
 }
 
+/* ───────── 🟦 [SECTION 13: MEDIA SAVE HELPERS] — END ───────── */
+
+/* ═══ यहाँ BATCH 1A खत्म होता है ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 14: PERMISSIONS FLOW (NATIVE + WEB)] — START
+   📌 क्या: Native (Android) या Web दोनों में सभी permissions मांगना —
+           camera, mic, notification, etc.
+   🔗 कहाँ से: grantPermsBtn, recheckPermsBtn, runFullPermissionFlow()
+   ⚠️ डिपेंड: window.AndroidAudio.requestAllPermissions (native),
+              window.__onPermissionResult (native callback)
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function requestAllPermissionsNative() {
   return new Promise((resolve) => {
     if (!window.AndroidAudio || typeof window.AndroidAudio.requestAllPermissions !== 'function') {
@@ -393,6 +552,7 @@ function requestAllPermissionsNative() {
   });
 }
 
+// Native layer इस global function को call करता है जब सारी permissions का result आता है
 window.__onPermissionResult = function(callbackId, allGranted, deniedList) {
   try {
     const cb = permissionCallbacks[callbackId];
@@ -436,7 +596,18 @@ function openAppSettingsNative() {
   }
 }
 
-// Push Token Syncing
+/* ───────── 🟦 [SECTION 14: PERMISSIONS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 15: PUSH NOTIFICATION & FCM TOKEN SYNC] — START
+   📌 क्या: Native Capacitor Push plugin से FCM token प्राप्त करना और
+           Firebase में `users/{uid}/fcmToken` पर save करना
+   🔗 कहाँ से: initApp() → setupNativePushListeners(), requestNotificationPermission()
+   ⚠️ डिपेंड: getPushPlugin(), myUserId, db
+   🎯 Trigger: Native push plugin से 'registration' event
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function waitForPushPlugin(maxAttempts = 20) {
   for (let i = 0; i < maxAttempts; i++) {
     const push = getPushPlugin();
@@ -519,7 +690,52 @@ async function setupNativePushListeners() {
   }
 }
 
-// Sounds & Ringtones
+// Web FCM registration (browser notification)
+async function requestNotificationPermission() {
+  if (isNativeApp()) {
+    const push = await waitForPushPlugin(10);
+    if (!push) return;
+    try {
+      let perm = await push.checkPermissions();
+      if (perm.receive !== 'granted') perm = await push.requestPermissions();
+      if (perm.receive === 'granted') await push.register();
+    } catch(e) {}
+    return;
+  }
+
+  try {
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return;
+    await navigator.serviceWorker.register('./firebase-messaging-sw.js', { updateViaCache: 'none' });
+    const swReg = await navigator.serviceWorker.ready;
+    const { getMessaging, getToken } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js");
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+    if (token) {
+      await saveFcmTokenToFirebase(token);
+    }
+  } catch(err) {}
+}
+
+async function runFullPermissionFlow() {
+  toast(currentLang === 'hi' ? '🛡️ अनुमतियाँ जाँची जा रही हैं...' : '🛡️ Requesting permissions...');
+  const result = await requestAllPermissionsNative();
+  try { await requestNotificationPermission(); } catch(e) {}
+  return result.allGranted;
+}
+
+/* ───────── 🟦 [SECTION 15: PUSH & FCM] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 16: SOUNDS & RINGTONES (Web Audio API)] — START
+   📌 क्या: Web Audio API से beep/tick/cheer/oops/ringing बजाना
+   🔗 कहाँ से: chat send/receive, quiz जीतना/हारना, incoming call, outgoing call
+   ⚠️ डिपेंड: audioCtx (lazy init), browser autoplay policy (pointerdown unlock)
+   🎯 सभी audio HTML5 Audio या Web Audio API
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let audioCtx = null, outgoingRingTimer = null;
 
 function ensureAudioContext() {
@@ -593,7 +809,7 @@ function playBeepTone() {
     osc.frequency.setValueAtTime(440, ctx.currentTime); osc.type = 'sine';
     gain.gain.setValueAtTime(0.35, ctx.currentTime);
     gain.gain.setValueAtTime(0.35, ctx.currentTime + 1.0);
-    gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(); osc.stop(ctx.currentTime + 1.2);
   } catch(e) {}
@@ -609,7 +825,17 @@ function stopIncomingRingtone() { stopNativeRinging(); }
 function stopAllCallTones() { stopOutgoingCallTone(); stopNativeRinging(); }
 document.addEventListener('pointerdown', () => { ensureAudioContext(); }, {passive:true});
 
-// Utilities
+/* ───────── 🟦 [SECTION 16: SOUNDS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 17: UTILITY HELPERS] — START
+   📌 क्या: toast, safe HTML escape, name check, time/date format,
+           file icon, call notification clear, media acquire
+   🔗 कहाँ से: लगभग पूरी app
+   ⚠️ डिपेंड: DOM elements (#toast etc.)
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2600);
@@ -680,39 +906,17 @@ async function acquireCallMedia(audioOnly = false) {
   }
 }
 
-async function requestNotificationPermission() {
-  if (isNativeApp()) {
-    const push = await waitForPushPlugin(10);
-    if (!push) return;
-    try {
-      let perm = await push.checkPermissions();
-      if (perm.receive !== 'granted') perm = await push.requestPermissions();
-      if (perm.receive === 'granted') await push.register();
-    } catch(e) {}
-    return;
-  }
+/* ───────── 🟦 [SECTION 17: UTILS] — END ───────── */
 
-  try {
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') return;
-    await navigator.serviceWorker.register('./firebase-messaging-sw.js', { updateViaCache: 'none' });
-    const swReg = await navigator.serviceWorker.ready;
-    const { getMessaging, getToken } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js");
-    const messaging = getMessaging(app);
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
-    if (token) {
-      await saveFcmTokenToFirebase(token);
-    }
-  } catch(err) {}
-}
 
-async function runFullPermissionFlow() {
-  toast(currentLang === 'hi' ? '🛡️ अनुमतियाँ जाँची जा रही हैं...' : '🛡️ Requesting permissions...');
-  const result = await requestAllPermissionsNative();
-  try { await requestNotificationPermission(); } catch(e) {}
-  return result.allGranted;
-}
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 18: INCOMING CALL HANDLERS] — START
+   📌 क्या: Push notification से आई incoming call दिखाना, direct accept
+           (notification accept बटन), native launch intent पढ़ना
+   🔗 कहाँ से: setupNativePushListeners, checkNativeLaunchIntent, listenForIncoming
+   ⚠️ डिपेंड: activeCallId, incomingDialog, Firebase user_inbox
+   🎯 पूरी incoming call entry-point chain
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function handleIncomingCallNotification(data, isFromForegroundListener = false) {
   if (!data || !data.callId) return;
@@ -765,6 +969,7 @@ async function handleDirectAcceptCall(callId) {
   } catch(e) {}
 }
 
+// Native Android से launch intent (notification से app खुलने पर)
 function checkNativeLaunchIntent() {
   if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
     const action = window.AndroidAudio.getLaunchCallAction();
@@ -807,13 +1012,23 @@ function updateHeaderTitle() {
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
 
-// --- Call Audio Tones Manager ---
+/* ───────── 🟦 [SECTION 18: INCOMING CALL HANDLERS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 19: CALL AUDIO MANAGER (HTML5 Audio)] — START
+   📌 क्या: HTML5 Audio files (connecting.mp3, ringing.mp3, busy.mp3, end.mp3)
+           से call lifecycle tones बजाना/बंद करना
+   🔗 कहाँ से: startCall, joinCallSession, hangup, call reject/busy
+   ⚠️ डिपेंड: sounds/*.mp3 files मौजूद हों
+   ═══════════════════════════════════════════════════════════════════════ */
+
 const CallAudioManager = {
   connecting: new Audio('sounds/connecting.mp3'),
   ringing: new Audio('sounds/ringing.mp3'),
   busy: new Audio('sounds/busy.mp3'),
   end: new Audio('sounds/end.mp3'),
-  
+
   init() {
     this.connecting.loop = true;
     this.ringing.loop = true;
@@ -840,7 +1055,7 @@ const CallAudioManager = {
   playBusy() {
     this.stopAll();
     this.busy.play().catch(e => console.log("Audio play blocked", e));
-    setTimeout(() => this.stopAll(), 3000); 
+    setTimeout(() => this.stopAll(), 3000);
   },
 
   playEnd() {
@@ -851,9 +1066,20 @@ const CallAudioManager = {
 
 CallAudioManager.init(); // इसे शुरू करना ज़रूरी है
 
-// ===================================================
-// ✅ PRESENCE & LISTENERS (GHOST USER & OTA WIPE FIX)
-// ===================================================
+/* ───────── 🟦 [SECTION 19: CALL AUDIO MANAGER] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 20: PRESENCE & LISTENERS (GHOST USER & OTA WIPE FIX)] — START
+   📌 क्या: Firebase `.info/connected` से presence track, users list live,
+           self account status monitor (reset detect), incoming call listen,
+           latest chat previews listen, call logs listen
+   🔗 कहाँ से: initPresence() → checkUser() → initApp()
+   ⚠️ डिपेंड: myUserId, myUserName, allOnlineUsers, db
+   🔥 GHOST USER FIX: onDisconnect पर online=false + cleanup पुराने listeners
+   🎯 पूरी presence chain — सबसे critical section
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let connectedUnsub = null;
 let usersListUnsub = null;
 let activePresenceUserRef = null;
@@ -898,16 +1124,18 @@ async function initPresence() {
   activePresenceUserRef = userRef;
   activePresenceInboxRef = inboxRef;
 
+  // Disconnect पर safety handlers register करना
   await onDisconnect(userRef).update({
     online: false, lastSeen: serverTimestamp(), onlineSince: null,
     activeCallId: null, isBusy: false, typingTo: null
   }).catch(()=>{});
   await onDisconnect(inboxRef).remove().catch(()=>{});
 
+  // शुरुआती online state सेट
   await update(userRef, {
-    id: currentUid, name: myUserName, online: true,
-    onlineSince: serverTimestamp(), lastSeen: serverTimestamp(), activeCallId: null
-  });
+  id: currentUid, name: myUserName, online: true,
+  onlineSince: serverTimestamp(), lastSeen: serverTimestamp(), activeCallId: null
+}).catch(e => console.warn('Presence write warning (ignored):', e));
 
   if (myFcmToken) {
     await update(userRef, { fcmToken: myFcmToken }).catch(()=>{});
@@ -917,6 +1145,7 @@ async function initPresence() {
     try { window.AndroidBridge.syncUser(currentUid); } catch(e){}
   }
 
+  // Firebase connection status track
   connectedUnsub = onValue(connectedRef, async snap => {
     if (!myUserId || myUserId !== currentUid) return;
 
@@ -930,6 +1159,7 @@ async function initPresence() {
     }
   });
 
+  // सभी users की live list
   if (usersListUnsub) usersListUnsub();
   usersListUnsub = onValue(ref(db, 'users'), snap => {
     allOnlineUsers = snap.val() || {};
@@ -947,12 +1177,13 @@ async function initPresence() {
   listenForIncoming();
   listenForLatestChatPreviews();
   listenForCallLogs();
-  
+
   if (typeof listenForIncomingMediaSignals === 'function') {
     listenForIncomingMediaSignals();
   }
 }
 
+// अगर admin ने user की ID delete कर दी है, तो detect करके session clear
 function listenSelfAccountStatus() {
   if (selfStatusUnsub) selfStatusUnsub();
   const watchedUid = myUserId;
@@ -971,6 +1202,19 @@ function listenSelfAccountStatus() {
     }
   });
 }
+
+/* ───────── 🟦 [SECTION 20: PRESENCE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 21: BOOT FLOW & NAME SAVE] — START
+   📌 क्या: checkUser() — app को lobby/name modal/perms modal में ले जाना।
+           saveNameBtn — नया user ID generate करके Firebase में भेजना।
+           grantPermsBtn — permissions मांगकर lobby में जाना।
+   🔗 कहाँ से: initApp() → checkUser()
+   ⚠️ डिपेंड: myUserId, myUserName, initPresence, runFullPermissionFlow
+   🎯 पहली बार app खोलने का पूरा flow
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function checkUser() {
   lobbyScreen.hidden = true;
@@ -1032,6 +1276,17 @@ $('grantPermsBtn').onclick = async () => {$('permNoticeModal').hidden = true;
   lobbyScreen.hidden = false;
   initPresence();
 };
+
+/* ───────── 🟦 [SECTION 21: BOOT FLOW] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 22: PROFILE MODAL ACTIONS] — START
+   📌 क्या: profile modal खोलना/बंद करना, नाम बदलना, permissions recheck,
+           chat clear, ID reset
+   🔗 कहाँ से: profileBtn, closeProfileBtn, toggleEditNameBtn आदि
+   ⚠️ डिपेंड: myUserName, myUserId, Firebase users/{uid}
+   ═══════════════════════════════════════════════════════════════════════ */
 
 $('profileBtn').onclick = () => {$('nameEditArea').hidden = true;
   $('toggleEditNameBtn').textContent = translations[currentLang].btnChangeName;
@@ -1112,11 +1367,84 @@ $('resetProfileBtn').onclick = async () => {
   location.href = location.pathname;
 };
 
-// Admin Pin & Panel
-adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };$('verifyPinBtn').onclick = () => {
-  if ($('adminPinInput').value.trim() === ADMIN_SECRET_PIN) {$('adminPinModal').hidden = true; openAdminPanel(); }
-  else toast('गलत पिन!');
+/* ───────── 🟦 [SECTION 22: PROFILE ACTIONS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 23: 🔥 ADMIN PIN — FIREBASE VERIFICATION] — START
+   📌 क्या: पहले PIN hardcoded ("1990") था — अब Firebase
+           `admin_config/pin` से verify होता है
+   🔗 कहाँ से: adminBtn click → adminPinModal → verifyPinBtn
+   ⚠️ डिपेंड: Firebase path admin_config/pin (manually set किया गया)
+   🔥 CHANGE: गलत PIN → "गलत पिन!" toast, सही → admin panel खुलेगा
+   🛡️ Fallback: अगर Firebase में PIN नहीं मिला → panel locked (error toast)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 🔐 Firebase से admin PIN पढ़कर verify करता है
+ * @param {string} inputPin - user ने जो PIN टाइप किया
+ * @returns {Promise<boolean>} - true = match, false = गलत / नहीं मिला
+ *
+ * Firebase structure:
+ *   admin_config/
+ *     pin: "1990"   ← Console से manually set करें
+ */
+async function verifyAdminPinAsync(inputPin) {
+  try {
+    const snap = await get(ref(db, 'admin_config/pin'));
+    if (!snap.exists()) {
+      // PIN Firebase में set नहीं है
+      console.warn('admin_config/pin not found in Firebase');
+      return false;
+    }
+    const storedPin = String(snap.val()).trim();
+    const input = String(inputPin || '').trim();
+    return storedPin === input;
+  } catch (err) {
+    console.error('verifyAdminPinAsync error:', err);
+    return false;
+  }
+}
+
+// Admin button — PIN modal खोलो
+adminBtn.onclick = () => { $('adminPinInput').value = ''; $('adminPinModal').hidden = false; };
+$('closePinBtn').onclick = () => { $('adminPinModal').hidden = true; };
+
+// 🔥 PIN verify — अब async Firebase check के साथ
+$('verifyPinBtn').onclick = async () => {
+  const input = $('adminPinInput').value.trim();
+  if (!input) return;
+
+  const btn = $('verifyPinBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ जाँच...';
+
+  try {
+    const isValid = await verifyAdminPinAsync(input);
+    if (isValid) {
+      $('adminPinModal').hidden = true;
+      openAdminPanel();
+    } else {
+      toast(currentLang === 'hi' ? '❌ गलत पिन!' : '❌ Wrong PIN!');
+    }
+  } catch (err) {
+    toast(currentLang === 'hi' ? '❌ सर्वर त्रुटि' : '❌ Server error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 };
+
+/* ───────── 🟦 [SECTION 23: ADMIN PIN (Firebase)] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 24: ADMIN PANEL UI] — START
+   📌 क्या: सभी users की list, hidden/visible toggle, permanent delete
+   🔗 कहाँ से: verifyPinBtn सही होने पर → openAdminPanel()
+   ⚠️ डिपेंड: allOnlineUsers, renderContacts()
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function openAdminPanel() {
   const list = $('adminUsersList'); list.innerHTML = '';
@@ -1149,7 +1477,16 @@ function openAdminPanel() {
 }
 $('closeAdminPanelBtn').onclick = () => {$('adminPanelModal').hidden = true; };
 
-// Tabs & Call Logs
+/* ───────── 🟦 [SECTION 24: ADMIN PANEL] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 25: TABS (Chats / Calls)] — START
+   📌 क्या: bottom tab switching — Chat list ↔ Call logs
+   🔗 कहाँ से: tabChatsBtn, tabCallsBtn
+   ⚠️ डिपेंड: renderCallLogs()
+   ═══════════════════════════════════════════════════════════════════════ */
+
 $('tabChatsBtn').onclick = () => {$('tabChatsBtn').className = 'tab-btn active-chat';
   $('tabCallsBtn').className = 'tab-btn';$('tabChatsContent').hidden = false;
   $('tabCallsContent').hidden = true;
@@ -1159,6 +1496,18 @@ $('tabCallsBtn').onclick = () => {$('tabCallsBtn').className = 'tab-btn active-c
   $('tabChatsContent').hidden = true;
   renderCallLogs();
 };
+
+/* ───────── 🟦 [SECTION 25: TABS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 26: CALL LOGS (Record / Listen / Render)] — START
+   📌 क्या: हर कॉल (incoming/outgoing/missed) को Firebase
+           `call_logs/{uid}/{callId}` में save, live listen, UI render
+   🔗 कहाँ से: hangup(), btnReject, listenForIncoming
+   ⚠️ डिपेंड: allCallLogs, callLogsList, formatClockTime
+   🎯 दोनों तरफ के logs sync होते हैं (मैं + सामने वाला)
+   ═══════════════════════════════════════════════════════════════════════ */
 
 async function recordCallLog(entry) {
   try {
@@ -1204,13 +1553,13 @@ function renderCallLogs() {
     callLogsList.innerHTML = `<div style="text-align:center;padding:28px;color:#94a3b8;font-size:13px">${currentLang==='hi'?'कोई कॉल लॉग नहीं है':'No call logs yet'}</div>`;
     return;
   }
-  
+
   allCallLogs.forEach(l => {
     const card = document.createElement('div');
     card.className = 'contact-card';
     let iconHtml = '';
     const isVoice = l.callMode === 'audio';
-    
+
     // स्मार्ट चेक: अगर ड्यूरेशन 00:00 है या टाइप missed है
     const isMissed = l.type === 'missed' || (l.type === 'incoming' && (!l.duration || l.duration === '00:00' || l.duration === '0'));
 
@@ -1240,7 +1589,19 @@ function renderCallLogs() {
   });
 }
 
-// Contacts List & Previews
+/* ───────── 🟦 [SECTION 26: CALL LOGS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 27: CONTACT LIST & CHAT PREVIEWS] — START
+   📌 क्या: live chat snippets (last message preview), unread counts,
+           delivered ticks auto-update, notification trigger,
+           contacts list render, online strip, whatsapp share
+   🔗 कहाँ से: initPresence() → listenForLatestChatPreviews()
+   ⚠️ डिपेंड: latestChatSnippets, unreadCounts, renderContacts
+   🎯 Real-time tick sync (✓, ✓✓, ✓✓ blue) + unread badge
+   ═══════════════════════════════════════════════════════════════════════ */
+
 const getChatRoomId = (a, b) => [a, b].sort().join('__');
 
 function getTickBadge(snippet) {
@@ -1255,69 +1616,84 @@ let isInitialLoad = true;
 // ✅ FIX: Real-time Lobby Snippet, Instant Delivery Ticks & Unread Count Sync
 function listenForLatestChatPreviews() {
   onValue(ref(db, 'chats'), snap => {
-    const rooms = snap.val() || {};
-    let hasUpdates = false;
+    try {
+      const rooms = snap.val() || {};
+      let hasUpdates = false;
 
-    Object.keys(rooms).forEach(key => {
-      if (!key.includes(myUserId)) return;
-      const parts = key.split('__');
-      const targetId = parts[0] === myUserId ? parts[1] : parts[0];
-      const msgs = rooms[key]?.messages || {};
-      const msgKeys = Object.keys(msgs);
-      if (!msgKeys.length) return;
+      Object.keys(rooms).forEach(key => {
+        try {
+          if (!key.includes(myUserId)) return;
+          const parts = key.split('__');
+          const targetId = parts[0] === myUserId ? parts[1] : parts[0];
+          const msgs = rooms[key]?.messages || {};
+          const msgKeys = Object.keys(msgs);
+          if (!msgKeys.length) return;
 
-      const sortedKeys = msgKeys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
-      const lastMsg = msgs[sortedKeys[sortedKeys.length - 1]];
+          const sortedKeys = msgKeys.sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
+          const lastMsg = msgs[sortedKeys[sortedKeys.length - 1]];
+          if (!lastMsg) return; // सुरक्षा के लिए
 
-      let unread = 0;
-      msgKeys.forEach(k => {
-        const m = msgs[k];
-        if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) {
-          unread++;
-        }
-        if (m.senderId !== myUserId && !m.delivered) {
-          update(ref(db, `chats/${key}/messages/${k}`), { delivered: true }).catch(()=>{});
+          let unread = 0;
+          msgKeys.forEach(k => {
+            const m = msgs[k];
+            if (!m) return;
+            if (m.senderId !== myUserId && !m.read && currentChatTargetId !== targetId) {
+              unread++;
+            }
+            if (m.senderId !== myUserId && !m.delivered) {
+              update(ref(db, `chats/${key}/messages/${k}`), { delivered: true }).catch(()=>{});
+            }
+          });
+          unreadCounts[targetId] = unread;
+
+          const prevTime = latestChatSnippets[targetId]?.time || 0;
+          const isNew = !isInitialLoad && lastMsg.time > prevTime && lastMsg.senderId !== myUserId && currentChatTargetId !== targetId;
+
+          let msgText = lastMsg.text || '';
+          if (lastMsg.deleted || lastMsg.type === 'deleted') {
+            msgText = '🚫 यह संदेश हटा दिया गया है';
+          } else if (lastMsg.type === 'image') {
+            msgText = '📷 ' + (currentLang === 'hi' ? 'फ़ोटो' : 'Photo');
+          } else if (lastMsg.type === 'video') {
+            msgText = '🎥 ' + (currentLang === 'hi' ? 'वीडियो' : 'Video');
+          } else if (lastMsg.type === 'audio') {
+            msgText = '🎙 ' + (currentLang === 'hi' ? 'वॉयस नोट' : 'Voice Note');
+          } else if (lastMsg.type === 'doc') {
+            msgText = '📄 ' + (lastMsg.fileName || (currentLang === 'hi' ? 'दस्तावेज़' : 'Document'));
+          } else if (lastMsg.type === 'system-call') {
+            msgText = lastMsg.text;
+          }
+
+          latestChatSnippets[targetId] = { 
+            text: msgText, 
+            time: lastMsg.time || Date.now(), 
+            senderId: lastMsg.senderId, 
+            read: !!lastMsg.read, 
+            delivered: !!lastMsg.delivered 
+          };
+          hasUpdates = true;
+
+          // यहाँ try-catch लगाया है ताकि नोटिफिकेशन फेल होने पर भी नीचे का renderContacts() चले
+          if (isNew) {
+            try {
+              triggerSystemMessageNotification(lastMsg.senderName || 'New message', msgText, targetId);
+            } catch(nErr) {}
+          }
+        } catch(roomErr) {
+          console.warn('Error in room:', key, roomErr);
         }
       });
-      unreadCounts[targetId] = unread;
 
-      const prevTime = latestChatSnippets[targetId]?.time || 0;
-      const isNew = !isInitialLoad && lastMsg.time > prevTime && lastMsg.senderId !== myUserId && currentChatTargetId !== targetId;
-
-      let msgText = lastMsg.text || '';
-      if (lastMsg.deleted || lastMsg.type === 'deleted') {
-        msgText = '🚫 यह संदेश हटा दिया गया है';
-      } else if (lastMsg.type === 'image') {
-        msgText = '📷 ' + (currentLang === 'hi' ? 'फ़ोटो' : 'Photo');
-      } else if (lastMsg.type === 'video') {
-        msgText = '🎥 ' + (currentLang === 'hi' ? 'वीडियो' : 'Video');
-      } else if (lastMsg.type === 'audio') {
-        msgText = '🎙 ' + (currentLang === 'hi' ? 'वॉयस नोट' : 'Voice Note');
-      } else if (lastMsg.type === 'doc') {
-        msgText = '📄 ' + (lastMsg.fileName || (currentLang === 'hi' ? 'दस्तावेज़' : 'Document'));
-      } else if (lastMsg.type === 'system-call') {
-        msgText = lastMsg.text;
+      isInitialLoad = false;
+      if (hasUpdates) {
+        try {
+          localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
+          localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
+        } catch(e) {}
+        renderContacts(); // यह UI को अपडेट करेगा
       }
-
-      latestChatSnippets[targetId] = { 
-        text: msgText, 
-        time: lastMsg.time || Date.now(), 
-        senderId: lastMsg.senderId, 
-        read: !!lastMsg.read, 
-        delivered: !!lastMsg.delivered 
-      };
-      hasUpdates = true;
-
-      if (isNew) triggerSystemMessageNotification(lastMsg.senderName || 'New message', msgText, targetId);
-    });
-
-    isInitialLoad = false;
-    if (hasUpdates) {
-      try {
-        localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
-        localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
-      } catch(e) {}
-      renderContacts();
+    } catch (err) {
+      console.warn('Chat listener error:', err);
     }
   });
 }
@@ -1412,22 +1788,26 @@ function renderContacts() {
 searchInput.oninput = renderContacts;
 setInterval(() => { if (!lobbyScreen.hidden && Object.keys(allOnlineUsers).length) renderContacts(); }, 60000);
 
-// पॉइंट #2: WhatsApp शेयरिंग बटन
+// WhatsApp share button
 if ($('shareAppWhatsappBtn')) {$('shareAppWhatsappBtn').onclick = () => {
-    const promoMsg = currentLang === 'hi' 
-      ? `📱 कमाल का वीडियो कॉलिंग ऐप! इसमें फन-मोड, वाइटबोर्ड और पहेलियां (Riddles) भी हैं। अभी डाउनलोड करें: \n${GITHUB_APK_URL}` 
+    const promoMsg = currentLang === 'hi'
+      ? `📱 कमाल का वीडियो कॉलिंग ऐप! इसमें फन-मोड, वाइटबोर्ड और पहेलियां (Riddles) भी हैं। अभी डाउनलोड करें: \n${GITHUB_APK_URL}`
       : `📱 Amazing Video Calling App with Fun-Mode, Whiteboard & Riddles! Download now: \n${GITHUB_APK_URL}`;
     window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(promoMsg), '_blank');
   };
 }
 
-/* =========================================================================
-   🔴🔴🔴 [PART 1 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
-   ========================================================================= */
-/* =========================================================================
-   🟢🟢🟢 [PART 2 OF 3 — START (शुरू): app.js v1.24.1] 🟢🟢🟢
-   Long-press Actions, Reactions, Chat Engine, Delivery/Read Sync, Voice Dock
-   ========================================================================= */
+/* ───────── 🟦 [SECTION 27: CONTACTS & PREVIEWS] — END ───────── */
+
+/* ═══ यहाँ BATCH 1B खत्म होता है ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 28: LONG-PRESS MESSAGE MENU] — START
+   📌 क्या: किसी भी chat bubble पर 500ms देर तक दबाने से context menu
+           खुलता है (reactions + copy/reply/forward/star/delete)
+   🔗 कहाँ से: attachBubbleLongPress() हर bubble पर लगता है
+   ⚠️ डिपेंड: REACTION_EMOJIS, openMessageMenu(), closeMessageMenu()
+   🎯 Touch + Mouse दोनों support, scroll पर auto-cancel
+   ═══════════════════════════════════════════════════════════════════════ */
 
 let longPressTimer = null;
 let longPressStartX = 0;
@@ -1440,6 +1820,7 @@ let replyToMessageData = null;
 
 const REACTION_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
 
+// हर bubble पर long-press gesture attach करता है
 function attachBubbleLongPress(el, msgId, m) {
   const HOLD_TIME = 500;
 
@@ -1455,6 +1836,7 @@ function attachBubbleLongPress(el, msgId, m) {
     }, HOLD_TIME);
   };
 
+  // अगर 10px से ज़्यादा move हुआ तो cancel (scroll मान लो)
   const onMove = (e) => {
     const x = e.touches ? e.touches[0].clientX : e.clientX;
     const y = e.touches ? e.touches[0].clientY : e.clientY;
@@ -1488,6 +1870,7 @@ function attachBubbleLongPress(el, msgId, m) {
   });
 }
 
+// Menu को DOM में create + render करता है
 function openMessageMenu(el, msgId, m) {
   currentLongPressMsgId = msgId;
   currentLongPressMsgData = m;
@@ -1575,6 +1958,7 @@ function openMessageMenu(el, msgId, m) {
 
   document.body.appendChild(menu);
 
+  // menu box के अंदर touch events को bubble न होने दें
   const menuBox = menu.querySelector('.menu-box');
   if (menuBox) {
     ['touchstart', 'touchend', 'click'].forEach(evt => {
@@ -1582,6 +1966,7 @@ function openMessageMenu(el, msgId, m) {
     });
   }
 
+  // Reaction click
   menu.querySelectorAll('.reaction-pick-btn').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -1591,6 +1976,7 @@ function openMessageMenu(el, msgId, m) {
     };
   });
 
+  // Menu item click
   menu.querySelectorAll('.menu-item').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -1600,6 +1986,7 @@ function openMessageMenu(el, msgId, m) {
     };
   });
 
+  // Backdrop tap = close
   const backdrop = menu.querySelector('.menu-backdrop');
   if (backdrop) {
     backdrop.addEventListener('touchstart', (e) => { e.preventDefault(); closeMessageMenu(); });
@@ -1614,6 +2001,16 @@ function closeMessageMenu() {
   currentLongPressMsgData = null;
 }
 
+/* ───────── 🟦 [SECTION 28: LONG-PRESS MENU] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 29: MESSAGE ACTIONS (Copy/Reply/Forward/Star/Delete)] — START
+   📌 क्या: long-press menu से चुनी गई action का handler
+   🔗 कहाँ से: openMessageMenu() से call
+   ⚠️ डिपेंड: startReply, openForwardDialog, toggleStarMessage, deleteMessage
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function handleMessageAction(action, msgId, m) {
   if (!currentChatTargetId || !msgId) return;
 
@@ -1626,6 +2023,7 @@ async function handleMessageAction(action, msgId, m) {
         await navigator.clipboard.writeText(m.text || '');
         toast(currentLang === 'hi' ? '📋 कॉपी हो गया' : '📋 Copied');
       } catch(e) {
+        // Fallback for old browsers
         const ta = document.createElement('textarea');
         ta.value = m.text || '';
         document.body.appendChild(ta);
@@ -1662,6 +2060,18 @@ async function handleMessageAction(action, msgId, m) {
   }
 }
 
+/* ───────── 🟦 [SECTION 29: MESSAGE ACTIONS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 30: REACTIONS (Toggle + Render)] — START
+   📌 क्या: किसी message पर emoji reaction add/remove, और सभी
+           reactions को bubble पर chips के रूप में render
+   🔗 कहाँ से: long-press menu → reaction button, loadChatMessages()
+   ⚠️ डिपेंड: Firebase chats/{roomId}/messages/{msgId}/reactions/{uid}
+   🎯 एक user = एक reaction (replace on new emoji)
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function toggleReaction(msgId, m, emoji) {
   if (!currentChatTargetId) return;
   const roomId = getChatRoomId(myUserId, currentChatTargetId);
@@ -1674,6 +2084,7 @@ async function toggleReaction(msgId, m, emoji) {
   } catch(e) { toast('त्रुटि'); }
 }
 
+// Bubble के नीचे chips बनाता है (❤️2 👍1)
 function renderReactionsHtml(m, msgId) {
   if (!m.reactions) return '';
   const counts = {};
@@ -1687,6 +2098,16 @@ function renderReactionsHtml(m, msgId) {
     }).join('')}
   </div>`;
 }
+
+/* ───────── 🟦 [SECTION 30: REACTIONS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 31: REPLY PREVIEW BOX] — START
+   📌 क्या: चैट footer के ऊपर "जवाब दे रहे हैं..." bar दिखाना + cancel
+   🔗 कहाँ से: reply action, cancelReply(), sendChatMessage
+   ⚠️ डिपेंड: chat-footer DOM, chatInput
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function startReply(msgId, m) {
   replyToMessageId = msgId;
@@ -1734,6 +2155,17 @@ function cancelReply() {
   if (box) box.remove();
 }
 
+/* ───────── 🟦 [SECTION 31: REPLY PREVIEW] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 32: STAR + DELETE MESSAGE] — START
+   📌 क्या: message को star/unstar, और delete (for me / for everyone)
+   🔗 कहाँ से: long-press menu actions
+   ⚠️ डिपेंड: Firebase updates, localStorage (delete-me tracking)
+   🎯 delete-for-me = local cache only, delete-for-all = Firebase update
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function toggleStarMessage(roomPath, msgId, m) {
   const newStar = !m.starred;
   m.starred = newStar;
@@ -1750,6 +2182,7 @@ async function toggleStarMessage(roomPath, msgId, m) {
 async function deleteMessage(roomPath, msgId, forEveryone) {
   try {
     if (forEveryone) {
+      // Firebase में deleted=true set करो, text replace करो
       await update(ref(db, roomPath), {
         deleted: true,
         deletedAt: Date.now(),
@@ -1768,6 +2201,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
         `;
       }
     } else {
+      // सिर्फ मेरे लिए — DOM से हटाओ + localStorage में blacklist करो
       const el = $(`msg_${msgId}`);
       if (el) {
         el.style.transition = 'opacity 0.3s, transform 0.3s';
@@ -1790,6 +2224,7 @@ async function deleteMessage(roomPath, msgId, forEveryone) {
   }
 }
 
+// क्या यह message मेरे द्वारा locally deleted है?
 function isDeletedForMe(msgId) {
   try {
     const key = `vc_deleted_${myUserId}_${getChatRoomId(myUserId, currentChatTargetId)}`;
@@ -1799,6 +2234,17 @@ function isDeletedForMe(msgId) {
     return false;
   }
 }
+
+/* ───────── 🟦 [SECTION 32: STAR & DELETE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 33: FORWARD DIALOG] — START
+   📌 क्या: message को किसी और user को forward करना (prompt-based)
+   🔗 कहाँ से: long-press menu → forward action
+   ⚠️ डिपेंड: allOnlineUsers, Firebase chats/{roomId}
+   🎯 media (image/video/audio/doc) + text दोनों support
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function openForwardDialog(msgId, m) {
   const users = Object.keys(allOnlineUsers).filter(id => id !== myUserId && allOnlineUsers[id]?.name);
@@ -1838,6 +2284,7 @@ async function forwardMessageTo(targetId, m, targetName) {
       forwarded: true
     };
 
+    // Type-wise copy करना
     if (m.type === 'image' || m.type === 'video' || m.type === 'doc') {
       msgData.type = m.type;
       msgData.data = m.data || null;
@@ -1862,7 +2309,17 @@ async function forwardMessageTo(targetId, m, targetName) {
   }
 }
 
-// Chat Open / Close
+/* ───────── 🟦 [SECTION 33: FORWARD] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 34: CHAT OPEN / CLOSE] — START
+   📌 क्या: chat screen खोलना (target user set + status listen), बंद करना
+   🔗 कहाँ से: contact card tap, notification click, deep link
+   ⚠️ डिपेंड: chatUnsub, targetStatusUnsub, loadChatMessages()
+   🎯 chat खुलते ही unread count 0, badge हट जाता है
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let chatUnsub = null;
 let activePlayingAudio = null;
 let activePlayingBtn = null;
@@ -1877,24 +2334,25 @@ function openChat(tId, tName) {
   try {
     currentChatTargetId = tId;
     currentChatTargetName = tName || allOnlineUsers[tId]?.name || 'उपयोगकर्ता';
-    
+
     // Unread count locally aur badge reset
     unreadCounts[tId] = 0;
     try {
       localStorage.setItem('cached_unreads', JSON.stringify(unreadCounts));
     } catch(e) {}
-    
+
     try {
       const badge = document.querySelector(`.badge-unread[data-id="${tId}"]`);
       if (badge) badge.remove();
     } catch(e) {}
 
     renderContacts();
-    
+
     const targetNameEl = $('chatTargetName');
     if (targetNameEl) targetNameEl.textContent = currentChatTargetName;
     isInitialChatOpen = true;
 
+    // Target user का online/last seen live
     if (targetStatusUnsub) { targetStatusUnsub(); targetStatusUnsub = null; }
     targetStatusUnsub = onValue(ref(db, `users/${tId}`), (snap) => {
       const u = snap.val() || {};
@@ -1909,7 +2367,7 @@ function openChat(tId, tName) {
 
     if (lobbyScreen) lobbyScreen.hidden = true;
     if (chatScreen) chatScreen.hidden = false;
-    
+
     if (chatInput) {
       chatInput.value = '';
       chatInput.style.height = '44px';
@@ -1939,6 +2397,16 @@ $('chatBackBtn').onclick = closeChat;
 $('chatCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, false); };
 $('chatVoiceCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, true); };
 
+/* ───────── 🟦 [SECTION 34: CHAT OPEN/CLOSE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 35: VOICE NOTE BUBBLE EVENTS] — START
+   📌 क्या: voice note के play/pause, progress bar seek, speed change
+   🔗 कहाँ से: loadChatMessages() → audio type bubbles पर
+   ⚠️ डिपेंड: activePlayingAudio (single audio at a time)
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function attachVoiceBubbleEvents(container) {
   const btn = container.querySelector('.voice-play-circle');
   const bg = container.querySelector('.voice-progress-bg');
@@ -1951,11 +2419,13 @@ function attachVoiceBubbleEvents(container) {
       const bubble = btn.closest('.voice-note-bubble');
       const pBar = bubble.querySelector('.voice-progress-bar'), tLabel = bubble.querySelector('.voice-time-label');
 
+      // वही audio दोबारा click → pause/play toggle
       if (activePlayingAudio && activePlayingAudio.src === url) {
         if (!activePlayingAudio.paused) { activePlayingAudio.pause(); btn.textContent = '▶'; }
         else { activePlayingAudio.play(); btn.textContent = '⏸'; }
         return;
       }
+      // पुराना बंद करके नया चलाओ
       if (activePlayingAudio) { activePlayingAudio.pause(); if (activePlayingBtn) activePlayingBtn.textContent = '▶'; }
 
       const audio = new Audio(url);
@@ -1974,6 +2444,7 @@ function attachVoiceBubbleEvents(container) {
     };
   }
 
+  // Progress bar पर click = seek
   if (bg) {
     bg.onclick = (e) => {
       e.stopPropagation();
@@ -1985,6 +2456,7 @@ function attachVoiceBubbleEvents(container) {
     };
   }
 
+  // Speed toggle (1x → 1.5x → 2x → 1x)
   if (spdBtn) {
     spdBtn.onclick = (e) => {
       e.stopPropagation();
@@ -1998,7 +2470,21 @@ function attachVoiceBubbleEvents(container) {
   }
 }
 
-// Real-time Chat Load, Delivered & Read Ticks
+/* ───────── 🟦 [SECTION 35: VOICE BUBBLE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 36: CHAT MESSAGES ENGINE (MAIN)] — START
+   📌 क्या: पूरी chat history को live load + render करना।
+           हर message के type (text/image/video/audio/doc/system) के
+           हिसाब से सही bubble बनाना।
+   🔗 कहाँ से: openChat() → loadChatMessages()
+   ⚠️ डिपेंड: Firebase chats/{roomId}/messages, renderReactionsHtml,
+              attachBubbleLongPress, attachVoiceBubbleEvents
+   🎯 Delivered/Read ticks, reply preview, reactions, deleted state
+   📌 Auto-read: सामने वाले के message खुलते ही read=true set होता है
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function loadChatMessages() {
   const body = $('chatBody');
   if (chatUnsub) chatUnsub();
@@ -2008,6 +2494,7 @@ function loadChatMessages() {
     const msgs = snap.val() || {};
     const sortedKeys = Object.keys(msgs).sort((a,b) => (msgs[a].time||0) - (msgs[b].time||0));
 
+    // पुराने DOM से वो messages हटाओ जो Firebase में नहीं हैं
     const currentMsgEls = body.querySelectorAll('[data-msg-id]');
     const newKeySet = new Set(sortedKeys);
     currentMsgEls.forEach(el => {
@@ -2023,19 +2510,21 @@ function loadChatMessages() {
 
       // Agar samne wale ka message hai aur open hone par read nahi hua hai to read: true set karein
       if (m.senderId !== myUserId && !m.read) {
-        update(ref(db, `${roomPath}/${msgId}`), { 
-          read: true, 
-          delivered: true, 
-          readAt: Date.now() 
+        update(ref(db, `${roomPath}/${msgId}`), {
+          read: true,
+          delivered: true,
+          readAt: Date.now()
         }).catch(()=>{});
       }
 
+      // Media auto-save to Downloads
       if (m.data && m.senderId !== myUserId) {
         autoSaveMediaToDownloads(msgId, m.data, m.fileName, m.mimeType);
       }
 
       let el = document.getElementById(`msg_${msgId}`);
 
+      // पहले से DOM में है? सिर्फ update करो (starred, deleted, tick)
       if (el) {
         el.classList.toggle('starred', !!m.starred);
 
@@ -2056,10 +2545,12 @@ function loadChatMessages() {
         return;
       }
 
+      // ===== नया message bubble बनाओ =====
       el = document.createElement('div');
       el.id = `msg_${msgId}`;
       el.dataset.msgId = msgId;
 
+      // System call message (special centered bubble)
       if (m.type === 'system-call') {
         el.className = 'chat-bubble system-call';
         el.textContent = `${m.text} • ${formatClockTime(m.time)}`;
@@ -2068,6 +2559,7 @@ function loadChatMessages() {
         return;
       }
 
+      // Deleted message
       if (m.type === 'deleted' || m.deleted) {
         el.className = `chat-bubble is-deleted ${m.senderId === myUserId ? 'me' : 'them'}`;
         el.innerHTML = `
@@ -2082,6 +2574,7 @@ function loadChatMessages() {
       el.className = `chat-bubble ${m.senderId === myUserId ? 'me' : 'them'}`;
       if (m.starred) el.classList.add('starred');
 
+      // Reply preview (quoted block)
       let contentHtml = '';
       if (m.replyTo) {
         contentHtml += `
@@ -2095,6 +2588,7 @@ function loadChatMessages() {
         `;
       }
 
+      // Type-wise content
       if (m.type === 'image') {
         if (m.data) {
           contentHtml += `<div class="media-bubble"><img src="${m.data}" alt="image" data-media-id="${m.mediaId || msgId}"></div>`;
@@ -2130,8 +2624,10 @@ function loadChatMessages() {
         contentHtml += `<div>${safeName(m.text)}</div>`;
       }
 
+      // Reactions chips
       contentHtml += renderReactionsHtml(m, msgId);
 
+      // Tick (only for my messages)
       let tickHtml = '';
       if (m.senderId === myUserId) {
         if (m.read) tickHtml = '<span class="tick-mark tick-read" style="color:#38bdf8;font-weight:900;">✓✓</span>';
@@ -2141,6 +2637,7 @@ function loadChatMessages() {
 
       el.innerHTML = `${contentHtml}<div class="chat-meta"><span>${m.time ? formatClockTime(m.time) : ''}</span>${tickHtml}</div>`;
 
+      // Type-wise event listeners
       if (m.type === 'audio') attachVoiceBubbleEvents(el);
       if (m.type === 'image' && m.data) {
         const img = el.querySelector('img');
@@ -2160,12 +2657,24 @@ function loadChatMessages() {
       shouldScroll = true;
     });
 
+    // Auto-scroll अगर bottom के पास थे या पहली बार खुला
     if (shouldScroll && (isNearBottom || isInitialChatOpen)) {
       body.scrollTop = body.scrollHeight;
       isInitialChatOpen = false;
     }
   });
 }
+
+/* ───────── 🟦 [SECTION 36: CHAT MESSAGES ENGINE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 37: TICK UPDATER] — START
+   📌 क्या: DOM में पहले से मौजूद मेरे message का tick (✓/✓✓/✓✓ blue)
+           सिर्फ update करना (पूरा bubble फिर से नहीं बनाना)
+   🔗 कहाँ से: loadChatMessages() जब message पहले से DOM में हो
+   ⚠️ डिपेंड: msg_{id} DOM, .chat-meta class
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function applyTickSafely(msgId, m) {
   const el = document.getElementById(`msg_${msgId}`);
@@ -2180,6 +2689,17 @@ function applyTickSafely(msgId, m) {
     }
   }
 }
+
+/* ───────── 🟦 [SECTION 37: TICK UPDATER] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 38: MEDIA PLACEHOLDER & DOC BUBBLE BUILDER] — START
+   📌 क्या: data अभी नहीं आया है तो "auto-downloading" placeholder,
+           doc/file के लिए proper icon+name+size bubble
+   🔗 कहाँ से: loadChatMessages(), updateChatMediaMessageWithData()
+   ⚠️ डिपेंड: formatFileSize, getFileIcon, safeName
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function buildMediaPlaceholderHtml(msgId, m) {
   const sizeText = m.fileSize ? formatFileSize(m.fileSize) : '';
@@ -2210,6 +2730,17 @@ function buildDocBubbleHtml(msgId, m) {
   `;
 }
 
+/* ───────── 🟦 [SECTION 38: MEDIA PLACEHOLDER / DOC BUBBLE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 39: INPUT & ACTION BUTTON STATE] — START
+   📌 क्या: chat input के auto-grow, mic↔send icon toggle, typing indicator
+           (Firebase users/{uid}/typingTo) 1800ms debounce
+   🔗 कहाँ से: chatInput input/keydown events, openChat()
+   ⚠️ डिपेंड: chatInput, actionBtn, micSvg, sendSvg, typingTimeout
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function updateActionBtnState() {
   const hasText = chatInput.value.trim().length > 0;
   if (hasText) {
@@ -2236,6 +2767,18 @@ chatInput.addEventListener('input', () => {
   }
 });
 ['keyup', 'change', 'paste', 'compositionend'].forEach(ev => chatInput.addEventListener(ev, updateActionBtnState));
+
+/* ───────── 🟦 [SECTION 39: INPUT STATE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 40: CHAT SEND (Text + Push Notification)] — START
+   📌 क्या: text message Firebase में save + Cloudflare worker से FCM push
+           भेजना (receiver offline भी हो तो notify)
+   🔗 कहाँ से: actionBtn click, Enter key
+   ⚠️ डिपेंड: Firebase chats/{roomId}/messages, sendChatMessagePush
+   🎯 Reply preview को भी message में embed करता है
+   ═══════════════════════════════════════════════════════════════════════ */
 
 async function sendChatMessagePush(targetId, textContent, roomId, msgId, mediaMeta = null) {
   try {
@@ -2296,6 +2839,7 @@ async function sendChatMessage() {
     read: false
   };
 
+  // Reply block
   if (replyToMessageId && replyToMessageData) {
     let previewText = replyToMessageData.text || '';
     if (replyToMessageData.type === 'image') previewText = '📷 फ़ोटो';
@@ -2311,6 +2855,7 @@ async function sendChatMessage() {
     cancelReply();
   }
 
+  // Lobby preview को तुरंत update करो (optimistic)
   latestChatSnippets[currentChatTargetId] = { text: txt, time: Date.now(), senderId: myUserId, read: false, delivered: targetOnline };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
@@ -2319,6 +2864,7 @@ async function sendChatMessage() {
   sendChatMessagePush(currentChatTargetId, txt, roomId, newMsgId);
 }
 
+// Pointer/mouse down पर default blur न हो — double action से बचाव
 actionBtn.addEventListener('pointerdown', (e) => {
   if (chatInput.value.trim().length > 0) e.preventDefault();
 });
@@ -2326,6 +2872,7 @@ actionBtn.addEventListener('mousedown', (e) => {
   if (chatInput.value.trim().length > 0) e.preventDefault();
 });
 
+// Action button click = send (text हो) या voice dock (text खाली हो)
 let isSendingMsg = false;
 actionBtn.addEventListener('click', async (e) => {
   e.preventDefault();
@@ -2341,6 +2888,7 @@ actionBtn.addEventListener('click', async (e) => {
   }
 });
 
+// Enter = send, Shift+Enter = new line
 chatInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -2351,7 +2899,19 @@ chatInput.addEventListener('keydown', e => {
   }
 });
 
-// Media Sender & Attachments
+/* ───────── 🟦 [SECTION 40: CHAT SEND] — END ───────── */
+
+/* ═══ यहाँ BATCH 2A खत्म होता है ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 41: SEND MEDIA MESSAGE] — START
+   📌 क्या: फ़ाइल भेजने का main entry point। छोटी (<3.5MB) → सीधा base64
+           Firebase में; बड़ी → WebRTC P2P data channel से
+   🔗 कहाँ से: photoFileInput, videoFileInput, docFileInput, anyFileInput,
+              cameraCaptureInput, sendVcfMessage
+   ⚠️ डिपेंड: DIRECT_SEND_MAX_SIZE, sendMediaFileOverDataChannel
+   🎯 Optimistic lobby snippet + Firebase save + P2P fallback
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function sendMediaMessage(file) {
   if (!file || !currentChatTargetId) return;
 
@@ -2362,12 +2922,15 @@ async function sendMediaMessage(file) {
   const mediaId = `media_${Date.now()}_${Math.floor(Math.random()*10000)}`;
   const label = mediaType === 'image' ? '📷 फ़ोटो' : (mediaType === 'video' ? '🎥 वीडियो' : (mediaType === 'audio' ? '🎙 वॉयस नोट' : '📄 दस्तावेज़'));
 
+  // Local cache — file को बाद में data channel पर भेजने के लिए
   localFileMemoryCache[mediaId] = file;
 
+  // Lobby preview तुरंत update
   latestChatSnippets[targetId] = { text: label, time: Date.now(), senderId: myUserId, read: false, delivered: false };
   localStorage.setItem('cached_snippets', JSON.stringify(latestChatSnippets));
   renderContacts();
 
+  // छोटी फ़ाइल → सीधे base64 से भेज दो (P2P की ज़रूरत नहीं)
   if (file.size <= DIRECT_SEND_MAX_SIZE) {
     toast(currentLang === 'hi' ? '📤 फ़ाइल भेजी जा रही है...' : '📤 Sending file...');
     const reader = new FileReader();
@@ -2400,6 +2963,7 @@ async function sendMediaMessage(file) {
     return;
   }
 
+  // बड़ी फ़ाइल → पहले placeholder message save करो, फिर P2P से data भेजो
   const newMsgRef = push(ref(db, roomPath));
   const newMsgId = newMsgRef.key;
 
@@ -2431,6 +2995,18 @@ async function sendMediaMessage(file) {
   }
 }
 
+/* ───────── 🟦 [SECTION 41: SEND MEDIA MESSAGE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 42: MEDIA P2P DATA CHANNEL (SENDER SIDE)] — START
+   📌 क्या: बड़ी files को WebRTC data channel से भेजने के लिए connection
+           setup + offer/answer signaling (Firebase media_signals path)
+   🔗 कहाँ से: sendMediaFileOverDataChannel() → getOrCreateMediaDataChannel()
+   ⚠️ डिपेंड: ICE_SERVERS, db, mediaDataChannels, mediaPeerConnections
+   🎯 25s timeout पर fail, buffer drain के साथ chunked send
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function getOrCreateMediaDataChannel(peerId) {
   if (mediaDataChannels[peerId] && mediaDataChannels[peerId].readyState === 'open') {
     return mediaDataChannels[peerId];
@@ -2442,10 +3018,12 @@ async function getOrCreateMediaDataChannel(peerId) {
   const targetSignalsPath = `media_signals/${peerId}/${myUserId}`;
   const mySignalsPath = `media_signals/${myUserId}/${peerId}`;
 
+  // ICE candidates को सामने वाले के path पर भेजो
   pc.onicecandidate = e => {
     if (e.candidate) push(ref(db, `${targetSignalsPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
   };
 
+  // सामने वाले के ICE candidates सुनो
   pc.pendingIce = [];
   onChildAdded(ref(db, `${mySignalsPath}/candidates`), async snap => {
     const c = snap.val(); if (!c) return;
@@ -2454,6 +3032,7 @@ async function getOrCreateMediaDataChannel(peerId) {
     else pc.pendingIce.push(cand);
   });
 
+  // Remote description मिलने के बाद pending candidates flush
   pc.flushIce = async () => {
     const p = pc.pendingIce || []; pc.pendingIce = [];
     for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
@@ -2473,6 +3052,7 @@ async function getOrCreateMediaDataChannel(peerId) {
     await pc.setLocalDescription(offer);
     await set(ref(db, `${targetSignalsPath}/offer`), { sdp: offer.sdp, type: offer.type, ts: Date.now() });
 
+    // सामने वाले का answer सुनो
     const unsubAns = onValue(ref(db, `${mySignalsPath}/answer`), async snap => {
       const a = snap.val();
       if (a && !pc.currentRemoteDescription) {
@@ -2496,6 +3076,17 @@ async function getOrCreateMediaDataChannel(peerId) {
   });
 }
 
+/* ───────── 🟦 [SECTION 42: MEDIA DATA CHANNEL — SENDER] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 43: MEDIA P2P DATA CHANNEL (RECEIVER SIDE)] — START
+   📌 क्या: सामने वाले के offer को सुनकर answer भेजना, और datachannel
+           receive करके mediaDataChannels में save करना
+   🔗 कहाँ से: listenForIncomingMediaSignals() → initPresence()
+   ⚠️ डिपेंड: media_signals/{myUserId}/{senderId}, setupMediaDataChannel
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function listenForIncomingMediaSignals() {
   const incomingMediaRef = ref(db, `media_signals/${myUserId}`);
 
@@ -2507,6 +3098,7 @@ function listenForIncomingMediaSignals() {
       const signalData = allSenders[senderId];
       if (!signalData || !signalData.offer || signalData.answered) continue;
 
+      // पहले से connected है तो skip
       if (mediaPeerConnections[senderId] && mediaPeerConnections[senderId].connectionState === 'connected') {
         continue;
       }
@@ -2533,6 +3125,7 @@ function listenForIncomingMediaSignals() {
         for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
       };
 
+      // Sender की तरफ से data channel खुलेगा, यहाँ सिर्फ receive करो
       pc.ondatachannel = (event) => {
         const dc = event.channel;
         setupMediaDataChannel(senderId, dc);
@@ -2547,12 +3140,23 @@ function listenForIncomingMediaSignals() {
       await pc.flushIce();
       const ans = await pc.createAnswer();
       await pc.setLocalDescription(ans);
-      
+
       await set(ref(db, `${senderSignalsPath}/answer`), { sdp: ans.sdp, type: ans.type, ts: Date.now() });
       await update(ref(db, `media_signals/${myUserId}/${senderId}`), { answered: true }).catch(()=>{});
     }
   });
 }
+
+/* ───────── 🟦 [SECTION 43: MEDIA DATA CHANNEL — RECEIVER] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 44: DATA CHANNEL HANDLERS (Control + Chunks)] — START
+   📌 क्या: datachannel पर आने वाले messages को handle करना —
+           control JSON (start/end/request) और binary chunks
+   🔗 कहाँ से: setupMediaDataChannel() → onmessage
+   ⚠️ डिपेंड: incomingChunks, activeTransfers, handleIncomingChunk
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function setupMediaDataChannel(peerId, dc) {
   dc.binaryType = 'arraybuffer';
@@ -2581,6 +3185,7 @@ function handleMediaControlMessage(peerId, msg) {
 
   switch (msg.type) {
     case 'media-start':
+      // नया transfer शुरू — chunk buffer initialize
       incomingChunks[mediaId] = [];
       activeTransfers[mediaId] = {
         mediaId, peerId, direction: 'receive',
@@ -2592,6 +3197,7 @@ function handleMediaControlMessage(peerId, msg) {
       break;
 
     case 'media-end':
+      // सभी chunks आ चुके — Blob बनाकर Firebase में data भरो
       if (incomingChunks[mediaId]) {
         const transfer = activeTransfers[mediaId];
         const chunks = incomingChunks[mediaId];
@@ -2615,6 +3221,7 @@ function handleMediaControlMessage(peerId, msg) {
       break;
 
     case 'media-request':
+      // सामने वाला कह रहा है — यह media फिर भेजो (retry)
       if (localFileMemoryCache[mediaId]) {
         sendMediaFileOverDataChannel(peerId, localFileMemoryCache[mediaId]);
       }
@@ -2623,6 +3230,7 @@ function handleMediaControlMessage(peerId, msg) {
 }
 
 function handleIncomingChunk(peerId, arrayBuffer) {
+  // अभी जो transfer receiving state में है उसे ढूंढो
   const activeMediaIds = Object.keys(activeTransfers).filter(id => {
     const t = activeTransfers[id];
     return t.peerId === peerId && t.direction === 'receive' && t.status === 'receiving';
@@ -2638,10 +3246,23 @@ function handleIncomingChunk(peerId, arrayBuffer) {
   transfer.receivedChunks = (transfer.receivedChunks || 0) + 1;
   transfer.receivedBytes = (transfer.receivedBytes || 0) + arrayBuffer.byteLength;
 
+  // हर 10 chunks पर progress update
   if (transfer.receivedChunks % 10 === 0 || transfer.receivedBytes >= transfer.totalSize) {
     renderTransferQueue();
   }
 }
+
+/* ───────── 🟦 [SECTION 44: DATA CHANNEL HANDLERS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 45: FILE SENDING LOOP + BUFFER DRAIN] — START
+   📌 क्या: फ़ाइल को छोटे chunks में बाँटकर datachannel पर भेजना,
+           buffer high होने पर wait करना (backpressure)
+   🔗 कहाँ से: sendMediaMessage (बड़ी files), media-request retry
+   ⚠️ डिपेंड: CHUNK_SIZE, BUFFER_HIGH_THRESHOLD, BUFFER_LOW_THRESHOLD
+   🎯 Progress UI भी renderTransferQueue() से live update
+   ═══════════════════════════════════════════════════════════════════════ */
 
 async function sendMediaFileOverDataChannel(peerId, file) {
   let dc;
@@ -2661,6 +3282,7 @@ async function sendMediaFileOverDataChannel(peerId, file) {
   };
   renderTransferQueue();
 
+  // Start signal
   dc.send(JSON.stringify({
     type: 'media-start', mediaId, fileName: file.name, mimeType: file.type,
     totalSize: file.size, totalChunks
@@ -2678,6 +3300,7 @@ async function sendMediaFileOverDataChannel(peerId, file) {
       return null;
     }
 
+    // Buffer भरा है — खाली होने का इंतज़ार
     if (dc.bufferedAmount > BUFFER_HIGH_THRESHOLD) {
       await waitForBufferDrain(dc);
     }
@@ -2695,6 +3318,7 @@ async function sendMediaFileOverDataChannel(peerId, file) {
     }
   }
 
+  // End signal
   dc.send(JSON.stringify({ type: 'media-end', mediaId }));
   activeTransfers[mediaId].status = 'complete';
   renderTransferQueue();
@@ -2713,6 +3337,16 @@ function waitForBufferDrain(dc) {
     }, 50);
   });
 }
+
+/* ───────── 🟦 [SECTION 45: FILE SENDING LOOP] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 46: TYPE HELPERS + TRANSFER QUEUE UI] — START
+   📌 क्या: mime से media type पता करना, transfer progress UI render
+   🔗 कहाँ से: sendMediaMessage, handleIncomingChunk, renderTransferQueue
+   ⚠️ डिपेंड: activeTransfers, transferQueue DOM, getFileIcon
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function getMediaTypeFromMime(mime) {
   if (!mime) return 'doc';
@@ -2748,6 +3382,17 @@ function renderTransferQueue() {
   }).join('');
 }
 
+/* ───────── 🟦 [SECTION 46: TYPE HELPERS + TRANSFER QUEUE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 47: MEDIA BUBBLE LIVE UPDATE] — START
+   📌 क्या: placeholder overlay को असली image/video से बदलना जब
+           P2P data पूरा आ जाए
+   🔗 कहाँ से: handleMediaControlMessage → media-end
+   ⚠️ डिपेंड: DOM .media-download-overlay[data-media-id="..."]
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', fileName = '') {
   const overlay = document.querySelector(`.media-download-overlay[data-media-id="${mediaId}"]`);
   if (overlay) {
@@ -2771,7 +3416,19 @@ function updateChatMediaMessageWithData(mediaId, base64Data, mimeType = '', file
   }
 }
 
+/* ───────── 🟦 [SECTION 47: MEDIA BUBBLE LIVE UPDATE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 48: DOC DOWNLOAD HANDLER] — START
+   📌 क्या: doc/file bubble पर click → location/vcard/full viewer
+   🔗 कहाँ से: loadChatMessages → doc bubble click
+   ⚠️ डिपेंड: openMediaViewer, openContactVcfNative, saveMediaViaNative
+   🎯 Location (Google Maps) और VCF contacts के लिए special handling
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function handleDocDownload(msgId, m) {
+  // Location message
   if (m.data && (m.data.includes('maps.google.com') || m.fileName === 'लोकेशन')) {
     const openMaps = confirm('📍 लोकेशन Google Maps में खोलें?');
     if (openMaps) window.open(m.data, '_blank');
@@ -2779,6 +3436,7 @@ function handleDocDownload(msgId, m) {
     return;
   }
 
+  // VCF contact
   if (m.mimeType === 'text/vcard' || (m.fileName && m.fileName.endsWith('.vcf'))) {
     const rawBase64 = m.data ? m.data.replace(/^data:text\/vcard;base64,/, '') : '';
     const handled = openContactVcfNative(rawBase64, m.fileName || 'contact.vcf');
@@ -2789,10 +3447,22 @@ function handleDocDownload(msgId, m) {
     return;
   }
 
+  // बाकी सब कुछ — viewer में खोलो
   if (m.data) {
     openMediaViewer(m.data, m.mimeType || 'application/octet-stream', m.fileName || 'document');
   }
 }
+
+/* ───────── 🟦 [SECTION 48: DOC DOWNLOAD] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 49: MEDIA VIEWER (Fullscreen Preview)] — START
+   📌 क्या: image/video/PDF/doc को fullscreen में open + save button
+   🔗 कहाँ से: img click, video click, doc click
+   ⚠️ डिपेंड: mediaViewer, mediaViewerContent DOM
+   🎯 image → img tag, video → video controls, else → iframe
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function openMediaViewer(dataUrl, mimeType, fileName) {
   mediaViewerState = { dataUrl, mimeType, fileName };
@@ -2832,6 +3502,18 @@ $('saveMediaBtn').onclick = () => {
   toast('✅ Downloads में सहेज दिया गया');
 };
 
+/* ───────── 🟦 [SECTION 49: MEDIA VIEWER] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 50: ATTACH MENU (Camera/Image/Doc/Location/Contact/Phone)] — START
+   📌 क्या: paperclip button → attach menu popup, हर option का input trigger
+   🔗 कहाँ से: attachBtn, attachMenu
+   ⚠️ डिपेंड: photoFileInput, videoFileInput, docFileInput, anyFileInput,
+              cameraCaptureInput, sendLocationMessage, sendContactMessage,
+              openPhoneContactsPicker
+   ═══════════════════════════════════════════════════════════════════════ */
+
 const attachBtn = $('attachBtn');
 const attachMenu = $('attachMenu');
 
@@ -2860,9 +3542,24 @@ attachMenu.querySelectorAll('.attach-menu-item').forEach(btn => {
   };
 });
 
+// File inputs — एक बार file select होने पर send
 $('photoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
-$('videoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };$('docFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
-$('anyFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };$('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('videoFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('docFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('anyFileInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+$('cameraCaptureInput').onchange = (e) => { const f = e.target.files[0]; if (f) sendMediaMessage(f); e.target.value = ''; };
+
+/* ───────── 🟦 [SECTION 50: ATTACH MENU] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 51: SEND LOCATION MESSAGE] — START
+   📌 क्या: browser geolocation API से lat/lng लेकर Google Maps link
+           भेजना as doc message
+   🔗 कहाँ से: attach menu → location action
+   ⚠️ डिपेंड: navigator.geolocation
+   🎯 Receiver के लिए handleDocDownload() special case
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function sendLocationMessage() {
   if (!currentChatTargetId) return;
@@ -2892,6 +3589,17 @@ function sendLocationMessage() {
     toast('✅ लोकेशन भेज दी गई');
   }, () => { toast('लोकेशन प्राप्त नहीं हुई'); });
 }
+
+/* ───────── 🟦 [SECTION 51: LOCATION] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 52: SEND CONTACT MESSAGE (App Users)] — START
+   📌 क्या: app users में से कोई contact चुनकर VCF की तरह भेजना
+   🔗 कहाँ से: attach menu → contact action
+   ⚠️ डिपेंड: allOnlineUsers, sendChatMessagePush
+   🎯 Receiver: handleDocDownload → VCF open
+   ═══════════════════════════════════════════════════════════════════════ */
 
 async function sendContactMessage() {
   if (!currentChatTargetId) return;
@@ -2927,6 +3635,18 @@ async function sendContactMessage() {
   toast('✅ संपर्क भेज दिया गया');
 }
 
+/* ───────── 🟦 [SECTION 52: SEND CONTACT] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 53: PHONE CONTACTS PICKER (Native)] — START
+   📌 क्या: native Android से फोन contacts load करके user को select
+           करने देना और multi-select VCF भेजना
+   🔗 कहाँ से: attach menu → phone action
+   ⚠️ डिपेंड: loadPhoneContacts() (native bridge), isNativeApp()
+   🎯 Duplicate phone numbers filter, 300 max render, search
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let phoneContactsCache = [];
 
 async function openPhoneContactsPicker() {
@@ -2943,6 +3663,8 @@ async function openPhoneContactsPicker() {
   const selected = new Set();
 
   phoneContactsCache = await loadPhoneContacts();
+
+  // Duplicate numbers हटाओ
   const seen = new Set();
   phoneContactsCache = phoneContactsCache.filter(c => {
     if (!c || !c.phone) return false;
@@ -2999,6 +3721,17 @@ async function openPhoneContactsPicker() {
   renderList('');
 }
 
+/* ───────── 🟦 [SECTION 53: PHONE CONTACTS PICKER] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 54: SEND VCF MESSAGE] — START
+   📌 क्या: raw VCF content को base64 में encode करके doc message भेजना
+   🔗 कहाँ से: openPhoneContactsPicker() → multi-select send
+   ⚠️ डिपेंड: Firebase chats/{roomId}, sendChatMessagePush
+   🎯 Unicode-safe base64 (unescape + encodeURIComponent)
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function sendVcfMessage(vcfData, fileName) {
   const targetId = currentChatTargetId;
   if (!targetId) return;
@@ -3019,7 +3752,17 @@ async function sendVcfMessage(vcfData, fileName) {
   sendChatMessagePush(targetId, label, roomId, newMsgRef.key, { mediaType: 'doc', fileName, mimeType: 'text/vcard' });
 }
 
-// Voice Dock Recording
+/* ───────── 🟦 [SECTION 54: SEND VCF] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 55: VOICE DOCK RECORDING (UI + WAVEFORM)] — START
+   📌 क्या: mic hold पर dock popup, timer, pause/resume, live waveform
+   🔗 कहाँ से: actionBtn click (empty input), dockPauseResumeBtn, dockTrashBtn
+   ⚠️ डिपेंड: MediaRecorder, AudioContext analyser, waveCanvas
+   🎯 120s auto-send limit, discard पर cleanup
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let dockMediaRecorder = null, dockAudioChunks = [], dockStream = null, dockTimer = null, dockSeconds = 0;
 let dockAudioContext = null, dockAnalyser = null, dockAnimFrame = null, isDockPaused = false;
 const voiceDock = $('voiceDock'), dockTimerText = $('dockTimerText'), dockPauseResumeBtn =$('dockPauseResumeBtn');
@@ -3087,6 +3830,7 @@ function stopWaveformVisualizer() {
   if (dockAudioContext) { dockAudioContext.close().catch(()=>{}); dockAudioContext = null; }
 }
 
+// पॉज़ / जारी रखें toggle
 dockPauseResumeBtn.onclick = () => {
   if (!dockMediaRecorder) return;
   if (!isDockPaused) {
@@ -3100,6 +3844,7 @@ dockPauseResumeBtn.onclick = () => {
   }
 };
 
+// रद्द करना
 function discardRecording() {
   if (dockTimer) { clearInterval(dockTimer); dockTimer = null; }
   stopWaveformVisualizer();
@@ -3110,6 +3855,18 @@ function discardRecording() {
   updateActionBtnState();
 }
 $('dockTrashBtn').onclick = discardRecording;
+
+/* ───────── 🟦 [SECTION 55: VOICE DOCK UI] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 56: VOICE DOCK SEND] — START
+   📌 क्या: record किए हुए audio को base64 में बदलकर message के रूप
+           में भेजना
+   🔗 कहाँ से: dockSendBtn, 120s auto-trigger
+   ⚠️ डिपेंड: Firebase chats, sendChatMessagePush
+   🎯 audio/webm mime type
+   ═══════════════════════════════════════════════════════════════════════ */
 
 function sendVoiceDock() {
   if (!dockMediaRecorder) return;
@@ -3156,19 +3913,25 @@ function sendVoiceDock() {
 }
 $('dockSendBtn').onclick = sendVoiceDock;
 
-/* =========================================================================
-   🔴🔴🔴 [PART 2 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
-   ========================================================================= */
-/* =========================================================================
-   🟢🟢🟢 [PART 3 OF 3 — START (शुरू): app.js v1.24.1] 🟢🟢🟢
-   Call Engine, Controls, Strict Viewport & Touch-Slide Lock Fix, Hardware Back & Init
-   ========================================================================= */
+/* ───────── 🟦 [SECTION 56: VOICE DOCK SEND] — END ───────── */
+
+/* ═══ यहाँ BATCH 2B खत्म होता है ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 57: LISTEN INCOMING CALLS + MISSED + PUSH] — START
+   📌 क्या: user_inbox/{myUserId} पर live listen — जब कोई call आती है
+           तो ring dialog दिखाना, cancelled/missed/ended handle करना
+           + missed call notification
+   🔗 कहाँ से: initPresence() → listenForIncoming()
+   ⚠️ डिपेंड: activeCallId, currentCallType, Firebase user_inbox
+   🎯 Busy/cancelled/ended detection + missed call logging
+   ═══════════════════════════════════════════════════════════════════════ */
 
 currentCallType = 'outgoing';
 
 function listenForIncoming() {
   const incomingRef = ref(db, `user_inbox/${myUserId}`);
 
+  // पहली बार get — अगर app बंद थी और call आ चुकी है
   get(incomingRef).then(snap => {
     const data = snap.val();
     if (data && data.status === 'calling' && !activeCallId) {
@@ -3176,20 +3939,24 @@ function listenForIncoming() {
     }
   }).catch(()=>{});
 
+  // Live listen
   onValue(incomingRef, async (snap) => {
     const data = snap.val();
     if (!data) return;
 
+    // Direct accept से आए user के लिए — अपने inbox को clear करो
     if (callJoinedViaDirectAccept && activeCallId === data.callId) {
       remove(incomingRef).catch(()=>{});
       return;
     }
 
     if (data.status === 'calling') {
+      // अगर उसी call में already connected हैं तो skip
       if (activeCallId === data.callId && isCallConnected) {
         remove(incomingRef).catch(()=>{});
         return;
       }
+      // Busy — सामने वाले को बिज़ी बता दो
       if (isCallConnected || (activeCallId && !callScreen.hidden)) {
         await update(ref(db, `call_sessions/${data.callId}`), { status: 'busy' }).catch(()=>{});
         await remove(incomingRef).catch(()=>{});
@@ -3200,6 +3967,7 @@ function listenForIncoming() {
       await update(incomingRef, { status: 'ringing' }).catch(()=>{});
       await update(ref(db, `call_sessions/${data.callId}`), { status: 'ringing' }).catch(()=>{});
     } else if (data.status === 'cancelled' || data.status === 'ended') {
+      // Caller ने cancel कर दिया — missed call log करो
       clearOngoingCallNotification();
       if (!isCallConnected && currentCallType === 'incoming') {
         recordCallLog({
@@ -3225,6 +3993,7 @@ function listenForIncoming() {
   });
 }
 
+// Missed call के लिए notification
 function triggerMissedCallNotification(callerName, count) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
@@ -3245,6 +4014,7 @@ function triggerMissedCallNotification(callerName, count) {
   }).catch(() => {});
 }
 
+// Cloudflare worker से push notification भेजना (caller side)
 async function sendPushNotification(token, callerName, isVoice = false) {
   try {
     fetch("https://neeraj.neerajthegreat192.workers.dev/", {
@@ -3261,14 +4031,28 @@ async function sendPushNotification(token, callerName, isVoice = false) {
   } catch(e) {}
 }
 
+/* ───────── 🟦 [SECTION 57: INCOMING CALL LISTENER] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 58: START CALL (Outgoing)] — START
+   📌 क्या: कोई user को video/audio call करना। Firebase session create,
+           target के inbox में calling flag, ring tone बजाना,
+           answer/reject/busy/ended की live monitoring
+   🔗 कहाँ से: contact card click, call log click, chat call buttons
+   ⚠️ डिपेंड: CallAudioManager, acquireCallMedia, sendPushNotification
+   🎯 45s timeout, busy/reject पर 2.5s busy tone फिर hangup
+   ═══════════════════════════════════════════════════════════════════════ */
+
 async function startCall(remoteId, remoteName, audioOnly = false) {
   // कॉल मिलाते ही कनेक्टिंग टोन चालू करें
   CallAudioManager.playConnecting();
-  
+
+  // Target busy है क्या?
   try {
     const bSnap = await get(ref(db, `users/${remoteId}/activeCallId`));
     if (bSnap.exists() && bSnap.val()) {
-      CallAudioManager.stopAll(); // अगर बिज़ी है तो टोन बंद कर दें
+      CallAudioManager.stopAll();
       toast(`${remoteName} ${currentLang==='hi'?'अभी दूसरी कॉल में व्यस्त है':'is busy on another call'}`);
       return;
     }
@@ -3293,6 +4077,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
 
+  // Firebase session create
   const sessionRef = ref(db, `call_sessions/${activeCallId}`);
   await set(sessionRef, {
     callId: activeCallId,
@@ -3304,6 +4089,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
     createdAt: serverTimestamp()
   });
 
+  // Target के inbox में incoming call
   await set(ref(db, `user_inbox/${remoteId}`), {
     callId: activeCallId,
     callerId: myUserId,
@@ -3312,80 +4098,96 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
     status: 'calling'
   });
 
+  // Session status पर live watch
   const unsubSession = onValue(sessionRef, (snap) => {
     const d = snap.val();
     if (!d) return;
-    
-    // jab samne wala ringing status set kare
+
+    // जब सामने वाला ringing status सेट करे
     if (d.status === 'ringing' && !isCallConnected) {
       $('outgoingStatusText').textContent = currentLang==='hi'?'घंटी बज रही है... (Ringing)':'Ringing...';
       CallAudioManager.playRinging();
     }
-    
-    // jab samne wale ne call utha li ho
+
     if (d.status === 'answered') {
       CallAudioManager.stopAll();
     }
-    // जब सामने वाला बिज़ी हो 
-    if (d.status === 'busy') { 
-      unsubSession(); 
-      toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy'); 
+
+    // Busy
+    if (d.status === 'busy') {
+      unsubSession();
+      toast(currentLang==='hi'?'📵 सामने वाला अभी व्यस्त है':'📵 User is busy');
       CallAudioManager.playBusy();
       setTimeout(() => {
-        outgoingDialog.hidden = true; 
+        outgoingDialog.hidden = true;
         hangup(true);
-      }, 2500); // 2.5 सेकंड बिज़ी टोन बजाकर काट दें
+      }, 2500);
     }
-    
-    // जब सामने वाला कॉल काट (Reject) दे
-    if (d.status === 'rejected') { 
-      unsubSession(); 
-      toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined'); 
+
+    // Reject
+    if (d.status === 'rejected') {
+      unsubSession();
+      toast(currentLang==='hi'?'❌ कॉल अस्वीकार कर दी गई':'❌ Call declined');
       CallAudioManager.playBusy();
       setTimeout(() => {
-        outgoingDialog.hidden = true; 
+        outgoingDialog.hidden = true;
         hangup(true);
-      }, 2500); // 2.5 सेकंड बिज़ी टोन बजाकर काट दें
+      }, 2500);
     }
-    
-    if (d.status === 'ended' && isCallConnected) { 
-      unsubSession(); 
-      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended'); 
-      hangup(true); 
+
+    if (d.status === 'ended' && isCallConnected) {
+      unsubSession();
+      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended');
+      hangup(true);
     }
   });
   unsubs.push(unsubSession);
 
+  // 45s में कोई answer नहीं → cancel
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = setTimeout(() => {
-    if (activeCallId && !isCallConnected) { 
+    if (activeCallId && !isCallConnected) {
       CallAudioManager.stopAll();
-      toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer'); 
-      hangup(true); 
+      toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer');
+      hangup(true);
     }
   }, 45000);
 
+  // FCM push भेजो
   try {
     const tSnap = await get(ref(db, `users/${remoteId}`));
     const td = tSnap.val();
     if (td && td.fcmToken) sendPushNotification(td.fcmToken, myUserName, audioOnly);
   } catch(e) {}
 
+  // Target जब member बन जाए (answer) → session join
   const unsubAns = onValue(ref(db, `call_sessions/${activeCallId}/members/${remoteId}`), (snap) => {
-    if (snap.exists()) { 
-      CallAudioManager.stopAll(); // बात शुरू होते ही सारी टोन्स बंद
-      outgoingDialog.hidden = true; 
-      unsubAns(); 
-      joinCallSession(); 
+    if (snap.exists()) {
+      CallAudioManager.stopAll();
+      outgoingDialog.hidden = true;
+      unsubAns();
+      joinCallSession();
     }
   });
   unsubs.push(unsubAns);
 }
 
+/* ───────── 🟦 [SECTION 58: START CALL] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 59: CALL CANCEL/ACCEPT/REJECT BUTTONS] — START
+   📌 क्या: outgoing dialog का cancel, incoming dialog का accept/reject
+   🔗 कहाँ से: outgoingDialog "रद्द करें", incomingDialog "उठाएँ"/"काटें"
+   ⚠️ डिपेंड: CallAudioManager, acquireCallMedia, recordCallLog
+   🎯 Reject = log + Firebase rejected + locked detection
+   ═══════════════════════════════════════════════════════════════════════ */
+
 $('btnCancelCall').onclick = () => {
-  CallAudioManager.stopAll(); // कैंसिल करते ही टोन बंद
+  CallAudioManager.stopAll();
   outgoingDialog.hidden = true;
   if (currentCallTargetId) {
+    // Chat में missed call का system message
     const roomId = getChatRoomId(myUserId, currentCallTargetId);
     const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
     const logId = activeCallId || `call_${Date.now()}`;
@@ -3399,6 +4201,7 @@ $('btnCancelCall').onclick = () => {
       remove(ref(db, `user_inbox/${currentCallTargetId}`)).catch(()=>{});
     }, 3000);
 
+    // Push cancel
     get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
       const token = snap.val()?.fcmToken;
       if (token) {
@@ -3414,7 +4217,7 @@ $('btnCancelCall').onclick = () => {
 };
 
 $('btnAccept').onclick = async () => {
-  CallAudioManager.stopAll(); // उठाते ही रिंग टोन बंद
+  CallAudioManager.stopAll();
   incomingDialog.hidden = true;
   if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
 };
@@ -3455,6 +4258,18 @@ $('btnReject').onclick = async () => {
   closeIfLocked();
 };
 
+/* ───────── 🟦 [SECTION 59: CALL BUTTONS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 60: CALL MODE VISUALS + AUDIO-ONLY TOGGLE + PiP] — START
+   📌 क्या: video ↔ audio mode switch (voiceCallArea दिखाना, remoteGrid छिपाना),
+           camera track on/off (सभी peers पर replaceTrack), PiP entry
+   🔗 कहाँ से: audioModeBtn, camBtn (जब audio-only हो), PiP button
+   ⚠️ डिपेंड: localStream, peerConnections, ICE_SERVERS
+   🎯 Audio-only में earpiece, video mode में speaker
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function updateCallModeVisuals(isVoiceMode) {
   const voiceArea = $('voiceCallArea');
   const remoteGridEl = $('remoteGrid');
@@ -3486,6 +4301,7 @@ function updateCallModeVisuals(isVoiceMode) {
   }
 }
 
+// Video track को enable/disable — सभी peers पर
 async function toggleVideoTrackMode(enableCam) {
   try {
     if (enableCam) {
@@ -3541,7 +4357,7 @@ $('audioModeBtn').onclick = (e) => {
   scheduleAutoHide();
 };
 
-// --- पॉइंट #4: PiP Mode Native Call ---
+// PiP mode entry
 if ($('btnEnterPip')) {
   $('btnEnterPip').onclick = (e) => {
     e.stopPropagation();
@@ -3554,6 +4370,18 @@ if ($('btnEnterPip')) {
     }
   };
 }
+
+/* ───────── 🟦 [SECTION 60: CALL MODE VISUALS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 61: BITRATE + QUALITY MONITOR] — START
+   📌 क्या: WebRTC bitrate boost, SDP bitrate patch, हर 3s पर network
+           quality (RTT + packet loss) sample करना
+   🔗 कहाँ से: initiatePeerConnection, joinCallSession → startNetworkQualityMonitor
+   ⚠️ डिपेंड: peerConnections, localStream
+   🎯 High: 5 Mbps / Medium: 2.5 Mbps
+   ═══════════════════════════════════════════════════════════════════════ */
 
 async function boostPeerBitrate(pc) {
   try {
@@ -3637,9 +4465,1214 @@ function stopNetworkQualityMonitor() {
   qualityLevel = 'high';
 }
 
-// ===================================================
-// 🪄 FUN MODE & GAMES
-// ===================================================
+/* ───────── 🟦 [SECTION 61: QUALITY MONITOR] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 62: 🔥 NETWORK RECOVERY (NEW) — START]
+   📌 क्या: Call के दौरान network switch होने पर auto-reconnect
+   🔥 NEW MODULE — group (4-member) + 1:1 दोनों के लिए
+   📋 Logic:
+      1. Browser 'online' event या Firebase '.info/connected' → trigger
+      2. Dead localStream tracks (audio/video) re-acquire
+      3. हर peer के लिए:
+         - अगर मैं initiator (myUserId < peerId): ICE restart offer भेजो
+         - अगर मैं answerer: Firebase में recovery request लिखो
+      4. Initiator side पर recovery request सुनकर ICE restart trigger
+      5. Max 5 attempts, फिर fail toast
+   🔗 कहाँ से: joinCallSession() → setupCallNetworkRecovery()
+              hangup() finally → teardownCallNetworkRecovery()
+   ⚠️ डिपेंड: peerConnections, localStream, applySDPBitrate
+   🎯 Glare-free design: सिर्फ initiator ही ICE restart करता है
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let networkRecoveryActive = false;
+let networkRecoveryRetryCount = 0;
+let networkOnlineHandler = null;
+let networkOfflineHandler = null;
+let networkFirebaseConnectedUnsub = null;
+let networkRecoveryRequestUnsub = null;
+let networkWasOffline = false;
+
+/**
+ * 🆕 Call के दौरान network recovery listeners setup
+ * joinCallSession() में call होता है
+ */
+function setupCallNetworkRecovery() {
+  if (networkRecoveryActive) return;
+  networkRecoveryActive = true;
+  networkRecoveryRetryCount = 0;
+  networkWasOffline = false;
+
+  // 1️⃣ Browser offline/online detection
+  networkOfflineHandler = () => {
+    networkWasOffline = true;
+    console.log('[NetRecovery] offline event');
+  };
+  window.addEventListener('offline', networkOfflineHandler);
+
+  networkOnlineHandler = () => {
+    if (!networkWasOffline) return; // spurious event ignore
+    networkWasOffline = false;
+    if (!activeCallId || isHangingUp || !isCallConnected) return;
+    console.log('[NetRecovery] online event — scheduling recovery');
+    setTimeout(() => attemptNetworkRecovery(), 600);
+  };
+  window.addEventListener('online', networkOnlineHandler);
+
+  // 2️⃣ Firebase .info/connected — WebSocket reconnect
+  if (networkFirebaseConnectedUnsub) networkFirebaseConnectedUnsub();
+  let firebaseWasDisconnected = false;
+  networkFirebaseConnectedUnsub = onValue(ref(db, '.info/connected'), (snap) => {
+    if (snap.val() === false) {
+      firebaseWasDisconnected = true;
+    } else if (snap.val() === true && firebaseWasDisconnected) {
+      firebaseWasDisconnected = false;
+      if (activeCallId && isCallConnected && !isHangingUp) {
+        console.log('[NetRecovery] Firebase reconnected — scheduling recovery');
+        setTimeout(() => attemptNetworkRecovery(), 600);
+      }
+    }
+  });
+
+  // 3️⃣ Recovery requests — मैं initiator हूँ तो peer के request पर ICE restart भेजो
+  if (networkRecoveryRequestUnsub) networkRecoveryRequestUnsub();
+  if (!activeCallId) return;
+  networkRecoveryRequestUnsub = onValue(ref(db, `call_sessions/${activeCallId}/recovery_requests`), async snap => {
+    const requests = snap.val() || {};
+    for (const key of Object.keys(requests)) {
+      const parts = key.split('__');
+      if (parts.length !== 2) continue;
+      const [from, to] = parts;
+      if (to !== myUserId) continue;       // request मेरे लिए नहीं है
+      if (from === myUserId) continue;     // खुद से नहीं
+      if (myUserId >= from) continue;      // मैं initiator नहीं हूँ
+
+      const pc = peerConnections[from];
+      if (!pc) continue;
+
+      const reqTs = requests[key]?.requestedAt || 0;
+      if (pc._lastRestartRequest && pc._lastRestartRequest >= reqTs) continue;
+      pc._lastRestartRequest = reqTs;
+
+      try {
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(new RTCSessionDescription({ type: offer.type, sdp: applySDPBitrate(offer.sdp) }));
+        const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${from}`;
+        await set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
+        console.log('[NetRecovery] ICE restart offer sent on request to', from);
+      } catch(e) {
+        console.warn('[NetRecovery] ICE restart on request failed:', e);
+      }
+    }
+  });
+
+  console.log('[NetRecovery] listeners active');
+}
+
+/**
+ * 🆕 Actual reconnect attempt
+ * - Dead media re-acquire
+ * - Peer-wise: initiator → ICE restart, answerer → Firebase recovery request
+ */
+async function attemptNetworkRecovery() {
+  if (!activeCallId || isHangingUp || !isCallConnected) return;
+
+  networkRecoveryRetryCount++;
+  if (networkRecoveryRetryCount > 5) {
+    toast(currentLang === 'hi' ? '❌ नेटवर्क रिकनेक्ट नहीं हो पाया' : '❌ Network reconnect failed');
+    networkRecoveryRetryCount = 0;
+    return;
+  }
+
+  toast(currentLang === 'hi' ? `🔄 नेटवर्क रिकनेक्ट... (${networkRecoveryRetryCount}/5)` : `🔄 Reconnecting... (${networkRecoveryRetryCount}/5)`);
+  console.log('[NetRecovery] attempt #' + networkRecoveryRetryCount);
+
+  // ── Step 1: Dead media re-acquire ──
+  if (localStream) {
+    const audioTracks = localStream.getAudioTracks();
+    const audioDead = audioTracks.length === 0 || audioTracks.every(t => t.readyState === 'ended');
+    const videoTracks = localStream.getVideoTracks();
+    const videoDead = !isAudioOnlyCall && (videoTracks.length === 0 || videoTracks.every(t => t.readyState === 'ended'));
+
+    if (audioDead || videoDead) {
+      try {
+        console.log('[NetRecovery] re-acquiring dead media (audio:' + audioDead + ', video:' + videoDead + ')');
+        const fresh = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          video: isAudioOnlyCall ? false : { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        // पुराने dead tracks हटाओ
+        localStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
+        // नए tracks जोड़ो
+        fresh.getTracks().forEach(t => localStream.addTrack(t));
+        localVideo.srcObject = localStream;
+        localVideo.play().catch(()=>{});
+      } catch(e) {
+        console.warn('[NetRecovery] media re-acquire failed:', e);
+      }
+    }
+  }
+
+  // ── Step 2: Peer-wise recovery ──
+  for (const pId of Object.keys(peerConnections)) {
+    const pc = peerConnections[pId];
+    if (!pc) continue;
+
+    // Sender tracks को fresh से replace करो
+    if (localStream) {
+      for (const sender of pc.getSenders()) {
+        if (!sender.track) continue;
+        const fresh = localStream.getTracks().find(t => t.kind === sender.track.kind);
+        if (fresh && fresh !== sender.track) {
+          try { await sender.replaceTrack(fresh); } catch(e) {}
+        }
+      }
+    }
+
+    const iAmInitiator = myUserId < pId;
+
+    if (iAmInitiator) {
+      // मैं initiator → सीधे ICE restart offer भेजो
+      try {
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(new RTCSessionDescription({ type: offer.type, sdp: applySDPBitrate(offer.sdp) }));
+        const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${pId}`;
+        await set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
+        console.log('[NetRecovery] ICE restart offer sent to', pId);
+        boostPeerBitrate(pc);
+      } catch(e) {
+        console.warn('[NetRecovery] ICE restart failed for', pId, e);
+        // अगर PC dead है तो fallback: close करके peer फिर से connect करेगा
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+          try { pc.close(); } catch(e2) {}
+          delete peerConnections[pId];
+        }
+      }
+    } else {
+      // मैं answerer → initiator को recovery request भेजो
+      try {
+        await set(ref(db, `call_sessions/${activeCallId}/recovery_requests/${myUserId}__${pId}`), {
+          requestedAt: Date.now(),
+          from: myUserId
+        });
+        console.log('[NetRecovery] recovery request sent to', pId);
+      } catch(e) {
+        console.warn('[NetRecovery] recovery request failed:', e);
+      }
+    }
+  }
+
+  // 8s बाद retry counter reset (success मान लो)
+  setTimeout(() => { networkRecoveryRetryCount = 0; }, 8000);
+}
+
+/**
+ * 🆕 Hangup के समय listeners cleanup
+ */
+function teardownCallNetworkRecovery() {
+  if (networkOfflineHandler) {
+    window.removeEventListener('offline', networkOfflineHandler);
+    networkOfflineHandler = null;
+  }
+  if (networkOnlineHandler) {
+    window.removeEventListener('online', networkOnlineHandler);
+    networkOnlineHandler = null;
+  }
+  if (networkFirebaseConnectedUnsub) {
+    networkFirebaseConnectedUnsub();
+    networkFirebaseConnectedUnsub = null;
+  }
+  if (networkRecoveryRequestUnsub) {
+    networkRecoveryRequestUnsub();
+    networkRecoveryRequestUnsub = null;
+  }
+  networkRecoveryActive = false;
+  networkRecoveryRetryCount = 0;
+  networkWasOffline = false;
+  console.log('[NetRecovery] listeners teardown');
+}
+
+/* ───────── 🟦 [SECTION 62: NETWORK RECOVERY] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 63: JOIN CALL SESSION (Main WebRTC Entry)] — START
+   📌 क्या: Call से connect होने पर सारी setup — media, timer, network
+           recovery, members live watch, खुद को member list में add
+   🔗 कहाँ से: btnAccept, startCall का answer listener, handleDirectAcceptCall
+   ⚠️ डिपेंड: initKidsQuizListener, initRiddleGkListener, setupCallNetworkRecovery
+   🎯 Foreground service, wake lock, member cleanup onDisconnect
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function joinCallSession() {
+  CallAudioManager.stopAll();
+
+  // Caller को answer signal भेजो
+  if (!isCaller && activeCallId) {
+    update(ref(db, `call_sessions/${activeCallId}`), { status: 'answered' }).catch(()=>{});
+  }
+
+  isCallConnected = true;
+  callStartTime = Date.now();
+
+  clearTimeout(callTimeoutTimer);
+  callTimeoutTimer = null;
+  stopAllCallTones();
+  lobbyScreen.hidden = true;
+  chatScreen.hidden = true;
+  callScreen.hidden = false;
+  isCallConnected = true;
+  isHangingUp = false;
+  ignoreBackUntil = Date.now() + 2000;
+  await requestWakeLock();
+  startNetworkQualityMonitor();
+  pipWrap.classList.remove('pip-hidden');
+  pipRestoreBtn.hidden = true;
+  localVideo.srcObject = localStream;
+  localVideo.play().catch(()=>{});
+
+  updateCallModeVisuals(isAudioOnlyCall);
+
+  if (isAudioOnlyCall) setHardwareSpeaker(false);
+  else setHardwareSpeaker(true);
+
+  startTimer();
+  scheduleAutoHide();
+
+  // 🆕 NETWORK RECOVERY HOOK — network switch auto-reconnect
+  setupCallNetworkRecovery();
+
+  // Foreground service (native)
+  if (window.AndroidBridge && typeof window.AndroidBridge.startCallForegroundService === 'function') {
+    window.AndroidBridge.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
+  } else if (window.AndroidAudio && typeof window.AndroidAudio.startCallForegroundService === 'function') {
+    window.AndroidAudio.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
+  }
+
+  // Fun mode listeners (batch 4 से hoisted)
+  initKidsQuizListener();
+  initRiddleGkListener();
+  listenRemoteCanvas();
+  listenWhiteboardAutoSync();
+  listenTictactoeSession();
+
+  const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
+  onDisconnect(myMemberRef).remove().catch(()=>{});
+
+  await set(myMemberRef, {
+    name: myUserName,
+    camEnabled: !isAudioOnlyCall,
+    micEnabled,
+    audioOnly: isAudioOnlyCall,
+    joinedAt: Date.now()
+  });
+
+  callJoinedViaDirectAccept = false;
+
+  // Session status watch
+  if (callSessionUnsub) callSessionUnsub();
+  callSessionUnsub = onValue(ref(db, `call_sessions/${activeCallId}/status`), snap => {
+    if (snap.val() === 'ended') {
+      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended');
+      hangup(true);
+    }
+  });
+
+  // Members live — हर new member के लिए peer connection
+  onValue(ref(db, `call_sessions/${activeCallId}/members`), snap => {
+    const members = snap.val() || {};
+    const ids = Object.keys(members);
+    if (ids.length > MAX_CALL_MEMBERS) { toast(`Maximum ${MAX_CALL_MEMBERS} members allowed`); return; }
+    ids.forEach(pId => {
+      if (pId !== myUserId) {
+        if (!peerConnections[pId]) initiatePeerConnection(pId, members[pId].name);
+        updateRemotePeerUI(pId, members[pId]);
+      }
+    });
+    Object.keys(peerConnections).forEach(pId => { if (!members[pId]) closePeer(pId); });
+    updateRemoteGridClass();
+  });
+}
+
+/* ───────── 🟦 [SECTION 63: JOIN CALL SESSION] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 64: PEER CONNECTION (WebRTC per Peer)] — START
+   📌 क्या: हर remote user के लिए RTCPeerConnection बनाना, offer/answer
+           signaling, ICE candidates exchange, track receive
+   🔗 कहाँ से: joinCallSession → members listener
+   ⚠️ डिपेंड: ICE_SERVERS, peerConnections, localStream
+   🎯 Smaller userId = initiator (offerer), larger = answerer
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function initiatePeerConnection(peerId, peerName) {
+  const pc = new RTCPeerConnection(ICE_SERVERS);
+  peerConnections[peerId] = pc;
+
+  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  if (isAudioOnlyCall && (!localStream || localStream.getVideoTracks().length === 0)) {
+    try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch(e){}
+  }
+  boostPeerBitrate(pc);
+
+  pc.ontrack = e => {
+    addRemoteVideoCell(peerId, e.streams[0], peerName);
+    updateRemoteGridClass();
+    if (isAudioOnlyCall && !speakerEnabled) {
+      setTimeout(() => { setHardwareSpeaker(false); }, 300);
+      setTimeout(() => { setHardwareSpeaker(false); }, 1000);
+    }
+  };
+
+  const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${peerId}`;
+  const peerPath = `call_sessions/${activeCallId}/signals/${peerId}__${myUserId}`;
+
+  pc.onicecandidate = e => { if (e.candidate) push(ref(db, `${myPath}/candidates`), e.candidate.toJSON()); };
+  pc.pendingIce = [];
+
+  onChildAdded(ref(db, `${peerPath}/candidates`), async snap => {
+    const c = snap.val();
+    if (!c) return;
+    const cand = new RTCIceCandidate(c);
+    if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
+    else pc.pendingIce.push(cand);
+  });
+
+  pc.flushIce = async () => {
+    const p = pc.pendingIce || [];
+    pc.pendingIce = [];
+    for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
+  };
+
+  if (myUserId < peerId) {
+    // मैं initiator → offer बनाओ
+    pc.createOffer()
+      .then(o => pc.setLocalDescription(new RTCSessionDescription({ type: o.type, sdp: applySDPBitrate(o.sdp) })))
+      .then(() => set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type }));
+
+    onValue(ref(db, `${peerPath}/answer`), snap => {
+      const a = snap.val();
+      if (a && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== a.sdp)) {
+        pc.setRemoteDescription(new RTCSessionDescription(a)).then(async () => { await pc.flushIce(); boostPeerBitrate(pc); });
+      }
+    });
+  } else {
+    // मैं answerer → offer सुनो, answer भेजो
+    onValue(ref(db, `${peerPath}/offer`), async snap => {
+      const o = snap.val();
+      if (o && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== o.sdp)) {
+        await pc.setRemoteDescription(new RTCSessionDescription(o));
+        await pc.flushIce();
+        const a = await pc.createAnswer();
+        await pc.setLocalDescription(new RTCSessionDescription({ type: a.type, sdp: applySDPBitrate(a.sdp) }));
+        set(ref(db, `${myPath}/answer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
+        boostPeerBitrate(pc);
+      }
+    });
+  }
+}
+
+/* ───────── 🟦 [SECTION 64: PEER CONNECTION] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 65: REMOTE VIDEO CELL & PEER UI] — START
+   📌 क्या: remote stream के लिए video element बनाना, cam/mic off
+           overlays दिखाना/छिपाना, grid layout adjust
+   🔗 कहाँ से: initiatePeerConnection ontrack, members listener
+   ⚠️ डिपेंड: remoteGrid DOM
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function addRemoteVideoCell(id, stream, peerName) {
+  let cell = $(`remote_cell_${id}`);
+  if (!cell) {
+    cell = document.createElement('div');
+    cell.id = `remote_cell_${id}`;
+    cell.className = 'remote-cell';
+    cell.innerHTML = `
+      <video autoplay playsinline></video>
+      <div class="remote-mute-badge" id="mute_badge_${id}" hidden>🔇 माइक बंद</div>
+      <div class="remote-off-overlay" id="cam_off_${id}" hidden>
+        <div class="remote-off-avatar">👤</div>
+        <div style="font-size:12px;font-weight:700;color:#94a3b8">${safeName(peerName || 'यूज़र')}</div>
+      </div>
+    `;
+    remoteGrid.appendChild(cell);
+  }
+  const v = cell.querySelector('video');
+  v.srcObject = stream;
+  v.muted = false;
+  v.play().catch(()=>{});
+}
+
+function updateRemotePeerUI(peerId, data) {
+  if (!data) return;
+  const cam = $(`cam_off_${peerId}`), mic = $(`mute_badge_${peerId}`);
+  if (cam) cam.hidden = data.camEnabled !== false;
+  if (mic) mic.hidden = data.micEnabled !== false;
+}
+
+function removeRemoteVideoCell(id) { const c = $(`remote_cell_${id}`); if (c) c.remove(); }
+
+function updateRemoteGridClass() {
+  const count = remoteGrid.children.length;
+  remoteGrid.className = count <= 1 ? 'count-1' : count === 2 ? 'count-2' : 'count-4';
+}
+
+function closePeer(id) {
+  if (peerConnections[id]) { peerConnections[id].close(); delete peerConnections[id]; }
+  removeRemoteVideoCell(id);
+  updateRemoteGridClass();
+}
+
+/* ───────── 🟦 [SECTION 65: REMOTE PEER UI] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 66: ADD PARTICIPANT MODAL] — START
+   📌 क्या: चालू call में नया user जोड़ना (4 तक)
+   🔗 कहाँ से: btnAddPerson (call screen)
+   ⚠️ डिपेंड: allOnlineUsers, MAX_CALL_MEMBERS, Firebase
+   ═══════════════════════════════════════════════════════════════════════ */
+
+$('btnAddPerson').onclick = (e) => {
+  e.stopPropagation();
+  const list = $('addContactsList');
+  list.innerHTML = '';
+  const amIAdmin = isNeerajBadola(myUserName);
+  const avail = Object.keys(allOnlineUsers).filter(id => id !== myUserId && !peerConnections[id] && (!allOnlineUsers[id].hidden || amIAdmin));
+  if (!avail.length) {
+    list.innerHTML = `<div style="font-size:12px;color:#94a3b8;padding:10px">${currentLang==='hi'?'अन्य कोई संपर्क उपलब्ध नहीं है':'No other contacts available'}</div>`;
+  } else {
+    avail.forEach(id => {
+      const u = allOnlineUsers[id];
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.05);padding:8px 12px;border-radius:12px;border:1px solid var(--line)';
+      row.innerHTML = `<span style="font-size:14px;font-weight:700">${safeName(u.name)}</span><button style="background:var(--c-call-tab);border:0;color:#fff;font-size:12px;font-weight:800;padding:6px 14px;border-radius:12px">जोड़ें</button>`;
+      row.querySelector('button').onclick = async () => {
+        const snap = await get(ref(db, `call_sessions/${activeCallId}/members`));
+        if (snap.exists() && Object.keys(snap.val()||{}).length >= MAX_CALL_MEMBERS) { toast(`Max ${MAX_CALL_MEMBERS} members allowed`); return; }
+        await update(ref(db, `users/${id}`), { activeCallId }).catch(()=>{});
+        await set(ref(db, `user_inbox/${id}`), { callId: activeCallId, callerId: myUserId, callerName: myUserName + ' (ग्रुप)', audioOnly: isAudioOnlyCall, status: 'calling' });
+        const uSnap = await get(ref(db, `users/${id}`));
+        if (uSnap.val()?.fcmToken) sendPushNotification(uSnap.val().fcmToken, myUserName, isAudioOnlyCall);
+        toast(`${u.name} को कॉल भेजा गया!`);
+        $('addParticipantModal').hidden = true;
+      };
+      list.appendChild(row);
+    });
+  }
+  $('addParticipantModal').hidden = false;
+};
+$('closeAddModalBtn').onclick = () => {$('addParticipantModal').hidden = true; };
+
+/* ───────── 🟦 [SECTION 66: ADD PARTICIPANT] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 67: PiP SWAP GESTURES] — START
+   📌 क्या: local PiP को swipe-away करना, tap पर swap, restore button
+   🔗 कहाँ से: pipWrap (touch events), pipRestoreBtn, remoteGrid click
+   ⚠️ डिपेंड: callScreen CSS class .video-swapped
+   🎯 Local ↔ Remote video swap, swipe left = hide PiP
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let pipTouchStartX = 0, pipTouchStartY = 0, pipMoved = false;
+
+pipWrap.addEventListener('touchstart', e => {
+  pipTouchStartX = e.changedTouches[0].clientX;
+  pipTouchStartY = e.changedTouches[0].clientY;
+  pipMoved = false;
+}, {passive:true});
+
+pipWrap.addEventListener('touchmove', e => {
+  const dx = Math.abs(e.changedTouches[0].clientX - pipTouchStartX);
+  const dy = Math.abs(e.changedTouches[0].clientY - pipTouchStartY);
+  if (dx > 10 || dy > 10) pipMoved = true;
+}, {passive:true});
+
+pipWrap.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - pipTouchStartX;
+  const dy = e.changedTouches[0].clientY - pipTouchStartY;
+
+  if (dx > 45 && Math.abs(dx) > Math.abs(dy)) {
+    // Swipe right — hide PiP
+    e.stopPropagation();
+    pipWrap.classList.add('pip-hidden');
+    pipRestoreBtn.hidden = false;
+    scheduleAutoHide();
+  } else if (!pipMoved) {
+    // Tap — swap local/remote
+    e.stopPropagation();
+    callScreen.classList.toggle('video-swapped');
+    toast(callScreen.classList.contains('video-swapped')
+      ? (currentLang === 'hi' ? '🔄 आपकी वीडियो बड़ी स्क्रीन पर' : '🔄 Your video Fullscreen')
+      : (currentLang === 'hi' ? '🔄 सामान्य व्यू' : '🔄 Normal View'));
+    scheduleAutoHide();
+  }
+});
+
+// Remote area tap = swap back
+remoteGrid.addEventListener('click', (e) => {
+  if (callScreen.classList.contains('video-swapped')) {
+    e.stopPropagation();
+    callScreen.classList.remove('video-swapped');
+    scheduleAutoHide();
+  }
+});
+
+pipRestoreBtn.onclick = e => {
+  e.stopPropagation();
+  pipWrap.classList.remove('pip-hidden');
+  pipRestoreBtn.hidden = true;
+  scheduleAutoHide();
+};
+
+/* ───────── 🟦 [SECTION 67: PiP SWAP] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 68: AUTO-HIDE CONTROLS] — START
+   📌 क्या: 3.5s inactivity के बाद controlsBar और callTopBar hide
+   🔗 कहाँ से: call screen interactions
+   ⚠️ डिपेंड: fun-mode open states (quiz, whiteboard, ttt, riddle), controlsBar
+   🎯 अगर कोई game खुला है तो hide नहीं
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function scheduleAutoHide() {
+  clearTimeout(autoHideTimer);
+  autoHideTimer = setTimeout(() => {
+    const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
+    const isRiddleOpen = $('kidsRiddleBox') && !$('kidsRiddleBox').hidden;
+    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden && $('funModeTray').hidden && !isTttOpen && !isRiddleOpen) {
+      controlsBar.classList.add('fade-out');
+      $('callTopBar').classList.add('fade-out');
+    }
+  }, 3500);
+}
+
+// Call screen tap = toggle controls
+callScreen.addEventListener('click', e => {
+  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox') || e.target.closest('#kidsRiddleBox')) return;
+  const isH = controlsBar.classList.contains('fade-out');
+  controlsBar.classList.toggle('fade-out', !isH);
+  $('callTopBar').classList.toggle('fade-out', !isH);
+  if (isH) scheduleAutoHide();
+});
+
+/* ───────── 🟦 [SECTION 68: AUTO-HIDE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 69: CALL CONTROLS (Mic/Cam/Speaker/Flip/Hang)] — START
+   📌 क्या: mic toggle, cam toggle, speaker toggle, camera flip,
+           hang button
+   🔗 कहाँ से: call screen control bar
+   ⚠️ डिपेंड: localStream, peerConnections, hardware bridge
+   🎯 सभी controls Firebase में sync (camEnabled, micEnabled)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+$('micBtn').onclick = async (e) => {
+  e.stopPropagation();
+  micEnabled = !micEnabled;
+  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
+  $('micBtn').classList.toggle('off', !micEnabled);
+  if (activeCallId) await update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { micEnabled }).catch(()=>{});
+  scheduleAutoHide();
+};
+
+$('camBtn').onclick = async (e) => {
+  e.stopPropagation();
+  if (isAudioOnlyCall) toggleVideoTrackMode(true);
+  else toggleVideoTrackMode(!camEnabled);
+  scheduleAutoHide();
+};
+
+$('speakerBtn').onclick = (e) => {
+  e.stopPropagation();
+  setHardwareSpeaker(!speakerEnabled);
+  toast(speakerEnabled
+    ? (currentLang === 'hi' ? '🔊 लाउडस्पीकर चालू' : '🔊 Speaker ON')
+    : (currentLang === 'hi' ? '👂 इयरपीस मोड चालू (कान पर लगाएँ)' : '👂 Earpiece mode (Put to ear)'));
+  scheduleAutoHide();
+};
+
+// Camera flip (front ↔ back)
+$('flipBtn').onclick = async (e) => {
+  e.stopPropagation();
+  $('funModeTray').hidden = true;
+  if (isAudioOnlyCall || !camEnabled) return;
+  facingMode = facingMode === 'user' ? 'environment' : 'user';
+  pipWrap.classList.toggle('mirror', facingMode === 'user');
+  try {
+    if (localStream) localStream.getVideoTracks().forEach(t => t.stop());
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } },
+      audio: false
+    });
+    const newTrack = newStream.getVideoTracks()[0];
+    const oldTrack = localStream.getVideoTracks()[0];
+    if (oldTrack) localStream.removeTrack(oldTrack);
+    localStream.addTrack(newTrack);
+    localVideo.srcObject = localStream;
+    Object.values(peerConnections).forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) sender.replaceTrack(newTrack);
+      boostPeerBitrate(pc);
+    });
+  } catch(e) {}
+  scheduleAutoHide();
+};
+
+// Hang button
+$('hangBtn').onclick = (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  if (isHangingUp) return;
+  isHangingUp = true;
+  hangup();
+};
+
+/* ───────── 🟦 [SECTION 69: CALL CONTROLS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 70: HANGUP (Full Cleanup)] — START
+   📌 क्या: call end करने का पूरा flow — duration calc, Firebase cleanup,
+           peer close, tracks stop, UI reset, native foreground service stop
+   🔗 कहाँ से: hangBtn, btnReject, listenForIncoming, startCall timeouts
+   ⚠️ डिपेंड: cleanupKidsModules (batch 4), teardownCallNetworkRecovery
+   🎯 Call log record + audio end tone + locked detection
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function hangup(silent = false) {
+  try {
+    // Duration calculate
+    let actualDuration = '00:01';
+    if (callStartTime > 0 && isCallConnected) {
+      const elapsedSec = Math.max(1, Math.floor((Date.now() - callStartTime) / 1000));
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+      const ss = String(elapsedSec % 60).padStart(2, '0');
+      actualDuration = `${mm}:${ss}`;
+    }
+
+    clearOngoingCallNotification();
+
+    // Call end tone logic
+    if (isCallConnected && !silent) {
+      CallAudioManager.playEnd();
+    } else {
+      CallAudioManager.stopAll();
+    }
+
+    // 🆕 Network recovery cleanup
+    teardownCallNetworkRecovery();
+
+    stopTimer();
+    releaseWakeLock();
+    clearTimeout(autoHideTimer);
+    clearTimeout(callTimeoutTimer);
+    callTimeoutTimer = null;
+    stopNetworkQualityMonitor();
+    cleanupKidsModules();
+    resetHardwareAudio();
+
+    // Native foreground service stop
+    if (window.AndroidBridge && typeof window.AndroidBridge.stopCallForegroundService === 'function') {
+      window.AndroidBridge.stopCallForegroundService();
+    } else if (window.AndroidAudio && typeof window.AndroidAudio.stopCallForegroundService === 'function') {
+      window.AndroidAudio.stopCallForegroundService();
+    }
+
+    // Call log
+    if (isCallConnected && currentCallTargetId) {
+      recordCallLog({
+        callId: activeCallId || `call_${Date.now()}`,
+        targetId: currentCallTargetId,
+        name: currentCallTargetName || 'उपयोगकर्ता',
+        type: isCaller ? 'outgoing' : 'incoming',
+        callMode: isAudioOnlyCall ? 'audio' : 'video',
+        duration: actualDuration,
+        time: Date.now()
+      });
+    }
+
+    // Firebase cleanup
+    if (activeCallId) {
+      await update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
+      await update(ref(db, `call_sessions/${activeCallId}`), { status: 'ended' }).catch(()=>{});
+      await remove(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`)).catch(()=>{});
+      await remove(ref(db, `call_sessions/${activeCallId}/recovery_requests`)).catch(()=>{});
+    }
+    await remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
+  } catch(err) {
+    console.warn("Hangup warning:", err);
+  } finally {
+    // Peer cleanup
+    unsubs.forEach(fn => { try { fn(); } catch(e){} });
+    unsubs = [];
+    if (callSessionUnsub) { callSessionUnsub(); callSessionUnsub = null; }
+    Object.keys(peerConnections).forEach(id => closePeer(id));
+    peerConnections = {};
+
+    // Media channels cleanup
+    Object.keys(mediaDataChannels).forEach(pid => {
+      try { mediaDataChannels[pid].close(); } catch(e) {}
+    });
+    mediaDataChannels = {};
+    Object.keys(mediaPeerConnections).forEach(pid => {
+      try { mediaPeerConnections[pid].close(); } catch(e) {}
+    });
+    mediaPeerConnections = {};
+
+    // Tracks stop
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    remoteGrid.innerHTML = '';
+    activeCallId = null;
+    isCallConnected = false;
+    isAudioOnlyCall = false;
+    callStartTime = 0;
+    callJoinedViaDirectAccept = false;
+
+    // UI reset
+    callScreen.classList.remove('video-swapped');
+    controlsBar.classList.remove('fade-out');
+    $('callTopBar').classList.remove('fade-out');
+    pipWrap.classList.remove('pip-hidden');
+    pipRestoreBtn.hidden = true;
+    pipWrap.style.opacity = '1';
+    $('camBtn').classList.remove('off');
+    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
+    remoteGrid.style.display = 'grid';
+    pipWrap.style.display = 'block';
+
+    const wasLocked = isDeviceLocked();
+    if (!wasLocked) {
+      callScreen.hidden = true;
+      incomingDialog.hidden = true;
+      outgoingDialog.hidden = true;
+      chatScreen.hidden = true;
+      lobbyScreen.hidden = false;
+    } else {
+      callScreen.hidden = true;
+      incomingDialog.hidden = true;
+      outgoingDialog.hidden = true;
+      chatScreen.hidden = true;
+      lobbyScreen.hidden = true;
+    }
+    isHangingUp = false;
+
+    closeIfLocked();
+  }
+}
+
+/* ───────── 🟦 [SECTION 70: HANGUP] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 71: CALL TIMER + WAKE LOCK] — START
+   📌 क्या: 00:00 से बढ़ता timer, screen को on रखने के लिए WakeLock
+   🔗 कहाँ से: joinCallSession (start), hangup (stop)
+   ⚠️ डिपेंड: navigator.wakeLock (optional)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function startTimer() {
+  callStartTime = Date.now();
+  if (timerTimer) clearInterval(timerTimer);
+  timerTimer = setInterval(() => {
+    const diff = Math.floor((Date.now() - callStartTime) / 1000);
+    $('callTimer').textContent = `${String(Math.floor(diff/60)).padStart(2,'0')}:${String(diff%60).padStart(2,'0')}`;
+  }, 1000);
+}
+function stopTimer() {
+  if (timerTimer) { clearInterval(timerTimer); timerTimer = null; }
+  $('callTimer').textContent = '00:00';
+}
+
+async function requestWakeLock() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+}
+function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; } }
+
+/* ───────── 🟦 [SECTION 71: TIMER + WAKE LOCK] — END ───────── */
+
+/* ═══ यहाँ BATCH 3A खत्म होता है ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 72: HARDWARE BACK BUTTON HANDLER] — START
+   📌 क्या: Android hardware back button को layered close क्रम में handle
+           करना — modal → message menu → media viewer → attach menu →
+           game → voice dock → reply → chat → call → incoming → app exit
+   🔗 कहाँ से: initApp() → setupHardwareBackButton()
+   ⚠️ डिपेंड: closeTictactoeGame, closeRiddleGame, closeKidsQuiz (batch 4),
+              closeChat, hangup, ignoreBackUntil
+   🎯 Web popstate + Native Capacitor backButton दोनों support
+   ⏱️ Double back press पर app exit (2s window)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let backPressedOnce = false;
+
+function setupHardwareBackButton() {
+  // Web back (popstate) — layered close
+  window.addEventListener('popstate', (e) => {
+    // Call शुरू होने के 2s तक back ignore करो
+    if (Date.now() < ignoreBackUntil) {
+      history.pushState(null, '', window.location.href);
+      e.preventDefault();
+      return;
+    }
+    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
+    for (const m of openModals) {
+      if (m && !m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    }
+    if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
+      history.pushState(null, '', window.location.href); e.preventDefault(); return;
+    }
+    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!voiceDock.hidden) { discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if ($('replyPreviewBox')) { cancelReply(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!chatScreen.hidden) { closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    if (!incomingDialog.hidden) { $('btnReject').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+  });
+
+  history.pushState(null, '', window.location.href);
+
+  // Native back button (Capacitor App plugin)
+  const appPlugin = getAppPlugin();
+  if (!isNativeApp() || !appPlugin) return;
+
+  appPlugin.addListener('backButton', () => {
+    if (Date.now() < ignoreBackUntil) return;
+    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
+    for (const m of openModals) { if (m && !m.hidden) { m.hidden = true; return; } }
+    if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
+    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
+    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; }
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
+      return;
+    }
+    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
+    if (!voiceDock.hidden) { discardRecording(); return; }
+    if ($('replyPreviewBox')) { cancelReply(); return; }
+    if (!chatScreen.hidden) { closeChat(); return; }
+    if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); return; }
+    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
+    if (!incomingDialog.hidden) { $('btnReject').click(); return; }
+
+    // Double back = app exit
+    if (backPressedOnce) { getAppPlugin().exitApp(); }
+    else {
+      backPressedOnce = true;
+      toast(currentLang === 'hi' ? 'बाहर निकलने के लिए दोबारा बैक दबाएँ' : 'Press back again to exit');
+      setTimeout(() => { backPressedOnce = false; }, 2000);
+    }
+  });
+}
+
+/* ───────── 🟦 [SECTION 72: HARDWARE BACK] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 73: STRICT VIEWPORT LOCK (Chat Keyboard Fix)] — START
+   📌 क्या: चैट में कीबोर्ड खुलने पर visualViewport को पकड़कर chat screen
+           की height lock करना — ताकि पूरा screen pan न हो
+   🔗 कहाँ से: chatScreen hidden toggle, chatInput focus/blur,
+               visualViewport resize/scroll
+   ⚠️ डिपेंड: window.visualViewport (mobile), chatScreen, chatInput
+   🎯 Header/footer पर touchmove block, chatBody auto-scroll
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function lockChatViewportHeight() {
+  if (chatScreen.hidden) return;
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const px = `${vh}px`;
+
+  document.documentElement.style.height = px;
+  document.body.style.height = px;
+  chatScreen.style.position = 'fixed';
+  chatScreen.style.top = '0px';
+  chatScreen.style.left = '0px';
+  chatScreen.style.right = '0px';
+  chatScreen.style.height = px;
+}
+
+function resetChatViewportHeight() {
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  document.documentElement.style.height = '100%';
+  document.body.style.height = '100%';
+  chatScreen.style.top = '0px';
+  chatScreen.style.height = '100%';
+}
+
+// Visual viewport listeners
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    if (!chatScreen.hidden) {
+      lockChatViewportHeight();
+      const body = $('chatBody');
+      if (body) body.scrollTop = body.scrollHeight;
+    }
+  });
+  window.visualViewport.addEventListener('scroll', () => {
+    if (!chatScreen.hidden) {
+      lockChatViewportHeight();
+    }
+  });
+}
+
+// Chat screen खुलने/बंद होने पर auto-sync height
+if (window.MutationObserver && chatScreen) {
+  const chatObserver = new MutationObserver(() => {
+    if (!chatScreen.hidden) {
+      lockChatViewportHeight();
+    } else {
+      resetChatViewportHeight();
+    }
+  });
+  chatObserver.observe(chatScreen, { attributes: true, attributeFilter: ['hidden'] });
+}
+
+// Header/footer पर finger slide = block (panning रोकना)
+document.addEventListener('touchmove', (e) => {
+  if (chatScreen.hidden) return;
+  const inHeader = e.target.closest('.chat-header');
+  const inFooter = e.target.closest('.chat-footer');
+  if (inHeader || inFooter) {
+    if (e.target === chatInput && chatInput.scrollHeight > chatInput.clientHeight) {
+      return;
+    }
+    e.preventDefault();
+  }
+}, { passive: false });
+
+// Input focus = keyboard adjust
+chatInput.addEventListener('focus', () => {
+  setTimeout(() => {
+    lockChatViewportHeight();
+    const body = $('chatBody');
+    if (body) body.scrollTop = body.scrollHeight;
+  }, 150);
+});
+
+// Input blur = keyboard बंद
+chatInput.addEventListener('blur', () => {
+  setTimeout(() => {
+    if (!chatScreen.hidden) {
+      lockChatViewportHeight();
+    } else {
+      resetChatViewportHeight();
+    }
+  }, 100);
+});
+
+/* ───────── 🟦 [SECTION 73: VIEWPORT LOCK] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 74: OTA UPDATE (Web JS/CSS Caching)] — START
+   📌 क्या: server पर naya version आने पर OTA cached JS/CSS download
+           करके localStorage में save
+   🔗 कहाँ से: checkUpdateBtn (manual), initApp (auto after 3s)
+   ⚠️ डिपेंड: CURRENT_APP_VERSION, ota-version.json endpoint
+   🎯 Auto = silent, Manual = user को restart prompt
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function checkWebOtaUpdate(manual = false) {
+  try {
+    if (manual) toast(currentLang === 'hi' ? 'अपडेट की जांच हो रही है...' : 'Checking for update...');
+
+    const res = await fetch('https://neerajthegreat192.github.io/ota-version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) {
+      if (manual) toast(currentLang === 'hi' ? 'सर्वर से संपर्क नहीं हो पाया' : 'Server not reachable');
+      return;
+    }
+
+    const info = await res.json();
+    const activeVer = localStorage.getItem('ota_active_ver');
+
+    if (info.version && String(info.version) !== activeVer) {
+      if (manual) toast(currentLang === 'hi' ? 'नया अपडेट डाउनलोड हो रहा है...' : 'Downloading new update...');
+
+      const jsRes = await fetch('https://neerajthegreat192.github.io/app.js?t=' + Date.now(), { cache: 'no-store' });
+      const cssRes = await fetch('https://neerajthegreat192.github.io/style.css?t=' + Date.now(), { cache: 'no-store' });
+
+      if (jsRes.ok && cssRes.ok) {
+        const newJs = await jsRes.text();
+        const newCss = await cssRes.text();
+        localStorage.setItem('ota_cached_js', newJs);
+        localStorage.setItem('ota_cached_css', newCss);
+        localStorage.setItem('ota_active_ver', String(info.version));
+
+        if (manual) {
+          if (confirm(currentLang === 'hi' ? 'नया अपडेट मिल गया है! क्या आप अभी ऐप रीस्टार्ट करना चाहते हैं?' : 'New update applied! Restart app now?')) {
+            location.reload();
+          }
+        }
+      } else {
+        if (manual) toast('फ़ाइलें डाउनलोड करने में त्रुटि');
+      }
+    } else {
+      if (manual) toast(`✅ App is on latest version (OTA v${info.version})`);
+    }
+  } catch (err) {
+    if (manual) toast('अपडेट चेक फेल हो गया');
+  }
+}
+
+// Manual OTA trigger (profile modal से)
+$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
+  checkWebOtaUpdate(true);
+};
+
+/* ───────── 🟦 [SECTION 74: OTA UPDATE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 75: DEEP LINKS (URL + Notification + Native)] — START
+   📌 क्या: किसी URL, notification या native intent से app खुलने पर
+           सही screen पर पहुँचाना — chat open या direct call accept
+   🔗 कहाँ से: initApp() → handleDeepLinks()
+   ⚠️ डिपेंड: openChat, handleDirectAcceptCall, getAppPlugin
+   🎯 3 sources:
+       1. Service Worker messages (browser notification click)
+       2. URL query params (?chatTargetId=..., ?acceptCallId=...)
+       3. Capacitor appUrlOpen (native deep link)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function handleDeepLinks() {
+  try {
+    // 1️⃣ Service Worker messages
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', async (event) => {
+        const data = event.data;
+        if (!data) return;
+
+        if (data.type === 'NEW_CHAT_MESSAGE' && data.senderId) {
+          if (latestChatSnippets[data.senderId]) {
+            latestChatSnippets[data.senderId].text = data.text;
+            latestChatSnippets[data.senderId].time = Date.now();
+            renderContacts();
+          }
+        } else if (data.type === 'OPEN_CHAT' && data.targetId) {
+          openChat(data.targetId, data.senderName || 'उपयोगकर्ता');
+        } else if (data.type === 'ACCEPT_CALL' && data.callId) {
+          if (!isCallConnected) handleDirectAcceptCall(data.callId);
+        }
+      });
+    }
+
+    // 2️⃣ URL query params
+    const urlParams = new URLSearchParams(window.location.search);
+    const openChatId = urlParams.get('chatTargetId');
+    const openChatName = urlParams.get('chatTargetName');
+    const accCallId = urlParams.get('acceptCallId');
+
+    if (openChatId) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setTimeout(() => openChat(openChatId, openChatName || 'उपयोगकर्ता'), 800);
+    } else if (accCallId) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      handleDirectAcceptCall(accCallId);
+    }
+
+    // 3️⃣ Native deep links (Capacitor)
+    const appPlugin = getAppPlugin();
+    if (isNativeApp() && appPlugin) {
+      appPlugin.addListener('appUrlOpen', async (event) => {
+        try {
+          const url = new URL(event.url);
+          const chatTgtId = url.searchParams.get('chatTargetId');
+          const chatTgtName = url.searchParams.get('chatTargetName');
+          const aId = url.searchParams.get('acceptCallId');
+
+          if (aId) handleDirectAcceptCall(aId);
+          else if (chatTgtId) openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता');
+        } catch(e) {}
+      });
+
+      // App foreground में आने पर launch intent फिर check
+      appPlugin.addListener('appStateChange', (state) => {
+        if (state.isActive) checkNativeLaunchIntent();
+      });
+    }
+  } catch (e) {
+    console.warn('Deep link error:', e);
+  }
+}
+
+/* ───────── 🟦 [SECTION 75: DEEP LINKS] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 76: APP INITIALIZATION (Boot Flow)] — START
+   📌 क्या: पूरी app का main entry point। Language, theme, back button,
+           push, user check, deep links, native intent, splash, OTA
+   🔗 कहाँ से: DOM ready पर auto-run (नीचे readyState check)
+   ⚠️ डिपेंड: applyLanguage, applyTheme, setupHardwareBackButton,
+              setupNativePushListeners, checkUser, handleDeepLinks,
+              checkNativeLaunchIntent, hideSplashScreen, checkWebOtaUpdate
+   🎯 Splash 4s max, OTA check 3s delay पर auto
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function initApp() {
+  try {
+    applyLanguage(currentLang);
+    applyTheme(currentTheme);
+    setupHardwareBackButton();
+    setupNativePushListeners();
+    checkUser();
+    handleDeepLinks();
+    checkNativeLaunchIntent();
+  } catch (err) {
+    console.error('UI init error:', err);
+    hideSplashScreen();
+  }
+
+  // Safety: 4s बाद splash force hide
+  setTimeout(() => { hideSplashScreen(); }, 4000);
+  // Auto OTA check (silent)
+  setTimeout(() => checkWebOtaUpdate(false), 3000);
+}
+
+// DOM ready होने पर initApp call
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initApp, { once: true });
+} else {
+  initApp();
+}
+
+/* ───────── 🟦 [SECTION 76: APP INITIALIZATION] — END ───────── */
+
+/* ═══ यहाँ BATCH 3B खत्म होता है ═══ */
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 77: FUN MODE TRAY OPEN/CLOSE] — START
+   📌 क्या: call के दौरान fun-mode tray खोलना/बंद करना (games का hub)
+   🔗 कहाँ से: funModeBtn, closeFunTrayBtn, tray backdrop
+   ⚠️ डिपेंड: isCallConnected, controlsBar
+   🎯 Call connect नहीं है तो toast
+   ═══════════════════════════════════════════════════════════════════════ */
+
 $('funModeBtn').onclick = (e) => {
   e.stopPropagation();
   if (!isCallConnected) {
@@ -3660,7 +5693,18 @@ $('funModeTray').onclick = (e) => {
   if (e.target === $('funModeTray')) $('funModeTray').hidden = true;
 };
 
-// 1. Kids Quiz Module
+/* ───────── 🟦 [SECTION 77: FUN MODE TRAY] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 78: KIDS QUIZ GAME] — START
+   📌 क्या: LKG/UKG quiz — random सवाल, options, 15s timer,
+           Firebase sync (दोनों तरफ same question दिखे)
+   🔗 कहाँ से: btnKidsQuiz, nextQuizBtn, quizCategorySelect
+   ⚠️ डिपेंड: questions.json (external), playCheerSound/playOopsSound
+   🎯 Firebase: call_sessions/{id}/quiz_state
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let allQuizQuestions = null;
 let quizSessionUnsub = null;
 let quizTimerInterval = null;
@@ -3807,7 +5851,18 @@ $('btnKidsQuiz').onclick = (e) => {
   scheduleAutoHide();
 };
 
-// --- पॉइंट #3: Riddle & GK Module ---
+/* ───────── 🟦 [SECTION 78: KIDS QUIZ] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 79: RIDDLE & GK GAME] — START
+   📌 क्या: Riddles/GK — easy mode (MCQ, 20s timer) + hard mode
+           (buzzer + parent eval), score 10 तक
+   🔗 कहाँ से: trayBtnRiddleGk, riddle controls
+   ⚠️ डिपेंड: riddle.json (external) + fallback defaults
+   🎯 Firebase: call_sessions/{id}/riddle_state
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let riddleData = null;
 let riddleSessionUnsub = null;
 let riddleTimerInterval = null;
@@ -3821,7 +5876,7 @@ async function fetchRiddleData() {
       if (data) { riddleData = data; return riddleData; }
     }
   } catch(e) {}
-  
+
   // Fallback defaults
   return {
     easy_mode: [
@@ -3892,6 +5947,7 @@ async function sendRiddleQuestion(mode = 'easy_mode') {
     let rScore = cur.rightScore || 0;
     let wScore = cur.wrongScore || 0;
 
+    // 10 सवाल हो गए → reset
     if (rScore + wScore >= 10) { rScore = 0; wScore = 0; }
 
     set(riddleRef, {
@@ -3935,11 +5991,11 @@ function initRiddleGkListener() {
 
     const optsArea = $('riddleOptionsArea');
     const hardEvalArea = $('riddleHardEvalArea');
-    const buzzerWrap = $('riddleBuzzerWrap'); 
+    const buzzerWrap = $('riddleBuzzerWrap');
     optsArea.innerHTML = '';
     hardEvalArea.hidden = true;
 
-    // Check if the current user is the parent/admin
+    // कौन parent है — admin या caller
     const amIParent = isNeerajBadola(myUserName) || isCaller;
 
     if (rScore + wScore >= 10) {
@@ -3956,7 +6012,7 @@ function initRiddleGkListener() {
     }
 
     if (state.mode === 'easy_mode') {
-      if (buzzerWrap) buzzerWrap.hidden = true; 
+      if (buzzerWrap) buzzerWrap.hidden = true;
       if (state.options) {
         state.options.forEach(opt => {
           const btn = document.createElement('button');
@@ -4016,7 +6072,7 @@ function initRiddleGkListener() {
           $('evalWrongBtn').disabled = false;
         }
       } else {
-        hardEvalArea.hidden = true; 
+        hardEvalArea.hidden = true;
       }
     }
 
@@ -4100,8 +6156,17 @@ if ($('nextRiddleBtn')) $('nextRiddleBtn').onclick = (e) => { e.stopPropagation(
 if ($('riddleModeSelect')) $('riddleModeSelect').onchange = (e) => { e.stopPropagation(); sendRiddleQuestion(e.target.value); };
 if ($('closeRiddleBtn')) $('closeRiddleBtn').onclick = (e) => { e.stopPropagation(); closeRiddleGame(); };
 
+/* ───────── 🟦 [SECTION 79: RIDDLE & GK] — END ───────── */
 
-// Whiteboard
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 80: WHITEBOARD (Live Canvas)] — START
+   📌 क्या: live whiteboard — दोनों users साथ में draw कर सकें
+   🔗 कहाँ से: btnWhiteboard, tray, canvas tools (color/eraser/size/grid/clear)
+   ⚠️ डिपेंड: Firebase canvas_draw path, whiteboard_state path
+   🎯 Pointer events से point broadcast, दूसरी तरफ से draw replicate
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let isDrawing = false;
 let currentColor = '#10b981';
 let currentLineWidth = 4;
@@ -4217,6 +6282,7 @@ function clearLiveCanvas() {
   }
 }
 
+// Whiteboard tools
 document.querySelectorAll('.color-dot').forEach(btn => {
   btn.onclick = (e) => {
     e.stopPropagation();
@@ -4271,7 +6337,17 @@ $('btnWhiteboard').onclick = (e) => {
   scheduleAutoHide();
 };
 
-// Tic-Tac-Toe
+/* ───────── 🟦 [SECTION 80: WHITEBOARD] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 81: TIC-TAC-TOE GAME] — START
+   📌 क्या: zero-kaata (X vs O) game — turn based, win detection, reset
+   🔗 कहाँ से: trayBtnTictactoe
+   ⚠️ डिपेंड: Firebase tictactoe_state
+   🎯 DOM dynamic create (ensureTictactoeDOM), per-cell click, win pattern highlight
+   ═══════════════════════════════════════════════════════════════════════ */
+
 let tttSessionUnsub = null;
 let lastAnnouncedTttWinId = null;
 
@@ -4448,793 +6524,47 @@ $('trayBtnTictactoe').onclick = (e) => {
   startOrToggleTictactoe();
 };
 
+/* ───────── 🟦 [SECTION 81: TIC-TAC-TOE] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 82: CLEANUP KIDS MODULES (Base)] — START
+   📌 क्या: hangup पर सभी games (quiz/riddle/whiteboard/ttt) cleanup —
+           listeners unsub + UI hide + canvas clear
+   🔗 कहाँ से: hangup() (Section 70)
+   ⚠️ डिपेंड: quizSessionUnsub, riddleSessionUnsub, canvasSessionUnsub,
+              whiteboardSyncUnsub, tttSessionUnsub
+   🎯 Ludo का cleanup बाद में override pattern से जोड़ा जाएगा
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function cleanupKidsModules() {
   stopQuizTimerBar();
-  stopRiddleTimerBar(); // Point #3
+  stopRiddleTimerBar();
   if (quizSessionUnsub) { quizSessionUnsub(); quizSessionUnsub = null; }
-  if (riddleSessionUnsub) { riddleSessionUnsub(); riddleSessionUnsub = null; } // Point #3
+  if (riddleSessionUnsub) { riddleSessionUnsub(); riddleSessionUnsub = null; }
   if (canvasSessionUnsub) { canvasSessionUnsub(); canvasSessionUnsub = null; }
   if (whiteboardSyncUnsub) { whiteboardSyncUnsub(); whiteboardSyncUnsub = null; }
   if (tttSessionUnsub) { tttSessionUnsub(); tttSessionUnsub = null; }
-  
+
   const box = $('kidsQuizBox'); if (box) box.hidden = true;
-  const rBox = $('kidsRiddleBox'); if (rBox) rBox.hidden = true; // Point #3
+  const rBox = $('kidsRiddleBox'); if (rBox) rBox.hidden = true;
   const wb = $('kidsWhiteboardModal'); if (wb) wb.hidden = true;
   const ttt = $('kidsTictactoeBox'); if (ttt) ttt.hidden = true;
   if ($('funModeTray'))$('funModeTray').hidden = true;
   if (ctx && canvasEl) ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 }
 
-// Call Session & Peer WebRTC
-async function joinCallSession() {
-  CallAudioManager.stopAll(); // Sabse pehle saari ringtones forcefully band karo
-  
-  // Agar main call receive karne wala hoon, toh Firebase mein status 'answered' kar do
-  // taaki caller ko pata chal jaye ki call uth chuki hai aur wo ringtone dobara na bajaye
-  if (!isCaller && activeCallId) {
-    update(ref(db, `call_sessions/${activeCallId}`), { status: 'answered' }).catch(()=>{});
-  }
-  // --- NAYA CODE YAHAN TAK ---
-
-  isCallConnected = true;
-  callStartTime = Date.now();
-  // ... aapka baaki ka code yahan se niche same rahega ...
-     
-  clearTimeout(callTimeoutTimer);
-  callTimeoutTimer = null;
-  stopAllCallTones();
-  lobbyScreen.hidden = true;
-  chatScreen.hidden = true;
-  callScreen.hidden = false;
-  isCallConnected = true;
-  isHangingUp = false;
-  ignoreBackUntil = Date.now() + 2000;
-  await requestWakeLock();
-  startNetworkQualityMonitor();
-  pipWrap.classList.remove('pip-hidden');
-  pipRestoreBtn.hidden = true;
-  localVideo.srcObject = localStream;
-  localVideo.play().catch(()=>{});
-
-  updateCallModeVisuals(isAudioOnlyCall);
-
-  if (isAudioOnlyCall) setHardwareSpeaker(false);
-  else setHardwareSpeaker(true);
-
-  startTimer();
-  scheduleAutoHide();
-
-  // --- पॉइंट #1: Call Foreground Service Start ---
-  if (window.AndroidBridge && typeof window.AndroidBridge.startCallForegroundService === 'function') {
-    window.AndroidBridge.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
-  } else if (window.AndroidAudio && typeof window.AndroidAudio.startCallForegroundService === 'function') {
-    window.AndroidAudio.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
-  }
-
-  // Games Listeners Initialize
-  initKidsQuizListener();
-  initRiddleGkListener(); // --- पॉइंट #3: Riddle Game Sync ---
-  listenRemoteCanvas();
-  listenWhiteboardAutoSync();
-  listenTictactoeSession();
-
-  const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
-  onDisconnect(myMemberRef).remove().catch(()=>{});
-
-  await set(myMemberRef, {
-    name: myUserName,
-    camEnabled: !isAudioOnlyCall,
-    micEnabled,
-    audioOnly: isAudioOnlyCall,
-    joinedAt: Date.now()
-  });
-
-  callJoinedViaDirectAccept = false;
-
-  if (callSessionUnsub) callSessionUnsub();
-  callSessionUnsub = onValue(ref(db, `call_sessions/${activeCallId}/status`), snap => {
-    if (snap.val() === 'ended') {
-      toast(currentLang==='hi'?'कॉल समाप्त हो गई है':'Call ended');
-      hangup(true);
-    }
-  });
-
-  onValue(ref(db, `call_sessions/${activeCallId}/members`), snap => {
-    const members = snap.val() || {};
-    const ids = Object.keys(members);
-    if (ids.length > MAX_CALL_MEMBERS) { toast(`Maximum ${MAX_CALL_MEMBERS} members allowed`); return; }
-    ids.forEach(pId => {
-      if (pId !== myUserId) {
-        if (!peerConnections[pId]) initiatePeerConnection(pId, members[pId].name);
-        updateRemotePeerUI(pId, members[pId]);
-      }
-    });
-    Object.keys(peerConnections).forEach(pId => { if (!members[pId]) closePeer(pId); });
-    updateRemoteGridClass();
-  });
-}
-
-function initiatePeerConnection(peerId, peerName) {
-  const pc = new RTCPeerConnection(ICE_SERVERS);
-  peerConnections[peerId] = pc;
-
-  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-  if (isAudioOnlyCall && (!localStream || localStream.getVideoTracks().length === 0)) {
-    try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch(e){}
-  }
-  boostPeerBitrate(pc);
-
-  pc.ontrack = e => {
-    addRemoteVideoCell(peerId, e.streams[0], peerName);
-    updateRemoteGridClass();
-    if (isAudioOnlyCall && !speakerEnabled) {
-      setTimeout(() => { setHardwareSpeaker(false); }, 300);
-      setTimeout(() => { setHardwareSpeaker(false); }, 1000);
-    }
-  };
-
-  const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${peerId}`;
-  const peerPath = `call_sessions/${activeCallId}/signals/${peerId}__${myUserId}`;
-
-  pc.onicecandidate = e => { if (e.candidate) push(ref(db, `${myPath}/candidates`), e.candidate.toJSON()); };
-  pc.pendingIce = [];
-
-  onChildAdded(ref(db, `${peerPath}/candidates`), async snap => {
-    const c = snap.val();
-    if (!c) return;
-    const cand = new RTCIceCandidate(c);
-    if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
-    else pc.pendingIce.push(cand);
-  });
-
-  pc.flushIce = async () => {
-    const p = pc.pendingIce || [];
-    pc.pendingIce = [];
-    for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
-  };
-
-  if (myUserId < peerId) {
-    pc.createOffer()
-      .then(o => pc.setLocalDescription(new RTCSessionDescription({ type: o.type, sdp: applySDPBitrate(o.sdp) })))
-      .then(() => set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type }));
-
-    onValue(ref(db, `${peerPath}/answer`), snap => {
-      const a = snap.val();
-      if (a && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== a.sdp)) {
-        pc.setRemoteDescription(new RTCSessionDescription(a)).then(async () => { await pc.flushIce(); boostPeerBitrate(pc); });
-      }
-    });
-  } else {
-    onValue(ref(db, `${peerPath}/offer`), async snap => {
-      const o = snap.val();
-      if (o && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== o.sdp)) {
-        await pc.setRemoteDescription(new RTCSessionDescription(o));
-        await pc.flushIce();
-        const a = await pc.createAnswer();
-        await pc.setLocalDescription(new RTCSessionDescription({ type: a.type, sdp: applySDPBitrate(a.sdp) }));
-        set(ref(db, `${myPath}/answer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
-        boostPeerBitrate(pc);
-      }
-    });
-  }
-}
-
-function addRemoteVideoCell(id, stream, peerName) {
-  let cell = $(`remote_cell_${id}`);
-  if (!cell) {
-    cell = document.createElement('div');
-    cell.id = `remote_cell_${id}`;
-    cell.className = 'remote-cell';
-    cell.innerHTML = `
-      <video autoplay playsinline></video>
-      <div class="remote-mute-badge" id="mute_badge_${id}" hidden>🔇 माइक बंद</div>
-      <div class="remote-off-overlay" id="cam_off_${id}" hidden>
-        <div class="remote-off-avatar">👤</div>
-        <div style="font-size:12px;font-weight:700;color:#94a3b8">${safeName(peerName || 'यूज़र')}</div>
-      </div>
-    `;
-    remoteGrid.appendChild(cell);
-  }
-  const v = cell.querySelector('video');
-  v.srcObject = stream;
-  v.muted = false;
-  v.play().catch(()=>{});
-}
-
-function updateRemotePeerUI(peerId, data) {
-  if (!data) return;
-  const cam = $(`cam_off_${peerId}`), mic = $(`mute_badge_${peerId}`);
-  if (cam) cam.hidden = data.camEnabled !== false;
-  if (mic) mic.hidden = data.micEnabled !== false;
-}
-function removeRemoteVideoCell(id) { const c = $(`remote_cell_${id}`); if (c) c.remove(); }
-function updateRemoteGridClass() {
-  const count = remoteGrid.children.length;
-  remoteGrid.className = count <= 1 ? 'count-1' : count === 2 ? 'count-2' : 'count-4';
-}
-function closePeer(id) {
-  if (peerConnections[id]) { peerConnections[id].close(); delete peerConnections[id]; }
-  removeRemoteVideoCell(id);
-  updateRemoteGridClass();
-}
-
-$('btnAddPerson').onclick = (e) => {
-  e.stopPropagation();
-  const list = $('addContactsList');
-  list.innerHTML = '';
-  const amIAdmin = isNeerajBadola(myUserName);
-  const avail = Object.keys(allOnlineUsers).filter(id => id !== myUserId && !peerConnections[id] && (!allOnlineUsers[id].hidden || amIAdmin));
-  if (!avail.length) {
-    list.innerHTML = `<div style="font-size:12px;color:#94a3b8;padding:10px">${currentLang==='hi'?'अन्य कोई संपर्क उपलब्ध नहीं है':'No other contacts available'}</div>`;
-  } else {
-    avail.forEach(id => {
-      const u = allOnlineUsers[id];
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.05);padding:8px 12px;border-radius:12px;border:1px solid var(--line)';
-      row.innerHTML = `<span style="font-size:14px;font-weight:700">${safeName(u.name)}</span><button style="background:var(--c-call-tab);border:0;color:#fff;font-size:12px;font-weight:800;padding:6px 14px;border-radius:12px">जोड़ें</button>`;
-      row.querySelector('button').onclick = async () => {
-        const snap = await get(ref(db, `call_sessions/${activeCallId}/members`));
-        if (snap.exists() && Object.keys(snap.val()||{}).length >= MAX_CALL_MEMBERS) { toast(`Max ${MAX_CALL_MEMBERS} members allowed`); return; }
-        await update(ref(db, `users/${id}`), { activeCallId }).catch(()=>{});
-        await set(ref(db, `user_inbox/${id}`), { callId: activeCallId, callerId: myUserId, callerName: myUserName + ' (ग्रुप)', audioOnly: isAudioOnlyCall, status: 'calling' });
-        const uSnap = await get(ref(db, `users/${id}`));
-        if (uSnap.val()?.fcmToken) sendPushNotification(uSnap.val().fcmToken, myUserName, isAudioOnlyCall);
-        toast(`${u.name} को कॉल भेजा गया!`);
-        $('addParticipantModal').hidden = true;
-      };
-      list.appendChild(row);
-    });
-  }
-  $('addParticipantModal').hidden = false;
-};
-$('closeAddModalBtn').onclick = () => {$('addParticipantModal').hidden = true; };
-
-// PiP Swap Handlers
-let pipTouchStartX = 0, pipTouchStartY = 0, pipMoved = false;
-
-pipWrap.addEventListener('touchstart', e => {
-  pipTouchStartX = e.changedTouches[0].clientX;
-  pipTouchStartY = e.changedTouches[0].clientY;
-  pipMoved = false;
-}, {passive:true});
-
-pipWrap.addEventListener('touchmove', e => {
-  const dx = Math.abs(e.changedTouches[0].clientX - pipTouchStartX);
-  const dy = Math.abs(e.changedTouches[0].clientY - pipTouchStartY);
-  if (dx > 10 || dy > 10) pipMoved = true;
-}, {passive:true});
-
-pipWrap.addEventListener('touchend', e => {
-  const dx = e.changedTouches[0].clientX - pipTouchStartX;
-  const dy = e.changedTouches[0].clientY - pipTouchStartY;
-
-  if (dx > 45 && Math.abs(dx) > Math.abs(dy)) {
-    e.stopPropagation();
-    pipWrap.classList.add('pip-hidden');
-    pipRestoreBtn.hidden = false;
-    scheduleAutoHide();
-  } else if (!pipMoved) {
-    e.stopPropagation();
-    callScreen.classList.toggle('video-swapped');
-    toast(callScreen.classList.contains('video-swapped')
-      ? (currentLang === 'hi' ? '🔄 आपकी वीडियो बड़ी स्क्रीन पर' : '🔄 Your video Fullscreen')
-      : (currentLang === 'hi' ? '🔄 सामान्य व्यू' : '🔄 Normal View'));
-    scheduleAutoHide();
-  }
-});
-
-remoteGrid.addEventListener('click', (e) => {
-  if (callScreen.classList.contains('video-swapped')) {
-    e.stopPropagation();
-    callScreen.classList.remove('video-swapped');
-    scheduleAutoHide();
-  }
-});
-
-pipRestoreBtn.onclick = e => {
-  e.stopPropagation();
-  pipWrap.classList.remove('pip-hidden');
-  pipRestoreBtn.hidden = true;
-  scheduleAutoHide();
-};
-
-function scheduleAutoHide() {
-  clearTimeout(autoHideTimer);
-  autoHideTimer = setTimeout(() => {
-    const isTttOpen = $('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden;
-    const isRiddleOpen = $('kidsRiddleBox') && !$('kidsRiddleBox').hidden; // Point #3
-    if (isCallConnected && $('kidsQuizBox').hidden && $('kidsWhiteboardModal').hidden &&$('funModeTray').hidden && !isTttOpen && !isRiddleOpen) {
-      controlsBar.classList.add('fade-out');
-      $('callTopBar').classList.add('fade-out');
-    }
-  }, 3500);
-}
-
-callScreen.addEventListener('click', e => {
-  if (e.target.closest('.ctl-box') || e.target.closest('.modal-box') || e.target.closest('#pipWrap') || e.target.closest('#pipRestoreBtn') || e.target.closest('#kidsQuizBox') || e.target.closest('#kidsWhiteboardModal') || e.target.closest('#callTopBar') || e.target.closest('#funModeTray') || e.target.closest('#kidsTictactoeBox') || e.target.closest('#kidsRiddleBox')) return; // Added kidsRiddleBox for Point #3
-  const isH = controlsBar.classList.contains('fade-out');
-  controlsBar.classList.toggle('fade-out', !isH);
-  $('callTopBar').classList.toggle('fade-out', !isH);
-  if (isH) scheduleAutoHide();
-});
-
-// Call Controls
-$('micBtn').onclick = async (e) => {
-  e.stopPropagation();
-  micEnabled = !micEnabled;
-  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
-  $('micBtn').classList.toggle('off', !micEnabled);
-  if (activeCallId) await update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { micEnabled }).catch(()=>{});
-  scheduleAutoHide();
-};
-
-$('camBtn').onclick = async (e) => {
-  e.stopPropagation();
-  if (isAudioOnlyCall) toggleVideoTrackMode(true);
-  else toggleVideoTrackMode(!camEnabled);
-  scheduleAutoHide();
-};
-
-$('speakerBtn').onclick = (e) => {
-  e.stopPropagation();
-  setHardwareSpeaker(!speakerEnabled);
-  toast(speakerEnabled
-    ? (currentLang === 'hi' ? '🔊 लाउडस्पीकर चालू' : '🔊 Speaker ON')
-    : (currentLang === 'hi' ? '👂 इयरपीस मोड चालू (कान पर लगाएँ)' : '👂 Earpiece mode (Put to ear)'));
-  scheduleAutoHide();
-};
-
-$('flipBtn').onclick = async (e) => {
-  e.stopPropagation();
-  $('funModeTray').hidden = true;
-  if (isAudioOnlyCall || !camEnabled) return;
-  facingMode = facingMode === 'user' ? 'environment' : 'user';
-  pipWrap.classList.toggle('mirror', facingMode === 'user');
-  try {
-    if (localStream) localStream.getVideoTracks().forEach(t => t.stop());
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } },
-      audio: false
-    });
-    const newTrack = newStream.getVideoTracks()[0];
-    const oldTrack = localStream.getVideoTracks()[0];
-    if (oldTrack) localStream.removeTrack(oldTrack);
-    localStream.addTrack(newTrack);
-    localVideo.srcObject = localStream;
-    Object.values(peerConnections).forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender) sender.replaceTrack(newTrack);
-      boostPeerBitrate(pc);
-    });
-  } catch(e) {}
-  scheduleAutoHide();
-};
-
-$('hangBtn').onclick = (e) => {
-  e.stopPropagation();
-  e.preventDefault();
-  if (isHangingUp) return;
-  isHangingUp = true;
-  hangup();
-};
-
-async function hangup(silent = false) {
-  try {
-    let actualDuration = '00:01';
-    if (callStartTime > 0 && isCallConnected) {
-      const elapsedSec = Math.max(1, Math.floor((Date.now() - callStartTime) / 1000));
-      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
-      const ss = String(elapsedSec % 60).padStart(2, '0');
-      actualDuration = `${mm}:${ss}`;
-    }
-
-    clearOngoingCallNotification();
-    
-    // --- Call End Tone Logic ---
-    if (isCallConnected && !silent) {
-      CallAudioManager.playEnd(); // अगर बात हो रही थी (कॉल कनेक्टेड थी), तो एंड टोन बजाएं
-    } else {
-      CallAudioManager.stopAll(); // अगर बात नहीं हुई (जैसे मिस्ड/रिजेक्ट), तो सब आवाज़ें बंद कर दें
-    }
-    // ---------------------------
-
-    stopTimer();
-    releaseWakeLock();
-    clearTimeout(autoHideTimer);
-    clearTimeout(callTimeoutTimer);
-    callTimeoutTimer = null;
-    stopNetworkQualityMonitor();
-    cleanupKidsModules();
-    resetHardwareAudio();
-   
-    // --- पॉइंट #1: Call Foreground Service Stop ---
-    if (window.AndroidBridge && typeof window.AndroidBridge.stopCallForegroundService === 'function') {
-      window.AndroidBridge.stopCallForegroundService();
-    } else if (window.AndroidAudio && typeof window.AndroidAudio.stopCallForegroundService === 'function') {
-      window.AndroidAudio.stopCallForegroundService();
-    }
-
-    if (isCallConnected && currentCallTargetId) {
-      recordCallLog({
-        callId: activeCallId || `call_${Date.now()}`,
-        targetId: currentCallTargetId,
-        name: currentCallTargetName || 'उपयोगकर्ता',
-        type: isCaller ? 'outgoing' : 'incoming',
-        callMode: isAudioOnlyCall ? 'audio' : 'video',
-        duration: actualDuration,
-        time: Date.now()
-      });
-    }
-
-    if (activeCallId) {
-      await update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
-      await update(ref(db, `call_sessions/${activeCallId}`), { status: 'ended' }).catch(()=>{});
-      await remove(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`)).catch(()=>{});
-    }
-    await remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
-  } catch(err) {
-    console.warn("Hangup warning:", err);
-  } finally {
-    unsubs.forEach(fn => { try { fn(); } catch(e){} });
-    unsubs = [];
-    if (callSessionUnsub) { callSessionUnsub(); callSessionUnsub = null; }
-    Object.keys(peerConnections).forEach(id => closePeer(id));
-    peerConnections = {};
-
-    Object.keys(mediaDataChannels).forEach(pid => {
-      try { mediaDataChannels[pid].close(); } catch(e) {}
-    });
-    mediaDataChannels = {};
-    Object.keys(mediaPeerConnections).forEach(pid => {
-      try { mediaPeerConnections[pid].close(); } catch(e) {}
-    });
-    mediaPeerConnections = {};
-
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    remoteGrid.innerHTML = '';
-    activeCallId = null;
-    isCallConnected = false;
-    isAudioOnlyCall = false;
-    callStartTime = 0;
-    callJoinedViaDirectAccept = false;
-
-    callScreen.classList.remove('video-swapped');
-    controlsBar.classList.remove('fade-out');
-    $('callTopBar').classList.remove('fade-out');
-    pipWrap.classList.remove('pip-hidden');
-    pipRestoreBtn.hidden = true;
-    pipWrap.style.opacity = '1';
-    $('camBtn').classList.remove('off');
-    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
-    remoteGrid.style.display = 'grid';
-    pipWrap.style.display = 'block';
-
-    const wasLocked = isDeviceLocked();
-    if (!wasLocked) {
-      callScreen.hidden = true;
-      incomingDialog.hidden = true;
-      outgoingDialog.hidden = true;
-      chatScreen.hidden = true;
-      lobbyScreen.hidden = false;
-    } else {
-      callScreen.hidden = true;
-      incomingDialog.hidden = true;
-      outgoingDialog.hidden = true;
-      chatScreen.hidden = true;
-      lobbyScreen.hidden = true;
-    }
-    isHangingUp = false;
-
-    closeIfLocked();
-  }
-}
-
-function startTimer() {
-  callStartTime = Date.now();
-  if (timerTimer) clearInterval(timerTimer);
-  timerTimer = setInterval(() => {
-    const diff = Math.floor((Date.now() - callStartTime) / 1000);
-    $('callTimer').textContent = `${String(Math.floor(diff/60)).padStart(2,'0')}:${String(diff%60).padStart(2,'0')}`;
-  }, 1000);
-}
-function stopTimer() {
-  if (timerTimer) { clearInterval(timerTimer); timerTimer = null; }
-  $('callTimer').textContent = '00:00';
-}
-
-async function requestWakeLock() {
-  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
-}
-function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; } }
-
-// Hardware Back Button
-let backPressedOnce = false;
-function setupHardwareBackButton() {
-  window.addEventListener('popstate', (e) => {
-    if (Date.now() < ignoreBackUntil) {
-      history.pushState(null, '', window.location.href);
-      e.preventDefault();
-      return;
-    }
-    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
-    for (const m of openModals) {
-      if (m && !m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    }
-    if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; } // Point #3
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
-      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
-      history.pushState(null, '', window.location.href); e.preventDefault(); return;
-    }
-    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!voiceDock.hidden) { discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('replyPreviewBox')) { cancelReply(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!chatScreen.hidden) { closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!incomingDialog.hidden) { $('btnReject').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-  });
-
-  history.pushState(null, '', window.location.href);
-
-  const appPlugin = getAppPlugin();
-  if (!isNativeApp() || !appPlugin) return;
-  appPlugin.addListener('backButton', () => {
-    if (Date.now() < ignoreBackUntil) return;
-    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
-    for (const m of openModals) { if (m && !m.hidden) { m.hidden = true; return; } }
-    if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
-    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
-    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; } // Point #3
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
-      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
-      return;
-    }
-    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
-    if (!voiceDock.hidden) { discardRecording(); return; }
-    if ($('replyPreviewBox')) { cancelReply(); return; }
-    if (!chatScreen.hidden) { closeChat(); return; }
-    if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); return; }
-    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
-    if (!incomingDialog.hidden) { $('btnReject').click(); return; }
-
-    if (backPressedOnce) { getAppPlugin().exitApp(); }
-    else {
-      backPressedOnce = true;
-      toast(currentLang === 'hi' ? 'बाहर निकलने के लिए दोबारा बैक दबाएँ' : 'Press back again to exit');
-      setTimeout(() => { backPressedOnce = false; }, 2000);
-    }
-  });
-}
-
-// ===================================================
-// 🔒 STRICT VIEWPORT & TOUCH-SLIDE LOCK FIX
-// ===================================================
-function lockChatViewportHeight() {
-  if (chatScreen.hidden) return;
-  window.scrollTo(0, 0);
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
-
-  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  const px = `${vh}px`;
-
-  document.documentElement.style.height = px;
-  document.body.style.height = px;
-  chatScreen.style.position = 'fixed';
-  chatScreen.style.top = '0px';
-  chatScreen.style.left = '0px';
-  chatScreen.style.right = '0px';
-  chatScreen.style.height = px;
-}
-
-function resetChatViewportHeight() {
-  window.scrollTo(0, 0);
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
-  document.documentElement.style.height = '100%';
-  document.body.style.height = '100%';
-  chatScreen.style.top = '0px';
-  chatScreen.style.height = '100%';
-}
-
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    if (!chatScreen.hidden) {
-      lockChatViewportHeight();
-      const body = $('chatBody');
-      if (body) body.scrollTop = body.scrollHeight;
-    }
-  });
-  window.visualViewport.addEventListener('scroll', () => {
-    if (!chatScreen.hidden) {
-      lockChatViewportHeight();
-    }
-  });
-}
-
-// Chat screen khulne ya band hone par height automatic sync karein
-if (window.MutationObserver && chatScreen) {
-  const chatObserver = new MutationObserver(() => {
-    if (!chatScreen.hidden) {
-      lockChatViewportHeight();
-    } else {
-      resetChatViewportHeight();
-    }
-  });
-  chatObserver.observe(chatScreen, { attributes: true, attributeFilter: ['hidden'] });
-}
-
-// Header aur Footer par ungli rakhkar upار slide karne से screen pan hone ko rokein
-document.addEventListener('touchmove', (e) => {
-  if (chatScreen.hidden) return;
-  const inHeader = e.target.closest('.chat-header');
-  const inFooter = e.target.closest('.chat-footer');
-  if (inHeader || inFooter) {
-    if (e.target === chatInput && chatInput.scrollHeight > chatInput.clientHeight) {
-      return;
-    }
-    e.preventDefault();
-  }
-}, { passive: false });
-
-chatInput.addEventListener('focus', () => {
-  setTimeout(() => {
-    lockChatViewportHeight();
-    const body = $('chatBody');
-    if (body) body.scrollTop = body.scrollHeight;
-  }, 150);
-});
-
-chatInput.addEventListener('blur', () => {
-  setTimeout(() => {
-    if (!chatScreen.hidden) {
-      lockChatViewportHeight();
-    } else {
-      resetChatViewportHeight();
-    }
-  }, 100);
-});
-
-// OTA Update
-async function checkWebOtaUpdate(manual = false) {
-  try {
-    if (manual) toast(currentLang === 'hi' ? 'अपडेट की जांच हो रही है...' : 'Checking for update...');
-
-    const res = await fetch('https://neerajthegreat192.github.io/ota-version.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) {
-      if (manual) toast(currentLang === 'hi' ? 'सर्वर से संपर्क नहीं हो पाया' : 'Server not reachable');
-      return;
-    }
-
-    const info = await res.json();
-    const activeVer = localStorage.getItem('ota_active_ver');
-
-    if (info.version && String(info.version) !== activeVer) {
-      if (manual) toast(currentLang === 'hi' ? 'नया अपडेट डाउनलोड हो रहा है...' : 'Downloading new update...');
-
-      const jsRes = await fetch('https://neerajthegreat192.github.io/app.js?t=' + Date.now(), { cache: 'no-store' });
-      const cssRes = await fetch('https://neerajthegreat192.github.io/style.css?t=' + Date.now(), { cache: 'no-store' });
-
-      if (jsRes.ok && cssRes.ok) {
-        const newJs = await jsRes.text();
-        const newCss = await cssRes.text();
-        localStorage.setItem('ota_cached_js', newJs);
-        localStorage.setItem('ota_cached_css', newCss);
-        localStorage.setItem('ota_active_ver', String(info.version));
-
-        if (manual) {
-          if (confirm(currentLang === 'hi' ? 'नया अपडेट मिल गया है! क्या आप अभी ऐप रीस्टार्ट करना चाहते हैं?' : 'New update applied! Restart app now?')) {
-            location.reload();
-          }
-        }
-      } else {
-        if (manual) toast('फ़ाइलें डाउनलोड करने में त्रुटि');
-      }
-    } else {
-      if (manual) toast(`✅ App is on latest version (OTA v${info.version})`);
-    }
-  } catch (err) {
-    if (manual) toast('अपडेट चेक फेल हो गया');
-  }
-}
-
-$('checkUpdateBtn').onclick = () => {$('profileModal').hidden = true;
-  checkWebOtaUpdate(true);
-};
-
-// Deep Links
-function handleDeepLinks() {
-  try {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', async (event) => {
-        const data = event.data;
-        if (!data) return;
-
-        if (data.type === 'NEW_CHAT_MESSAGE' && data.senderId) {
-          if (latestChatSnippets[data.senderId]) {
-            latestChatSnippets[data.senderId].text = data.text;
-            latestChatSnippets[data.senderId].time = Date.now();
-            renderContacts();
-          }
-        } else if (data.type === 'OPEN_CHAT' && data.targetId) {
-          openChat(data.targetId, data.senderName || 'उपयोगकर्ता');
-        } else if (data.type === 'ACCEPT_CALL' && data.callId) {
-          if (!isCallConnected) handleDirectAcceptCall(data.callId);
-        }
-      });
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const openChatId = urlParams.get('chatTargetId');
-    const openChatName = urlParams.get('chatTargetName');
-    const accCallId = urlParams.get('acceptCallId');
-
-    if (openChatId) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setTimeout(() => openChat(openChatId, openChatName || 'उपयोगकर्ता'), 800);
-    } else if (accCallId) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-      handleDirectAcceptCall(accCallId);
-    }
-
-    const appPlugin = getAppPlugin();
-    if (isNativeApp() && appPlugin) {
-      appPlugin.addListener('appUrlOpen', async (event) => {
-        try {
-          const url = new URL(event.url);
-          const chatTgtId = url.searchParams.get('chatTargetId');
-          const chatTgtName = url.searchParams.get('chatTargetName');
-          const aId = url.searchParams.get('acceptCallId');
-
-          if (aId) handleDirectAcceptCall(aId);
-          else if (chatTgtId) openChat(chatTgtId, chatTgtName || 'उपयोगकर्ता');
-        } catch(e) {}
-      });
-
-      appPlugin.addListener('appStateChange', (state) => {
-        if (state.isActive) checkNativeLaunchIntent();
-      });
-    }
-  } catch (e) {
-    console.warn('Deep link error:', e);
-  }
-}
-
-// App Initialization
-async function initApp() {
-  try {
-    applyLanguage(currentLang);
-    applyTheme(currentTheme);
-    setupHardwareBackButton();
-    setupNativePushListeners();
-    checkUser();
-    handleDeepLinks();
-    checkNativeLaunchIntent();
-  } catch (err) {
-    console.error('UI init error:', err);
-    hideSplashScreen();
-  }
-
-  setTimeout(() => { hideSplashScreen(); }, 4000);
-  setTimeout(() => checkWebOtaUpdate(false), 3000);
-}
-
-if (document.readyState === 'loading') {
-  window.addEventListener('DOMContentLoaded', initApp, { once: true });
-} else {
-  initApp();
-}
-
-/* 🟣🟣🟣 [LUDO MODULE START (शुरू): app.js] 🟣🟣🟣 */
+/* ───────── 🟦 [SECTION 82: CLEANUP KIDS MODULES] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 83: LUDO GAME MODULE] — START
+   📌 क्या: पूरा Ludo board game — 2 player (r/y), tokens, dice,
+           capture, home, auto-move, remote animation
+   🔗 कहाँ से: trayBtnLudo, ludoRollBtn, ludoResetBtn, closeLudoBtn
+   ⚠️ डिपेंड: Firebase ludo_state, playCheerSound/playOopsSound/playMessageTickSound
+   🎯 Auto video-off + speaker-on जब game खुले
+   ═══════════════════════════════════════════════════════════════════════ */
 
 // --- Ludo Constants ---
 const LUDO_LOOP = [ [6,1],[6,2],[6,3],[6,4],[6,5],[5,6],[4,6],[3,6],[2,6],[1,6],[0,6],[0,7], [0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[6,9],[6,10],[6,11],[6,12],[6,13], [6,14],[7,14],[8,14],[8,13],[8,12],[8,11],[8,10],[8,9],[9,8],[10,8], [11,8],[12,8],[13,8],[14,8],[14,7],[14,6],[13,6],[12,6],[11,6],[10,6], [9,6],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0],[7,0],[6,0] ];
@@ -5333,10 +6663,9 @@ function renderLudoTokens() {
   if (!boardEl) return;
   boardEl.querySelectorAll('.tk').forEach(el => el.remove());
 
-  // Board और Cell के असल (Actual) DOM Size से गणित लगाना
   const firstCell = boardEl.querySelector('.lc');
   if (!firstCell) return;
-  
+
   const boardRect = boardEl.getBoundingClientRect();
   const cellRect = firstCell.getBoundingClientRect();
   const cellPx = cellRect.width;
@@ -5364,22 +6693,21 @@ function renderLudoTokens() {
     const inYard = (n === 1 && g.list[0].rel < 0);
     let size = cellPx * (inYard ? 1.4 : (n === 1 ? 0.95 : (n === 2 ? 0.62 : 0.46)));
     const slots = n === 1 ? [[0.5,0.5]] : n === 2 ? [[0.3,0.5],[0.7,0.5]] : [[0.28,0.28],[0.72,0.28],[0.28,0.72],[0.72,0.72]];
-    
+
     for (let k=0; k<n; k++) {
       const tk = g.list[k];
       const slot = slots[k] || [0.5, 0.5];
       const el = document.createElement('div');
       el.className = 'tk ' + tk.color;
       el.innerHTML = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M 50 96 C 24 78 8 60 8 44 A 42 42 0 0 1 92 44 C 92 60 76 78 50 96 Z" fill="url(#metal-grad)" stroke="rgba(40,40,40,.85)" stroke-width="1.4" stroke-linejoin="round"/><path d="M 50 88 C 30 72 18 56 18 44 A 32 32 0 0 1 82 44 C 82 56 70 72 50 88 Z" fill="url(#pinGrad-${tk.color})" stroke="rgba(0,0,0,.28)" stroke-width="0.9"/><ellipse cx="36" cy="30" rx="9" ry="5.5" fill="rgba(255,255,255,.55)"/><ellipse cx="33" cy="27" rx="3.5" ry="2" fill="rgba(255,255,255,.92)"/></svg>`;
-      
-      // सटीक पोज़िशनिंग
+
       const cx = offsetX + (g.c + slot[0]) * cellPx;
       const cy = offsetY + (g.r + slot[1]) * cellPx;
-      
+
       el.style.width = size + 'px'; el.style.height = size + 'px';
-      el.style.left = (cx - size/2) + 'px'; 
+      el.style.left = (cx - size/2) + 'px';
       el.style.top  = (cy - size/2 - (size * 0.06)) + 'px';
-      
+
       if (!ludoAnimating && ludoState && ludoState.turn === ludoMyColor && tk.color === ludoMyColor && ludoState.phase === 'move' && ludoState.dice) {
         if (ludoCanMove(tk.color, tk.idx, ludoState.dice)) {
           el.classList.add('movable');
@@ -5391,49 +6719,47 @@ function renderLudoTokens() {
   }
 }
 
-// --- Auto-Move Logic (अगर सिर्फ एक ही गोटी चल सकती है) ---
+// --- Auto-Move Logic ---
 function maybeLudoAutoMove() {
   if (!ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'move' || ludoAnimating || ludoState.gameOver) return;
   const roll = ludoState.dice;
   if (!roll) return;
-  
+
   const opts = [];
   for (let i=0; i<4; i++) {
     if (ludoCanMove(ludoMyColor, i, roll)) opts.push(i);
   }
-  
-  // अगर सिर्फ 1 ही विकल्प है
+
   if (opts.length === 1) {
     const key = ludoState.updatedAt + '_' + roll + '_' + opts[0];
     if (ludoAutoMoveKey === key) return;
     ludoAutoMoveKey = key;
-    
+
     if (ludoAutoMoveTimer) clearTimeout(ludoAutoMoveTimer);
     ludoAutoMoveTimer = setTimeout(() => {
       ludoAutoMoveTimer = null;
       if (!ludoAnimating && ludoState.turn === ludoMyColor && ludoState.phase === 'move') {
         ludoTryMove(opts[0]);
       }
-    }, 350); // 350ms का डिले ताकि एनीमेशन स्मूथ दिखे
+    }, 350);
   }
 }
 
 // --- Sync & Initialization ---
 async function startOrToggleLudo() {
-  if (!activeCallId || !isCallConnected) { 
-    if(typeof toast === 'function') toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही लूडो खेलें' : 'Connect call to play'); 
-    return; 
+  if (!activeCallId || !isCallConnected) {
+    if(typeof toast === 'function') toast(currentLang === 'hi' ? 'कॉल कनेक्ट होने पर ही लूडो खेलें' : 'Connect call to play');
+    return;
   }
 
-  // 1. दोनों का वीडियो ऑफ करें 2. लाउडस्पीकर चालू रखें
+  // दोनों का वीडियो ऑफ + लाउडस्पीकर चालू
   if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = false);
   if (typeof camEnabled !== 'undefined') camEnabled = false;
   if (typeof updateCallModeVisuals === 'function') updateCallModeVisuals(true);
-  
-  // स्पीकर फोर्सफुली ON रखना
+
   if (typeof setHardwareSpeaker === 'function') {
     setTimeout(() => setHardwareSpeaker(true), 300);
-    setTimeout(() => setHardwareSpeaker(true), 1000); 
+    setTimeout(() => setHardwareSpeaker(true), 1000);
   }
   update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
 
@@ -5462,21 +6788,20 @@ async function startOrToggleLudo() {
 function listenLudoSession() {
   if (!activeCallId) return;
   if (ludoSessionUnsub) ludoSessionUnsub();
-  
+
   const ludoRef = ref(db, `call_sessions/${activeCallId}/ludo_state`);
   ludoSessionUnsub = onValue(ludoRef, async snap => {
     const state = snap.val();
     const box = $('kidsLudoBox');
     if (!box) return;
-    
+
     if (!state || !state.active) { box.hidden = true; return; }
 
     if (box.hidden) {
       box.hidden = false;
       if ($('funModeTray'))$('funModeTray').hidden = true;
       if (typeof controlsBar !== 'undefined' && controlsBar) controlsBar.classList.add('fade-out');
-      
-      // रिसीवर साइड पर भी गेम खुलते ही वीडियो ऑफ और लाउडस्पीकर ऑन
+
       if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = false);
       if (typeof camEnabled !== 'undefined') camEnabled = false;
       if (typeof updateCallModeVisuals === 'function') updateCallModeVisuals(true);
@@ -5502,7 +6827,7 @@ function listenLudoSession() {
 function updateLudoUI() {
   if (!ludoState) return;
   renderLudoTokens();
-  
+
   const turnLabel = $('ludoTurnLabel');
   const rollBtn = $('ludoRollBtn');
   const diceBox = $('ludoDiceBox');
@@ -5518,7 +6843,7 @@ function updateLudoUI() {
   const isMyTurn = ludoState.turn === ludoMyColor;
   const turnColorEmoji = ludoState.turn === 'r' ? '🔴' : '🟡';
   const turnName = isMyTurn ? (typeof myUserName !== 'undefined' ? myUserName : 'You') : (typeof currentCallTargetName !== 'undefined' ? currentCallTargetName : 'Opponent');
-  
+
   turnLabel.textContent = `${turnColorEmoji} ${turnName} ka turn hai`;
   turnLabel.style.color = isMyTurn ? '#10b981' : '#a89e8a';
 
@@ -5536,20 +6861,17 @@ function updateLudoUI() {
     diceBox.classList.remove('hot');
   }
 
-  maybeLudoAutoMove(); // ऑटो-मूव चेक
+  maybeLudoAutoMove();
 }
 
 // --- Gameplay Actions ---
 async function ludoRollDice() {
   if (!ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'roll' || ludoState.gameOver || ludoAnimating) return;
-  
-  ludoState.phase = 'locked'; // मास्टर लॉक (ताकि डबल क्लिक काम न करे)
+
+  ludoState.phase = 'locked';
 
   const rollBtn = $('ludoRollBtn');
-  if (rollBtn) {
-    rollBtn.disabled = true; 
-    // pointerEvents = 'none' वाली लाइन यहाँ से हटा दी गई है
-  }
+  if (rollBtn) { rollBtn.disabled = true; }
 
   if (typeof playMessageTickSound === 'function') playMessageTickSound();
 
@@ -5561,14 +6883,15 @@ async function ludoRollDice() {
 
   const roll = 1 + Math.floor(Math.random() * 6);
   const newSixes = roll === 6 ? (ludoState.consecutiveSixes + 1) : 0;
-  
+
+  // लगातार 3 छक्के = turn forfeit
   if (roll === 6 && newSixes >= 3) {
     await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
       dice: roll, consecutiveSixes: 0, phase: 'roll',
       turn: ludoNextColor(ludoMyColor), updatedAt: Date.now(),
       lastMove: { color: ludoMyColor, skip: true, ts: Date.now() }
     });
-    return; 
+    return;
   }
 
   let movable = false;
@@ -5598,18 +6921,21 @@ async function ludoTryMove(tokenIdx) {
   if (ludoAnimating || !ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'move') return;
   const roll = ludoState.dice;
   if (!roll || !ludoCanMove(ludoMyColor, tokenIdx, roll)) return;
-  
+
   ludoAnimating = true;
   const startArr = ludoNormalizeTokens(ludoState.tokens[ludoMyColor]);
   const currentRel = startArr[tokenIdx];
   const finalRel = currentRel === -1 ? 0 : currentRel + roll;
 
   ludoVisualTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
+
+  // Yard से बाहर आने पर पहला step
   if (currentRel === -1) {
     ludoVisualTokens[ludoMyColor][tokenIdx] = 0;
     renderLudoTokens();
     await new Promise(r => setTimeout(r, 300));
   } else {
+    // Step-by-step animation
     for (let r = currentRel + 1; r <= finalRel; r++) {
       ludoVisualTokens[ludoMyColor][tokenIdx] = r;
       renderLudoTokens();
@@ -5621,6 +6947,7 @@ async function ludoTryMove(tokenIdx) {
   newTokens[ludoMyColor][tokenIdx] = finalRel;
   let captured = 0;
 
+  // Capture check (safe cells पर capture नहीं होगा)
   if (finalRel >= 0 && finalRel <= 50) {
     const myGlobalIdx = ludoAbsLoopIdx(ludoMyColor, finalRel);
     if (!LUDO_SAFE_IDX.includes(myGlobalIdx)) {
@@ -5628,7 +6955,7 @@ async function ludoTryMove(tokenIdx) {
       for (let j=0; j<4; j++) {
         const orel = newTokens[opp][j];
         if (orel >= 0 && orel <= 50 && ludoAbsLoopIdx(opp, orel) === myGlobalIdx) {
-          newTokens[opp][j] = -1; 
+          newTokens[opp][j] = -1;
           captured++;
           if (typeof playOopsSound === 'function') playOopsSound();
         }
@@ -5659,7 +6986,7 @@ async function animateLudoRemoteMove(move, oldTokens) {
   if (!move || move.skip || move.from === undefined || move.to === undefined) return;
   ludoAnimating = true;
   ludoVisualTokens = { r: ludoNormalizeTokens(oldTokens.r), y: ludoNormalizeTokens(oldTokens.y) };
-  
+
   if (move.from === -1) {
     ludoVisualTokens[move.color][move.token] = 0;
     renderLudoTokens();
@@ -5676,10 +7003,10 @@ async function animateLudoRemoteMove(move, oldTokens) {
 }
 
 // --- Events Connection ---
-if ($('ludoRollBtn')) {$('ludoRollBtn').onclick = (e) => { 
-    e.preventDefault(); 
-    e.stopPropagation(); 
-    ludoRollDice(); 
+if ($('ludoRollBtn')) {$('ludoRollBtn').onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ludoRollDice();
   };
 }
 
@@ -5713,6 +7040,19 @@ if ($('trayBtnLudo')) {$('trayBtnLudo').onclick = (e) => {
   };
 }
 
+/* ───────── 🟦 [SECTION 83: LUDO GAME] — END ───────── */
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 84: FINAL OVERRIDES (Ludo Hooks into Cleanup & Join)] — START
+   📌 क्या: Ludo module के लिए cleanup और join hooks — bina base functions
+           को modify किए, override pattern से जोड़ना
+   🔗 कहाँ से: Module load time (initApp से पहले)
+   ⚠️ डिपेंड: cleanupKidsModules (Section 82), joinCallSession (Section 63)
+   🎯 दोनों function declarations हैं — reassignment काम करता है
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// cleanupKidsModules को wrap करो — Ludo का cleanup भी जोड़ो
 const originalLudoCleanup = typeof cleanupKidsModules === 'function' ? cleanupKidsModules : null;
 cleanupKidsModules = function() {
   if (originalLudoCleanup) originalLudoCleanup();
@@ -5721,15 +7061,26 @@ cleanupKidsModules = function() {
   if (lBox) lBox.hidden = true;
 };
 
+// joinCallSession को wrap करो — Ludo session listener भी जोड़ो
 const originalJoinCallSession = typeof joinCallSession === 'function' ? joinCallSession : null;
 joinCallSession = async function() {
   if (originalJoinCallSession) await originalJoinCallSession();
-  listenLudoSession(); 
+  listenLudoSession();
 };
 
-/* 🟣🟣🟣 [LUDO MODULE END (समाप्त): app.js] 🟣🟣🟣 */
+/* ───────── 🟦 [SECTION 84: FINAL OVERRIDES] — END ───────── */
 
 
-/* =========================================================================
-   🔴🔴🔴 [PART 3 OF 3 — END (समाप्त): app.js v1.24.1] 🔴🔴🔴
-   ========================================================================= */
+/* ═══════════════════════════════════════════════════════════════════════
+   🟦 [SECTION 85: FILE END MARKER]
+   ═══════════════════════════════════════════════════════════════════════ */
+// ✅ app.js v1.24.1 — ALL SECTIONS COMPLETE
+// 📋 Structure recap:
+//   1A: Config / Firebase / DOM / Translations / State
+//   1B: Permissions / Push / Sounds / Admin PIN (Firebase) / Presence
+//   2A: Long-press / Reactions / Chat Engine / Ticks
+//   2B: Media / P2P Transfer / Voice Dock / Location / VCF
+//   3A: Call Engine / WebRTC / Controls / NETWORK RECOVERY
+//   3B: Hardware Back / Viewport Lock / OTA / Deep Links / Init
+//   4:  Fun Mode + Quiz + Riddle + Whiteboard + TicTacToe + Ludo
+/* ═══════════════════════════════════════════════════════════════════════ */
