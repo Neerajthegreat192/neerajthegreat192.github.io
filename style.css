@@ -145,10 +145,18 @@ html, body {
 
 #networkBanner {
   position: fixed; 
-  top: 0; left: 0; width: 100%;
-  background: #dc2626; color: #fff;
-  font-size: 12px; font-weight: 700;
-  text-align: center; padding: 6px;
+  top: calc(env(safe-area-inset-top, 24px) + 8px);
+  left: 14px;
+  right: 14px;
+  width: calc(100% - 28px);
+  background: #dc2626; 
+  color: #fff;
+  font-size: 13px; 
+  font-weight: 700;
+  text-align: center; 
+  padding: 8px 14px;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
   z-index: 99999;
 }
 /* ──────────────── [SECTION 02: BASE STYLES] — END ─────────────────────── */
@@ -1225,6 +1233,57 @@ html, body {
 .ctl-txt { font-size: 10px; font-weight: 700; color: #94a3b8; }
 
 .fade-out { opacity: 0; pointer-events: none; }
+
+/* ===================================================
+   कॉल रिकनेक्टिंग ओवरले (ब्लैक स्क्रीन से बचाव)
+   =================================================== */
+.reconnecting-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(9, 13, 16, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reconnecting-card {
+  background: #1e293b;
+  border: 1.5px solid var(--gold);
+  border-radius: 16px;
+  padding: 24px 28px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.reconnecting-spinner {
+  width: 38px;
+  height: 38px;
+  border: 3px solid rgba(245, 158, 11, 0.2);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spinReconn 0.8s linear infinite;
+}
+
+@keyframes spinReconn {
+  to { transform: rotate(360deg); }
+}
+
+.reconnecting-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--gold);
+}
+
+.reconnecting-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 /* ──────────────── [SECTION 14: CALL SCREEN] — END ──────────────────────── */
 
 

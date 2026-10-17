@@ -1,7 +1,29 @@
-<!-- 🟢🟢🟢 [START (शुरू): index.html] 🟢🟢🟢 -->
+<!-- =========================================================================
+   🟢🟢🟢 [START: index.html — v1.24.3] 🟢🟢🟢
+   =========================================================================
+   🎨 COMPONENT DIRECTORY (कॉम्पोनेंट डायरेक्टरी):
+   -------------------------------------------------------------------------
+   🟦 SECTION 01: HEAD & APP CONFIG     -> व्यूपोर्ट, PWA मैनिफेस्ट, डायनामिक OTA स्टाइल
+   🟦 SECTION 02: SPLASH & TOP BANNER   -> ऐप बूट स्प्लैश स्क्रीन व इंटरनेट एरर बैनर
+   🟦 SECTION 03: HIDDEN FILE INPUTS    -> कैमरा, गैलरी, डॉक्स व ऑडियो फ़ाइल पिकर्स
+   🟦 SECTION 04: MEDIA VIEWER & QUEUE  -> फ़ुलस्क्रीन मीडिया प्लेयर व अपलोड/डाउनलोड क्यू
+   🟦 SECTION 05: ATTACH ACTION MENU    -> पेपरक्लिप चैट अटैचमेंट पॉपअप मेन्यू
+   🟦 SECTION 06: MODALS & DIALOGS      -> परमिशन, नाम, प्रोफ़ाइल, एडमिन पिन व फ़ोन कॉन्टैक्ट्स
+   🟦 SECTION 07: LOBBY SCREEN          -> हेडर, ऑनलाइन स्ट्रिप, सर्च बार, चैट्स व कॉल लॉग्स
+   🟦 SECTION 08: CHAT SCREEN & FOOTER  -> चैट हेडर, मैसेजेस बॉडी, इनपुट बार व वॉयस डॉक
+   🟦 SECTION 09: CALL ALERT DIALOGS    -> इनकमिंग व आउटगोइंग कॉल फुलस्क्रीन कार्ड्स
+   🟦 SECTION 10: ACTIVE CALL ENGINE    -> वीडियो ग्रिड, री-कनेक्टिंग ओवरले, PiP व कंट्रोल्स
+   🟨 SECTION 11: FUN MODE & GAMES      -> किड्स क्विज़, रिडल & जीके चैलेंज, लाइव वाइटबोर्ड
+   🟨 SECTION 12: LUDO GAME & PIN DEFS  -> 15x15 लूडो बोर्ड, डाइस, टर्न डिस्प्ले व मेटैलिक SVG
+   🟦 SECTION 13: SCRIPTS & BOOT ENGINE -> ऑटो स्प्लैश गार्ड व डायनामिक ऐप लोडर
+   ========================================================================= -->
+
 <!DOCTYPE html>
 <html lang="hi">
 <head>
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 01: HEAD & APP CONFIG] — START
+   ───────────────────────────────────────────────────────────────────────── -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -9,8 +31,8 @@
 <meta name="theme-color" content="#090d10">
 <link rel="manifest" href="manifest.json">
 
-<!-- डायनामिक स्टाइल -->
-<link rel="stylesheet" href="style.css?v=1.24.5" id="baseStyle">
+<!-- डायनामिक स्टाइल एवं OTA कैशे लोडर -->
+<link rel="stylesheet" href="style.css?v=1.25.1" id="baseStyle">
 <style id="otaCustomStyle"></style>
 <script>
   try {
@@ -28,9 +50,13 @@
 </script>
 
 <title id="pageTitle">VideoCallApp</title>
+<!-- ──────────────── [SECTION 01: HEAD & CONFIG] — END ──────────────────── -->
 </head>
 <body>
 
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 02: SPLASH & TOP BANNER] — START
+   ───────────────────────────────────────────────────────────────────────── -->
 <!-- SPLASH SCREEN -->
 <div id="splashScreen">
   <div class="splash-content">
@@ -42,19 +68,29 @@
   </div>
 </div>
 
+<!-- इंटरनेट डिस्कनेक्ट बैनर -->
 <div id="networkBanner" hidden>⚠️ इंटरनेट कनेक्शन टूट गया है... पुनः कनेक्ट कर रहे हैं</div>
+<!-- ──────────────── [SECTION 02: SPLASH & BANNER] — END ─────────────────── -->
 
-<!-- Media Transfer: Hidden file inputs -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 03: HIDDEN FILE INPUTS] — START
+   ───────────────────────────────────────────────────────────────────────── -->
 <input type="file" id="photoFileInput" accept="image/*" style="display:none">
 <input type="file" id="videoFileInput" accept="video/*" style="display:none">
 <input type="file" id="docFileInput" accept="*/*" style="display:none">
 <input type="file" id="anyFileInput" accept="*/*" style="display:none">
 <input type="file" id="cameraCaptureInput" accept="image/*" capture="environment" style="display:none">
+<!-- ──────────────── [SECTION 03: FILE INPUTS] — END ─────────────────────── -->
 
-<!-- Media Transfer Queue -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 04: MEDIA VIEWER & QUEUE] — START
+   ───────────────────────────────────────────────────────────────────────── -->
+<!-- मीडिया ट्रांसफर प्रगति कतार -->
 <div id="transferQueue"></div>
 
-<!-- Media Viewer -->
+<!-- फुलस्क्रीन मीडिया व्यूअर -->
 <div id="mediaViewer" hidden>
   <div class="media-viewer-top">
     <button class="media-viewer-close" id="closeMediaViewerBtn">✕</button>
@@ -62,8 +98,12 @@
   </div>
   <div class="media-viewer-content" id="mediaViewerContent"></div>
 </div>
+<!-- ──────────────── [SECTION 04: MEDIA VIEWER] — END ────────────────────── -->
 
-<!-- Attach Menu -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 05: ATTACH ACTION MENU] — START
+   ───────────────────────────────────────────────────────────────────────── -->
 <div id="attachMenu" hidden>
   <button class="attach-menu-item" data-action="camera">
     <span class="attach-menu-icon camera">📸</span>
@@ -90,8 +130,13 @@
     <span>फ़ोन संपर्क</span>
   </button>
 </div>
+<!-- ──────────────── [SECTION 05: ATTACH MENU] — END ─────────────────────── -->
 
-<!-- PHONE CONTACTS PICKER MODAL -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 06: MODALS & DIALOGS] — START
+   ───────────────────────────────────────────────────────────────────────── -->
+<!-- फ़ोन संपर्क पिकर मोडल -->
 <div id="phoneContactsModal" class="modal-overlay" hidden>
   <div class="modal-box phone-contacts-box">
     <div class="pc-modal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -104,7 +149,7 @@
   </div>
 </div>
 
-<!-- Permission Notice Modal -->
+<!-- अनुमतियाँ सूचना मोडल -->
 <div id="permNoticeModal" class="modal-overlay" hidden>
   <div class="modal-box">
     <h2>🛡️ अनुमतियाँ आवश्यक हैं</h2>
@@ -121,7 +166,7 @@
   </div>
 </div>
 
-<!-- Name Modal (✅ FIX: हिंदी और सिंगल-टैप कीबोर्ड सपोर्ट के लिए रिस्ट्रिक्शन हटाई गई) -->
+<!-- नाम प्रविष्टि मोडल -->
 <div id="nameModal" class="modal-overlay" hidden>
   <div class="modal-box">
     <h2 id="txtWelcome">स्वागत है!</h2>
@@ -131,6 +176,7 @@
   </div>
 </div>
 
+<!-- सेटिंग्स एवं प्रोफ़ाइल मोडल -->
 <div id="profileModal" class="modal-overlay" hidden>
   <div class="modal-box">
     <h2 id="txtSettingsTitle" style="margin-bottom:14px">⚙ सेटिंग्स एवं प्रोफ़ाइल</h2>
@@ -154,6 +200,7 @@
   </div>
 </div>
 
+<!-- एडमिन पिन मोडल -->
 <div id="adminPinModal" class="modal-overlay" hidden>
   <div class="modal-box">
     <h2>🔐 एडमिन वेरिफिकेशन</h2>
@@ -163,6 +210,7 @@
   </div>
 </div>
 
+<!-- एडमिन कंट्रोल पैनल -->
 <div id="adminPanelModal" class="modal-overlay" hidden>
   <div class="modal-box" style="max-height:80vh;display:flex;flex-direction:column">
     <h2>👑 एडमिन कंट्रोल पैनल</h2>
@@ -171,6 +219,7 @@
   </div>
 </div>
 
+<!-- कॉल सदस्य जोड़ें मोडल -->
 <div id="addParticipantModal" class="modal-overlay" hidden>
   <div class="modal-box">
     <h2 id="txtAddParticipantTitle">कॉल में सदस्य जोड़ें</h2>
@@ -178,32 +227,40 @@
     <button id="closeAddModalBtn" class="btn-cancel-box">रद्द करें</button>
   </div>
 </div>
+<!-- ──────────────── [SECTION 06: MODALS] — END ───────────────────────────── -->
 
-<!-- Lobby Screen -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 07: LOBBY SCREEN] — START
+   ───────────────────────────────────────────────────────────────────────── -->
 <div id="lobby" class="screen" hidden>
   <div class="header">
     <div class="user-title" id="myHeaderName">...</div>
     <div class="header-actions">
       <button id="adminBtn" class="admin-badge">👑 एडमिन</button>
       
-      <!-- पॉइंट #2: WhatsApp शेयरिंग बटन (एडमिन और सेटिंग्स के बीच) -->
+      <!-- WhatsApp शेयरिंग बटन -->
       <button class="icon-hdr-btn btn-whatsapp-share" id="shareAppWhatsappBtn" title="व्हाट्सएप पर शेयर करें">
         <svg viewBox="0 0 24 24" style="fill:#25D366;width:20px;height:20px;"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.196 8.196 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.02-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.37-.44.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.35-.77-1.85-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.78 2.71 4.3 3.8.6.26 1.07.42 1.44.54.61.19 1.16.17 1.6.1.49-.07 1.47-.6 1.68-1.18.21-.59.21-1.09.15-1.19-.06-.1-.22-.16-.47-.29z"/></svg>
       </button>
 
+      <!-- प्रोफ़ाइल सेटिंग्स बटन -->
       <button class="icon-hdr-btn btn-gear" id="profileBtn" title="सेटिंग्स">
         <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
       </button>
     </div>
   </div>
   
-  <!-- ONLINE STRIP -->
+  <!-- ऑनलाइन यूजर स्ट्रिप -->
   <div id="onlineStrip" class="online-strip" hidden></div>
 
+  <!-- सर्च बार -->
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
     <input type="text" id="searchInput" class="search-input" placeholder="संपर्क या चैट खोजें..." autocomplete="off">
   </div>
+
+  <!-- लॉबी टैब्स -->
   <div class="lobby-tabs">
     <button class="tab-btn active-chat" id="tabChatsBtn">💬 चैट</button>
     <button class="tab-btn" id="tabCallsBtn">📞 कॉल</button>
@@ -211,8 +268,12 @@
   <div class="tab-content" id="tabChatsContent"><div id="contactsList"></div></div>
   <div class="tab-content" id="tabCallsContent" hidden><div id="callLogsList"></div></div>
 </div>
+<!-- ──────────────── [SECTION 07: LOBBY SCREEN] — END ─────────────────────── -->
 
-<!-- Chat Screen -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 08: CHAT SCREEN & FOOTER] — START
+   ───────────────────────────────────────────────────────────────────────── -->
 <div id="chatScreen" class="screen" hidden>
   <div class="chat-header">
     <div style="display:flex;align-items:center;gap:12px">
@@ -234,10 +295,14 @@
       </button>
     </div>
   </div>
+
+  <!-- मैसेजेस बॉडी -->
   <div class="chat-body" id="chatBody"></div>
   
+  <!-- नीचे स्क्रोल करने का बटन -->
   <button id="scrollBottomFab" class="scroll-fab" hidden>⬇</button>
 
+  <!-- चैट फुटर व इनपुट रो -->
   <div class="chat-footer" id="chatFooter">
     <div class="chat-input-row">
       <button class="attach-btn" id="attachBtn" title="अटैच करें">📎</button>
@@ -252,6 +317,7 @@
       </button>
     </div>
 
+    <!-- वॉयस रिकॉर्डिंग डॉक -->
     <div id="voiceDock" class="voice-dock" hidden>
       <div class="voice-dock-top">
         <div class="voice-dock-timer">
@@ -273,8 +339,13 @@
     </div>
   </div>
 </div>
+<!-- ──────────────── [SECTION 08: CHAT SCREEN] — END ──────────────────────── -->
 
-<!-- Incoming Call Dialog -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 09: CALL ALERT DIALOGS] — START
+   ───────────────────────────────────────────────────────────────────────── -->
+<!-- इनकमिंग कॉल डायलॉग -->
 <div id="incomingDialog" class="call-dialog" hidden>
   <div style="text-align:center">
     <div class="caller-photo">👤</div>
@@ -290,7 +361,7 @@
   </div>
 </div>
 
-<!-- Outgoing Call Dialog -->
+<!-- आउटगोइंग कॉल डायलॉग -->
 <div id="outgoingDialog" class="call-dialog" hidden>
   <div style="text-align:center">
     <div class="caller-photo">
@@ -301,11 +372,26 @@
   </div>
   <button class="circle-btn btn-reject" id="btnCancelCall" style="width:72px;height:72px"><span style="font-size:26px">✕</span><span id="txtCancelCall">रद्द करें</span></button>
 </div>
+<!-- ──────────────── [SECTION 09: CALL ALERTS] — END ──────────────────────── -->
 
-<!-- Active Call Screen -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 10: ACTIVE CALL ENGINE] — START
+   ───────────────────────────────────────────────────────────────────────── -->
 <div id="call" class="screen" hidden>
+  <!-- रिमोट वीडियो ग्रिड -->
   <div id="remoteGrid"></div>
 
+  <!-- 🔄 नेटवर्क स्लो / रिकनेक्टिंग ओवरले -->
+  <div id="callReconnectingOverlay" class="reconnecting-overlay" hidden>
+    <div class="reconnecting-card">
+      <div class="reconnecting-spinner"></div>
+      <div class="reconnecting-title">कमजोर नेटवर्क...</div>
+      <div class="reconnecting-sub">कॉल पुनः कनेक्ट की जा रही है</div>
+    </div>
+  </div>
+
+  <!-- ऑडियो कॉल मोड में दिखने वाला सेंट्रल एरिया -->
   <div id="voiceCallArea" class="voice-central-area" hidden>
     <div class="voice-avatar-ring">
       <div class="voice-avatar">👤</div>
@@ -314,25 +400,30 @@
     <div class="voice-call-substatus">ऑडियो कॉल जारी है...</div>
   </div>
 
+  <!-- PiP लोकल वीडियो प्रीव्यू -->
   <div class="pip-wrap mirror" id="pipWrap"><video id="localVideo" autoplay playsinline muted></video></div>
   <button id="pipRestoreBtn" class="pip-restore-btn" hidden>‹ 📹</button>
 
+  <!-- कॉल टॉप बार -->
   <div class="call-top-bar" id="callTopBar">
     <div class="top-pill" id="topPill">
       <div class="timer-pill" id="callTimer">00:00</div>
       <div class="network-pill high" id="networkPill"><span class="network-dot"></span><span id="networkText">हाई</span></div>
     </div>
     <div class="top-call-actions">
-      <!-- पॉइंट #4: Picture-in-Picture (PiP) बटन -->
+      <!-- PiP मोड बटन -->
       <button class="top-action-btn" id="btnEnterPip" title="मिनी स्क्रीन (PiP)">
         <svg viewBox="0 0 24 24"><path d="M19 11h-8v6h8v-6zm4 8V4.98C23 3.88 22.1 3 21 3H3c-1.1 0-2 .88-2 1.98V19c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zm-2 .02H3V4.97h18v14.05z"/></svg>
       </button>
+      <!-- सदस्य जोड़ें बटन -->
       <button class="top-action-btn" id="btnAddPerson" title="सदस्य जोड़ें">
         <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
       </button>
+      <!-- कैमरा फ्लिप बटन -->
       <button class="top-action-btn" id="flipBtn" title="कैमरा पलटें">
         <svg viewBox="0 0 24 24"><path d="M9 12c0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3-3 1.34-3 3zm11-4h-3.17L15 6H9L7.17 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm-8 10c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
       </button>
+      <!-- ऑडियो/वीडियो मोड बटन -->
       <button class="top-action-btn" id="audioModeBtn" title="मोड बदलें">
         <span id="audioModeIco">
           <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
@@ -341,6 +432,7 @@
     </div>
   </div>
 
+  <!-- फन मोड ट्रे -->
   <div id="funModeTray" class="fun-tray-modal" hidden>
     <div class="fun-tray-content">
       <div class="fun-tray-header">
@@ -352,7 +444,6 @@
           <span class="tray-icon">🎯</span>
           <span class="tray-label">किड्स क्विज़</span>
         </button>
-        <!-- पॉइंट #3: फन मोड ट्रे में Riddle & GK टैब -->
         <button class="tray-item" id="trayBtnRiddleGk">
           <span class="tray-icon">🧩</span>
           <span class="tray-label">Riddle & GK</span>
@@ -365,14 +456,18 @@
           <span class="tray-icon">❌⭕</span>
           <span class="tray-label">टिक-टैक-टो</span>
         </button>
-        <button class="tray-item" id="trayBtnLudo"
-        <span class="tray-icon">🎲</span>
-        <span class="tray-label">Ludo</span>
+        <button class="tray-item" id="trayBtnLudo">
+          <span class="tray-icon">🎲</span>
+          <span class="tray-label">Ludo</span>
         </button>
       </div>
     </div>
   </div>
 
+  <!-- ───────────────────────────────────────────────────────────────────────
+     🟨 [SECTION 11: FUN MODE & GAMES] — START
+     ─────────────────────────────────────────────────────────────────────── -->
+  <!-- 🎯 किड्स क्विज़ बॉक्स -->
   <div id="kidsQuizBox" class="quiz-floating-box" hidden>
     <div class="quiz-header">
       <div class="quiz-header-title">🎯 किड्स क्विज़</div>
@@ -392,7 +487,7 @@
     <button id="nextQuizBtn" class="quiz-next-big-btn">🔄 अगला सवाल (Next Question)</button>
   </div>
 
-  <!-- पॉइंट #3: Riddle & GK फ्लोटिंग गेम बॉक्स (Updated Layout) -->
+  <!-- 🧩 Riddle & GK फ्लोटिंग बॉक्स -->
   <div id="kidsRiddleBox" class="quiz-floating-box riddle-box-extended" hidden>
     <div class="quiz-header" style="margin-bottom: 6px;">
       <div class="quiz-header-title">🧩 Riddle & GK Challenge</div>
@@ -405,7 +500,6 @@
       </div>
     </div>
     
-    <!-- Scoreboard at the top with transparent background -->
     <div class="riddle-score-header">
       <span id="riddleScoreDisplay" class="riddle-score-left">✅ 0 | ❌ 0</span>
       <span id="riddleTotalDisplay" class="riddle-score-right">प्रश्न: 0/10</span>
@@ -415,12 +509,9 @@
       <div id="riddleTimerBar" class="quiz-timer-bar"></div>
     </div>
     
-    <!-- Question text -->
     <div id="riddleQuestionText" class="quiz-question riddle-q-text">पहेली लोड हो रही है...</div>
-    
     <div id="riddleOptionsArea" class="quiz-options-grid"></div>
     
-    <!-- Hard mode evaluation area -->
     <div id="riddleHardEvalArea" class="riddle-hard-eval" hidden>
       <button id="riddleShowAnswerBtn" class="riddle-show-ans-btn">👁️ उत्तर देखें (Show Answer)</button>
       <div id="riddleHiddenAnswer" class="riddle-hidden-ans" hidden></div>
@@ -430,7 +521,6 @@
       </div>
     </div>
     
-    <!-- Buzzer at the bottom (hidden in Easy mode via JS) -->
     <div id="riddleBuzzerWrap" class="riddle-buzzer-wrap">
       <button id="riddleBuzzerBtn" class="riddle-buzzer-btn">🔔 बजर (Buzzer)</button>
     </div>
@@ -438,6 +528,7 @@
     <button id="nextRiddleBtn" class="quiz-next-big-btn">🔄 अगला मुकाबला / सवाल (Next)</button>
   </div>
 
+  <!-- 🎨 लाइव वाइटबोर्ड मोडल -->
   <div id="kidsWhiteboardModal" class="whiteboard-overlay" hidden>
     <div class="whiteboard-top-bar">
       <span class="whiteboard-title">🎨 लाइव वाइटबोर्ड</span>
@@ -460,7 +551,9 @@
       <canvas id="kidsWhiteboardCanvas"></canvas>
     </div>
   </div>
+  <!-- ──────────────── [SECTION 11: FUN MODE] — END ─────────────────────────── -->
 
+  <!-- कॉल बॉटम कंट्रोल्स बार -->
   <div class="controls" id="controlsBar">
     <div class="controls-grid-5">
       <button class="ctl-box" id="micBtn">
@@ -498,9 +591,69 @@
     </div>
   </div>
 </div>
+<!-- ──────────────── [SECTION 10: ACTIVE CALL ENGINE] — END ───────────────── -->
+
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟨 [SECTION 12: LUDO GAME & PIN DEFS] — START
+   ───────────────────────────────────────────────────────────────────────── -->
+<!-- 🎲 लूडो गेम बॉक्स -->
+<div id="kidsLudoBox" class="quiz-floating-box ludo-box-extended" hidden>
+  <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom:8px;">
+    <div style="color:#f5c542; font-size:13px; font-weight:800; padding-left:4px; letter-spacing:0.5px;">🎲 LUDO</div>
+    <div style="display:flex; gap:10px;">
+      <button id="ludoResetBtn" class="ludo-action-btn" title="गेम रीसेट करें">🔄</button>
+      <button id="closeLudoBtn" class="ludo-action-btn" title="हाइड करें">✕</button>
+    </div>
+  </div>
+
+  <!-- लूडो का बोर्ड -->
+  <div id="ludoBoardWrap">
+    <div id="ludoBoard"></div>
+  </div>
+
+  <!-- नीचे टर्न और डाइस कंट्रोल्स -->
+  <div class="ludo-bottom-controls">
+    <div id="ludoTurnLabel" class="ludo-turn-display">🔴 Waiting...</div>
+    <div class="ludo-actions">
+      <div class="diceBox" id="ludoDiceBox">🎲</div>
+      <button id="ludoRollBtn" disabled>ROLL</button>
+    </div>
+  </div>
+</div>
+
+<!-- मेटैलिक गोटियों के लिए SVG Defs -->
+<svg id="pinDefs" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;">
+  <defs>
+    <radialGradient id="metal-grad" cx="35%" cy="25%" r="80%">
+      <stop offset="0%" stop-color="#f6f6f6"/><stop offset="35%" stop-color="#d8d8d8"/>
+      <stop offset="70%" stop-color="#9a9a9a"/><stop offset="100%" stop-color="#5a5a5a"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-r" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#ff9b8f"/><stop offset="45%" stop-color="#e74c3c"/><stop offset="100%" stop-color="#8a1c12"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-g" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#a5f0c2"/><stop offset="45%" stop-color="#2ecc71"/><stop offset="100%" stop-color="#0d5e2c"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-y" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#fff29a"/><stop offset="45%" stop-color="#f1c40f"/><stop offset="100%" stop-color="#7a5f08"/>
+    </radialGradient>
+    <radialGradient id="pinGrad-b" cx="35%" cy="28%" r="70%">
+      <stop offset="0%" stop-color="#a8d7f5"/><stop offset="45%" stop-color="#3498db"/><stop offset="100%" stop-color="#0e3f66"/>
+    </radialGradient>
+  </defs>
+</svg>
+<!-- ──────────────── [SECTION 12: LUDO MODULE] — END ──────────────────────── -->
+
+
+<!-- टोस्ट अलर्ट कंटेनर -->
 <div id="toast"></div>
 
-<!-- स्प्लैश स्क्रीन को किसी भी हाल में हटाने का ऑटो-गार्ड -->
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+   🟦 [SECTION 13: SCRIPTS & BOOT ENGINE] — START
+   ───────────────────────────────────────────────────────────────────────── -->
+<!-- स्प्लैश स्क्रीन हटाने का ऑटो-गार्ड -->
 <script>
   setTimeout(function() {
     var splash = document.getElementById('splashScreen');
@@ -513,7 +666,7 @@
   }, 1200);
 </script>
 
-<!-- डायनामिक स्क्रिप्ट लोडर -->
+<!-- डायनामिक स्क्रिप्ट एवं OTA लोडर -->
 <script>
   (function() {
     window.addEventListener('error', function(e) {
@@ -538,7 +691,7 @@
       } else {
         const defaultScript = document.createElement('script');
         defaultScript.type = 'module';
-        defaultScript.src = 'app.js?v=1.24.2';
+        defaultScript.src = 'app.js?v=1.25.1';
         document.body.appendChild(defaultScript);
       }
     } catch(e) {
@@ -549,56 +702,10 @@
     }
   })();
 </script>
-  
-<!-- 🟣🟣🟣 [LUDO MODULE START (शुरू): index.html] 🟣🟣🟣 -->
-<div id="kidsLudoBox" class="quiz-floating-box ludo-box-extended" hidden>
-  <!-- हेडर (गेम का नाम, रीसेट और क्लोज बटन) -->
-  <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom:8px;">
-    <div style="color:#f5c542; font-size:13px; font-weight:800; padding-left:4px; letter-spacing:0.5px;">🎲 LUDO</div>
-    <div style="display:flex; gap:10px;">
-      <button id="ludoResetBtn" class="ludo-action-btn" title="गेम रीसेट करें">🔄</button>
-      <button id="closeLudoBtn" class="ludo-action-btn" title="हाइड करें">✕</button>
-    </div>
-  </div>
-
-  <!-- लूडो का बोर्ड -->
-  <div id="ludoBoardWrap">
-    <div id="ludoBoard"></div>
-  </div>
-
-  <!-- नीचे टर्न और डाइस कंट्रोल्स -->
-  <div class="ludo-bottom-controls">
-    <div id="ludoTurnLabel" class="ludo-turn-display">🔴 Waiting...</div>
-    <div class="ludo-actions">
-      <div class="diceBox" id="ludoDiceBox">🎲</div>
-      <button id="ludoRollBtn" disabled>ROLL</button>
-    </div>
-  </div>
-</div>
-
-<!-- मैटेलिक गोटियों के लिए SVG (यह पहले जैसा ही रहेगा) -->
-<svg id="pinDefs" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;">
-  <defs>
-    <radialGradient id="metal-grad" cx="35%" cy="25%" r="80%">
-      <stop offset="0%" stop-color="#f6f6f6"/><stop offset="35%" stop-color="#d8d8d8"/>
-      <stop offset="70%" stop-color="#9a9a9a"/><stop offset="100%" stop-color="#5a5a5a"/>
-    </radialGradient>
-    <radialGradient id="pinGrad-r" cx="35%" cy="28%" r="70%">
-      <stop offset="0%" stop-color="#ff9b8f"/><stop offset="45%" stop-color="#e74c3c"/><stop offset="100%" stop-color="#8a1c12"/>
-    </radialGradient>
-    <radialGradient id="pinGrad-g" cx="35%" cy="28%" r="70%">
-      <stop offset="0%" stop-color="#a5f0c2"/><stop offset="45%" stop-color="#2ecc71"/><stop offset="100%" stop-color="#0d5e2c"/>
-    </radialGradient>
-    <radialGradient id="pinGrad-y" cx="35%" cy="28%" r="70%">
-      <stop offset="0%" stop-color="#fff29a"/><stop offset="45%" stop-color="#f1c40f"/><stop offset="100%" stop-color="#7a5f08"/>
-    </radialGradient>
-    <radialGradient id="pinGrad-b" cx="35%" cy="28%" r="70%">
-      <stop offset="0%" stop-color="#a8d7f5"/><stop offset="45%" stop-color="#3498db"/><stop offset="100%" stop-color="#0e3f66"/>
-    </radialGradient>
-  </defs>
-</svg>
-<!-- 🟣🟣🟣 [LUDO MODULE END (समाप्त): index.html] 🟣🟣🟣 -->
+<!-- ──────────────── [SECTION 13: BOOT ENGINE] — END ──────────────────────── -->
 
 </body>
 </html>
-<!-- 🔴🔴🔴 [END (समाप्त): index.html] 🔴🔴🔴 -->
+<!-- =========================================================================
+   🔴🔴🔴 [END: index.html — v1.24.3] 🔴🔴🔴
+   ========================================================================= -->

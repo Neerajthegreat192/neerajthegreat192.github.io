@@ -31,7 +31,7 @@ import { getDatabase, ref, set, get, update, remove, onValue, onChildAdded, push
    ⚠️ डिपेंड: कोई नहीं
    ═══════════════════════════════════════════════════════════════════════ */
 
-const CURRENT_APP_VERSION = "1.24.1";
+const CURRENT_APP_VERSION = "1.25.1";
 const GITHUB_APK_URL = "https://github.com/Neerajthegreat192/neerajthegreat192.github.io/releases/latest/download/app-release.apk";
 
 /* ───────── 🟦 [SECTION 02: GLOBAL CONSTANTS] — END ───────── */
@@ -4412,9 +4412,9 @@ if ($('btnEnterPip')) {
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 61: BITRATE + QUALITY MONITOR] — START
    📌 क्या: WebRTC bitrate boost, SDP bitrate patch, हर 3s पर network
-           quality (RTT + packet loss) sample करना
+           quality (RTT + packet loss) sample करना + स्लो नेटवर्क ओवरले
    🔗 कहाँ से: initiatePeerConnection, joinCallSession → startNetworkQualityMonitor
-   ⚠️ डिपेंड: peerConnections, localStream
+   ⚠️ डिपेंड: peerConnections, localStream, callReconnectingOverlay
    🎯 High: 5 Mbps / Medium: 2.5 Mbps
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -4460,7 +4460,7 @@ async function applyCallQuality(level) {
 }
 
 function updateNetworkIndicator(level, detail='') {
-  const pill = $('networkPill'), txt = $('networkText');
+  const pill = $('networkPill'), txt =$('networkText');
   if (!pill || !txt) return;
   pill.className = `network-pill ${level === 'medium' ? 'medium' : 'high'}`;
   txt.textContent = level === 'medium' ? translations[currentLang].netMedium : translations[currentLang].netOnline;
@@ -4485,6 +4485,12 @@ async function sampleNetworkQuality() {
   const isMed = worstRtt > 260 || lossPct > 5;
   await applyCallQuality(isMed ? 'medium' : 'high');
   updateNetworkIndicator(isMed ? 'medium' : 'high', `${Math.round(worstRtt)}ms / ${lossSamples ? lossPct.toFixed(1) : '0.0'}% loss`);
+
+  // 🔄 अत्यधिक पैकेट लॉस होने पर ब्लैक स्क्रीन से बचाव हेतु ओवरले दिखाना
+  const overlay = $('callReconnectingOverlay');
+  if (overlay && isCallConnected) {
+    overlay.hidden = !(lossPct > 25 || worstRtt > 600);
+  }
 }
 
 function startNetworkQualityMonitor() {
@@ -4498,6 +4504,8 @@ function startNetworkQualityMonitor() {
 function stopNetworkQualityMonitor() {
   if (qualityTimer) { clearInterval(qualityTimer); qualityTimer = null; }
   qualityLevel = 'high';
+  const overlay = $('callReconnectingOverlay');
+  if (overlay) overlay.hidden = true;
 }
 
 /* ───────── 🟦 [SECTION 61: QUALITY MONITOR] — END ───────── */
@@ -4517,7 +4525,7 @@ function stopNetworkQualityMonitor() {
       5. Max 5 attempts, फिर fail toast
    🔗 कहाँ से: joinCallSession() → setupCallNetworkRecovery()
               hangup() finally → teardownCallNetworkRecovery()
-   ⚠️ डिपेंड: peerConnections, localStream, applySDPBitrate
+   ⚠️ डिपेंड: peerConnections, localStream, applySDPBitrate, callReconnectingOverlay
    🎯 Glare-free design: सिर्फ initiator ही ICE restart करता है
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -4543,6 +4551,8 @@ function setupCallNetworkRecovery() {
   networkOfflineHandler = () => {
     networkWasOffline = true;
     console.log('[NetRecovery] offline event');
+    const overlay = $('callReconnectingOverlay');
+    if (overlay && isCallConnected) overlay.hidden = false;
   };
   window.addEventListener('offline', networkOfflineHandler);
 
@@ -4613,10 +4623,15 @@ function setupCallNetworkRecovery() {
 async function attemptNetworkRecovery() {
   if (!activeCallId || isHangingUp || !isCallConnected) return;
 
+  // 🔄 रिकनेक्ट शुरू होते ही ओवरले स्क्रीन पर दिखाना
+  const overlay = $('callReconnectingOverlay');
+  if (overlay) overlay.hidden = false;
+
   networkRecoveryRetryCount++;
   if (networkRecoveryRetryCount > 5) {
     toast(currentLang === 'hi' ? '❌ नेटवर्क रिकनेक्ट नहीं हो पाया' : '❌ Network reconnect failed');
     networkRecoveryRetryCount = 0;
+    if (overlay) overlay.hidden = true;
     return;
   }
 
@@ -4698,7 +4713,12 @@ async function attemptNetworkRecovery() {
     }
   }
 
-  // 8s बाद retry counter reset (success मान लो)
+  // रिकनेक्ट पूरा होने पर 4 सेकंड बाद ओवरले छिपाएं व 8 सेकंड बाद काउंटर रीसेट करें
+  setTimeout(() => {
+    const ov = $('callReconnectingOverlay');
+    if (ov && isCallConnected) ov.hidden = true;
+  }, 4000);
+
   setTimeout(() => { networkRecoveryRetryCount = 0; }, 8000);
 }
 
@@ -4725,6 +4745,8 @@ function teardownCallNetworkRecovery() {
   networkRecoveryActive = false;
   networkRecoveryRetryCount = 0;
   networkWasOffline = false;
+  const overlay = $('callReconnectingOverlay');
+  if (overlay) overlay.hidden = true;
   console.log('[NetRecovery] listeners teardown');
 }
 
@@ -5178,8 +5200,8 @@ $('hangBtn').onclick = (e) => {
    📌 क्या: call end करने का पूरा flow — duration calc, Firebase cleanup,
            peer close, tracks stop, UI reset, native foreground service stop
    🔗 कहाँ से: hangBtn, btnReject, listenForIncoming, startCall timeouts
-   ⚠️ डिपेंड: cleanupKidsModules (batch 4), teardownCallNetworkRecovery
-   🎯 Call log record + audio end tone + locked detection
+   ⚠️ डिपेंड: cleanupKidsModules (batch 4), teardownCallNetworkRecovery, callReconnectingOverlay
+   🎯 Call log record + audio end tone + locked detection + overlay reset
    ═══════════════════════════════════════════════════════════════════════ */
 
 async function hangup(silent = false) {
@@ -5284,6 +5306,10 @@ async function hangup(silent = false) {
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
 
+    // 🔄 Reconnecting overlay reset (kisi bhi haal me call katne par overlay hide rahe)
+    const overlay = $('callReconnectingOverlay');
+    if (overlay) overlay.hidden = true;
+
     const wasLocked = isDeviceLocked();
     if (!wasLocked) {
       callScreen.hidden = true;
@@ -5305,7 +5331,6 @@ async function hangup(silent = false) {
 }
 
 /* ───────── 🟦 [SECTION 70: HANGUP] — END ───────── */
-
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 71: CALL TIMER + WAKE LOCK] — START
