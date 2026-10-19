@@ -2149,6 +2149,58 @@ body.in-pip-mode #remoteGrid { width: 100vw !important; height: 100vh !important
   z-index: 99995 !important;
 }
 
+/* ===================================================
+   🖥️ डेस्कटॉप एवं कंप्यूटर व्यू — मोबाइल-कंटेनर फ्रेम
+   =================================================== */
+@media (min-width: 600px) {
+  /* 1. पूरी स्क्रीन का बैकग्राउंड डार्क रखना */
+  body {
+    background-color: #05070a !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* 2. लॉबी, चैट स्क्रीन, मोडाल्स और डायलॉग्स को 480px के मोबाइल साइज में बीच में सीमित करना */
+  #lobby,
+  #chatScreen,
+  .modal-box,
+  #incomingDialog,
+  #outgoingDialog,
+  .msg-long-press-menu .menu-box {
+    max-width: 480px !important;
+    width: 100% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  }
+
+  /* चैट हेडर और फुटर को 480px फ्रेम के अंदर संरेखित रखना */
+  .chat-header,
+  .chat-footer {
+    max-width: 480px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+  }
+
+  /* 3. वीडियो कॉलिंग स्क्रीन (#call) पूरी कंप्यूटर स्क्रीन पर 16:9 में खुली रहेगी */
+  #call {
+    max-width: 100% !important;
+    width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
+
 /* ──────────────── [SECTION 24: APK OVERRIDES] — END ────────────────────── */
 
 
