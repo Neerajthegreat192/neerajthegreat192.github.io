@@ -1881,14 +1881,44 @@ function renderContacts() {
     return;
   }
 
-  // जिन संपर्कों में ताज़ा मैसेज आया हो वे सबसे ऊपर दिखें
+  // 1️⃣ Sabhi users ke aakhri call ka time nikalna
+  const latestCallTimes = {};
+  if (Array.isArray(allCallLogs)) {
+    allCallLogs.forEach(log => {
+      if (log.targetId) {
+        const logTime = Number(log.time) || 0;
+        if (!latestCallTimes[log.targetId] || logTime > latestCallTimes[log.targetId]) {
+          latestCallTimes[log.targetId] = logTime;
+        }
+      }
+    });
+  }
+
+  // 2️⃣ Helper: User ke saath aakhri interaction (Call ya Message) ka time
+  const getLatestInteractionTime = (uid) => {
+    const msgTime = Number(latestChatSnippets[uid]?.time) || 0;
+    const callTime = Number(latestCallTimes[uid]) || 0;
+    return Math.max(msgTime, callTime);
+  };
+
+  // 3️⃣ WhatsApp-Style Sorting: Pin > Latest Message/Call > Alphabetical
   userIds.sort((a, b) => {
     const pinA = pinnedChats[a] ? 1 : 0;
     const pinB = pinnedChats[b] ? 1 : 0;
-    if (pinA !== pinB) return pinB - pinA;
-    const timeA = latestChatSnippets[a]?.time || allOnlineUsers[a]?.lastSeen || 0;
-    const timeB = latestChatSnippets[b]?.time || allOnlineUsers[b]?.lastSeen || 0;
-    return timeB - timeA;
+    if (pinA !== pinB) return pinB - pinA; // Pinned hamesha sabse upar
+
+    const timeA = getLatestInteractionTime(a);
+    const timeB = getLatestInteractionTime(b);
+
+    // Agar kisi se baat ya call hui hai, to jo sabse fresh hai wo upar aayega
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+
+    // Agar dono se koi baat nahi hui (time 0 hai), to naam ke hisab se (A-Z)
+    const nameA = (allOnlineUsers[a]?.name || '').toLowerCase();
+    const nameB = (allOnlineUsers[b]?.name || '').toLowerCase();
+    return nameA.localeCompare(nameB);
   });
 
   userIds.forEach(id => {
