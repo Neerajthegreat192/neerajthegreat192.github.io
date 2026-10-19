@@ -996,10 +996,7 @@ async function acquireCallMedia(audioOnly = false) {
 
 function handleIncomingCallNotification(data, isFromForegroundListener = false) {
   if (!data || !data.callId) return;
-  if (activeCallId === data.callId && !incomingDialog.hidden && incomingDialog.style.display !== 'none') return;
-
-  // 👈 अग्रभूमि में ऐप खुली होने पर एंड्रॉयड सिस्टम ट्रे से नोटिफिकेशन तुरंत हटाएं
-  clearOngoingCallNotification();
+  if (activeCallId === data.callId && !incomingDialog.hidden) return;
 
   activeCallId = data.callId;
   currentCallType = 'incoming';
@@ -1007,14 +1004,12 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   currentCallTargetName = data.callerName || 'कोई';
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
-  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
-  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
-  if (callScreen) { callScreen.hidden = true; callScreen.style.display = 'none'; }
+  lobbyScreen.hidden = true;
+  chatScreen.hidden = true;
+  callScreen.hidden = true;
 
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
-  
   incomingDialog.hidden = false;
-  incomingDialog.style.display = 'flex';
 
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
 }
@@ -1038,9 +1033,9 @@ async function handleDirectAcceptCall(callId) {
     callJoinedViaDirectAccept = true;
     remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
 
-    if (incomingDialog) { incomingDialog.hidden = true; incomingDialog.style.display = 'none'; }
-    if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
-    if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
+    incomingDialog.hidden = true;
+    lobbyScreen.hidden = true;
+    chatScreen.hidden = true;
 
     setTimeout(async () => {
       if (await acquireCallMedia(isAudioOnlyCall)) {
@@ -4407,7 +4402,6 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 $('btnCancelCall').onclick = () => {
   CallAudioManager.stopAll();
   outgoingDialog.hidden = true;
-  outgoingDialog.style.display = 'none';
   if (currentCallTargetId) {
     const roomId = getChatRoomId(myUserId, currentCallTargetId);
     const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
@@ -4439,16 +4433,12 @@ $('btnCancelCall').onclick = () => {
 $('btnAccept').onclick = async () => {
   CallAudioManager.stopAll();
   incomingDialog.hidden = true;
-  incomingDialog.style.display = 'none';
-  if (await acquireCallMedia(isAudioOnlyCall)) {
-    joinCallSession();
-  }
+  if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
 };
 
 $('btnReject').onclick = async () => {
   CallAudioManager.stopAll();
   incomingDialog.hidden = true;
-  incomingDialog.style.display = 'none';
   clearOngoingCallNotification();
 
   recordCallLog({
@@ -4471,18 +4461,12 @@ $('btnReject').onclick = async () => {
     callJoinedViaDirectAccept = false;
 
     callScreen.hidden = true;
-    callScreen.style.display = 'none';
     chatScreen.hidden = true;
-    chatScreen.style.display = 'none';
     lobbyScreen.hidden = false;
-    lobbyScreen.style.display = '';
   } else {
     callScreen.hidden = true;
-    callScreen.style.display = 'none';
     chatScreen.hidden = true;
-    chatScreen.style.display = 'none';
     lobbyScreen.hidden = true;
-    lobbyScreen.style.display = 'none';
   }
 
   closeIfLocked();
@@ -4973,17 +4957,10 @@ async function joinCallSession() {
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = null;
   stopAllCallTones();
-
-  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
-  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
-  if (incomingDialog) { incomingDialog.hidden = true; incomingDialog.style.display = 'none'; }
-  if (outgoingDialog) { outgoingDialog.hidden = true; outgoingDialog.style.display = 'none'; }
-  
-  if (callScreen) { 
-    callScreen.hidden = false; 
-    callScreen.style.display = 'flex'; // 👈 कॉल स्क्रीन पूरी तरह खोलें
-  }
-
+  lobbyScreen.hidden = true;
+  chatScreen.hidden = true;
+  callScreen.hidden = false;
+  isCallConnected = true;
   isHangingUp = false;
   ignoreBackUntil = Date.now() + 2000;
   await requestWakeLock();
@@ -5001,16 +4978,17 @@ async function joinCallSession() {
   startTimer();
   scheduleAutoHide();
 
-  // Network recovery
+  // 🆕 NETWORK RECOVERY HOOK
   setupCallNetworkRecovery();
 
-  // Native foreground service
+  // Foreground service (native)
   if (window.AndroidBridge && typeof window.AndroidBridge.startCallForegroundService === 'function') {
     window.AndroidBridge.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
   } else if (window.AndroidAudio && typeof window.AndroidAudio.startCallForegroundService === 'function') {
     window.AndroidAudio.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
   }
 
+  // Fun mode listeners
   initKidsQuizListener();
   initRiddleGkListener();
   listenRemoteCanvas();
@@ -5039,22 +5017,10 @@ async function joinCallSession() {
     }
   });
 
-  // 👈 Members live watch — ब्लैक स्क्रीन व तुरंत कटने का फिक्स
-  let initialGracePeriod = true;
-  setTimeout(() => { initialGracePeriod = false; }, 4000); // 4 सेकंड का सुरक्षित समय
-
+  // Members live — हर new member के लिए peer connection
   onValue(ref(db, `call_sessions/${activeCallId}/members`), snap => {
     const members = snap.val() || {};
     const ids = Object.keys(members);
-    const otherIds = ids.filter(pId => pId !== myUserId);
-
-    // केवल तभी कॉल काटें जब 4 सेकंड बीत चुके हों और सच में सामने वाला सदस्य जा चुका हो
-    if (!initialGracePeriod && isCallConnected && otherIds.length === 0) {
-      toast(currentLang === 'hi' ? 'सामने वाले ने कॉल समाप्त कर दी' : 'Call ended');
-      hangup(true);
-      return;
-    }
-
     if (ids.length > MAX_CALL_MEMBERS) { toast(`Maximum ${MAX_CALL_MEMBERS} members allowed`); return; }
     ids.forEach(pId => {
       if (pId !== myUserId) {
@@ -5463,153 +5429,138 @@ $('hangBtn').onclick = (e) => {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 70: HANGUP (Full Cleanup)] — START
-   📌 क्या: call end करने का पूरा flow — duration calc, Firebase cleanup,
-           peer close, tracks stop, UI reset, native foreground service stop
-   🔗 कहाँ से: hangBtn, btnReject, listenForIncoming, startCall timeouts
-   ⚠️ डिपेंड: cleanupKidsModules (batch 4), teardownCallNetworkRecovery, 
-              callReconnectingOverlay, hideOngoingCallBanner
-   🎯 Call log record + audio end tone + locked detection + overlay reset + 
-      Group Call Safe Exit + Ongoing Banner Hide + Instant Close
    ═══════════════════════════════════════════════════════════════════════ */
 
-function hangup(silent = false) {
-  if (isHangingUp) return;
-  isHangingUp = true;
-
-  // 1️⃣ Audio aur notification turant rokein
-  clearOngoingCallNotification();
-  if (isCallConnected && !silent) {
-    CallAudioManager.playEnd();
-  } else {
-    CallAudioManager.stopAll();
-  }
-
-  // 2️⃣ Call duration calculate karein
-  let actualDuration = '00:01';
-  if (callStartTime > 0 && isCallConnected) {
-    const elapsedSec = Math.max(1, Math.floor((Date.now() - callStartTime) / 1000));
-    const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
-    const ss = String(elapsedSec % 60).padStart(2, '0');
-    actualDuration = `${mm}:${ss}`;
-  }
-
-  // 3️⃣ Local hardware aur UI turant band karein (Instant 0ms cut)
-  teardownCallNetworkRecovery();
-  stopTimer();
-  releaseWakeLock();
-  clearTimeout(autoHideTimer);
-  clearTimeout(callTimeoutTimer);
-  callTimeoutTimer = null;
-  stopNetworkQualityMonitor();
-  cleanupKidsModules();
-  resetHardwareAudio();
-
-  if (window.AndroidBridge?.stopCallForegroundService) {
-    window.AndroidBridge.stopCallForegroundService();
-  } else if (window.AndroidAudio?.stopCallForegroundService) {
-    window.AndroidAudio.stopCallForegroundService();
-  }
-
-  // Peers aur media tracks turant close karein
-  unsubs.forEach(fn => { try { fn(); } catch(e){} });
-  unsubs = [];
-  if (callSessionUnsub) { callSessionUnsub(); callSessionUnsub = null; }
-  Object.keys(peerConnections).forEach(id => closePeer(id));
-  peerConnections = {};
-
-  Object.keys(mediaDataChannels).forEach(pid => { try { mediaDataChannels[pid].close(); } catch(e) {} });
-  mediaDataChannels = {};
-  Object.keys(mediaPeerConnections).forEach(pid => { try { mediaPeerConnections[pid].close(); } catch(e) {} });
-  mediaPeerConnections = {};
-
-  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-  remoteGrid.innerHTML = '';
-
-  const endedCallId = activeCallId;
-  const targetIdForLog = currentCallTargetId;
-  const targetNameForLog = currentCallTargetName;
-  const wasAudioCall = isAudioOnlyCall;
-  const wasConnected = isCallConnected;
-
-  activeCallId = null;
-  isCallConnected = false;
-  isAudioOnlyCall = false;
-  callStartTime = 0;
-  callJoinedViaDirectAccept = false;
-
-  // UI elements reset
-  callScreen.classList.remove('video-swapped');
-  controlsBar.classList.remove('fade-out');
-  $('callTopBar').classList.remove('fade-out');
-  pipWrap.classList.remove('pip-hidden');
-  pipRestoreBtn.hidden = true;
-  $('camBtn').classList.remove('off');
-  $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
-  if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
-  remoteGrid.style.display = 'grid';
-  pipWrap.style.display = 'block';
-
-  const overlay = $('callReconnectingOverlay');
-  if (overlay) overlay.hidden = true;
-
-  if (typeof hideOngoingCallBanner === 'function') {
-    hideOngoingCallBanner();
-  } else {
-    const ongoingBanner = $('ongoingCallBanner');
-    if (ongoingBanner) { ongoingBanner.hidden = true; ongoingBanner.style.display = 'none'; }
-  }
-
-  // Screen visibility handle karein (Lock vs Normal)
-  const wasLocked = isDeviceLocked();
-  callScreen.hidden = true;
-  callScreen.style.display = 'none';
-  incomingDialog.hidden = true;
-  incomingDialog.style.display = 'none';
-  outgoingDialog.hidden = true;
-  outgoingDialog.style.display = 'none';
-
-  if (!wasLocked) {
-    if (currentChatTargetId) {
-      if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
-      if (chatScreen) { chatScreen.hidden = false; chatScreen.style.display = 'flex'; }
-    } else {
-      if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
-      if (lobbyScreen) { lobbyScreen.hidden = false; lobbyScreen.style.display = ''; }
+async function hangup(silent = false) {
+  try {
+    // Duration calculate
+    let actualDuration = '00:01';
+    if (callStartTime > 0 && isCallConnected) {
+      const elapsedSec = Math.max(1, Math.floor((Date.now() - callStartTime) / 1000));
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+      const ss = String(elapsedSec % 60).padStart(2, '0');
+      actualDuration = `${mm}:${ss}`;
     }
-  } else {
-    if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
-    if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+
+    clearOngoingCallNotification();
+
+    // Call end tone logic
+    if (isCallConnected && !silent) {
+      CallAudioManager.playEnd();
+    } else {
+      CallAudioManager.stopAll();
+    }
+
+    // 🆕 Network recovery cleanup
+    teardownCallNetworkRecovery();
+
+    stopTimer();
+    releaseWakeLock();
+    clearTimeout(autoHideTimer);
+    clearTimeout(callTimeoutTimer);
+    callTimeoutTimer = null;
+    stopNetworkQualityMonitor();
+    cleanupKidsModules();
+    resetHardwareAudio();
+
+    // Native foreground service stop
+    if (window.AndroidBridge && typeof window.AndroidBridge.stopCallForegroundService === 'function') {
+      window.AndroidBridge.stopCallForegroundService();
+    } else if (window.AndroidAudio && typeof window.AndroidAudio.stopCallForegroundService === 'function') {
+      window.AndroidAudio.stopCallForegroundService();
+    }
+
+    // Call log
+    if (isCallConnected && currentCallTargetId) {
+      recordCallLog({
+        callId: activeCallId || `call_${Date.now()}`,
+        targetId: currentCallTargetId,
+        name: currentCallTargetName || 'उपयोगकर्ता',
+        type: isCaller ? 'outgoing' : 'incoming',
+        callMode: isAudioOnlyCall ? 'audio' : 'video',
+        duration: actualDuration,
+        time: Date.now()
+      });
+    }
+
+    // Firebase cleanup (Purana sidha aur saral logic jo hamesha chalta hai)
+    if (activeCallId) {
+      await update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
+      await update(ref(db, `call_sessions/${activeCallId}`), { status: 'ended' }).catch(()=>{});
+      await remove(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`)).catch(()=>{});
+      await remove(ref(db, `call_sessions/${activeCallId}/recovery_requests`)).catch(()=>{});
+    }
+    await remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
+  } catch(err) {
+    console.warn("Hangup warning:", err);
+  } finally {
+    // Peer cleanup
+    unsubs.forEach(fn => { try { fn(); } catch(e){} });
+    unsubs = [];
+    if (callSessionUnsub) { callSessionUnsub(); callSessionUnsub = null; }
+    Object.keys(peerConnections).forEach(id => closePeer(id));
+    peerConnections = {};
+
+    // Media channels cleanup
+    Object.keys(mediaDataChannels).forEach(pid => {
+      try { mediaDataChannels[pid].close(); } catch(e) {}
+    });
+    mediaDataChannels = {};
+    Object.keys(mediaPeerConnections).forEach(pid => {
+      try { mediaPeerConnections[pid].close(); } catch(e) {}
+    });
+    mediaPeerConnections = {};
+
+    // Tracks stop
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    remoteGrid.innerHTML = '';
+    activeCallId = null;
+    isCallConnected = false;
+    isAudioOnlyCall = false;
+    callStartTime = 0;
+    callJoinedViaDirectAccept = false;
+
+    // UI reset
+    callScreen.classList.remove('video-swapped');
+    controlsBar.classList.remove('fade-out');
+    $('callTopBar').classList.remove('fade-out');
+    pipWrap.classList.remove('pip-hidden');
+    pipRestoreBtn.hidden = true;
+    pipWrap.style.opacity = '1';
+    $('camBtn').classList.remove('off');
+    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
+    remoteGrid.style.display = 'grid';
+    pipWrap.style.display = 'block';
+
+    const overlay = $('callReconnectingOverlay');
+    if (overlay) overlay.hidden = true;
+
+    if ($('ongoingCallBanner'))$('ongoingCallBanner').hidden = true;
+
+    const wasLocked = isDeviceLocked();
+    if (!wasLocked) {
+      callScreen.hidden = true;
+      incomingDialog.hidden = true;
+      outgoingDialog.hidden = true;
+      if (currentChatTargetId) {
+        lobbyScreen.hidden = true;
+        chatScreen.hidden = false;
+      } else {
+        chatScreen.hidden = true;
+        lobbyScreen.hidden = false;
+      }
+    } else {
+      callScreen.hidden = true;
+      incomingDialog.hidden = true;
+      outgoingDialog.hidden = true;
+      chatScreen.hidden = true;
+      lobbyScreen.hidden = true;
+    }
+    isHangingUp = false;
+
     closeIfLocked();
   }
-
-  isHangingUp = false;
-
-  // 4️⃣ Firebase background async cleanup (UI pe koi rukawat nahi aayegi)
-  if (wasConnected && targetIdForLog) {
-    recordCallLog({
-      callId: endedCallId || `call_${Date.now()}`,
-      targetId: targetIdForLog,
-      name: targetNameForLog || 'उपयोगकर्ता',
-      type: isCaller ? 'outgoing' : 'incoming',
-      callMode: wasAudioCall ? 'audio' : 'video',
-      duration: actualDuration,
-      time: Date.now()
-    }).catch(()=>{});
-  }
-
-  if (endedCallId) {
-    update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
-    remove(ref(db, `call_sessions/${endedCallId}/members/${myUserId}`)).then(async () => {
-      const snap = await get(ref(db, `call_sessions/${endedCallId}/members`));
-      const rem = snap.val() || {};
-      const remIds = Object.keys(rem).filter(id => id !== myUserId);
-      if (remIds.length <= 1) {
-        update(ref(db, `call_sessions/${endedCallId}`), { status: 'ended' }).catch(()=>{});
-        remove(ref(db, `call_sessions/${endedCallId}/recovery_requests`)).catch(()=>{});
-      }
-    }).catch(()=>{});
-  }
-  remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
 }
 
 /* ───────── 🟦 [SECTION 70: HANGUP] — END ───────── */
