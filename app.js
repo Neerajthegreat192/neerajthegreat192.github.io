@@ -1015,7 +1015,6 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
 }
 
 async function handleDirectAcceptCall(callId) {
-async function handleDirectAcceptCall(callId) {
   try {
     stopAllCallTones();
     const sSnap = await get(ref(db, `call_sessions/${callId}`));
