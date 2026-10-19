@@ -2201,6 +2201,17 @@ body.in-pip-mode #remoteGrid { width: 100vw !important; height: 100vh !important
   }
 }
 
+/* 🚫 वीडियो के ऊपर ब्राउज़र का डिफ़ॉल्ट बड़ा प्ले बटन पूरी तरह छिपाएं */
+video::-webkit-media-controls,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button,
+video::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* ──────────────── [SECTION 24: APK OVERRIDES] — END ────────────────────── */
 
 

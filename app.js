@@ -4980,6 +4980,15 @@ async function joinCallSession() {
   onValue(ref(db, `call_sessions/${activeCallId}/members`), snap => {
     const members = snap.val() || {};
     const ids = Object.keys(members);
+    const otherIds = ids.filter(pId => pId !== myUserId);
+
+    // 👈 फिक्स: अगर कॉल कनेक्ट हो चुकी है और कमरे में कोई दूसरा सदस्य नहीं बचा, तो तुरंत कॉल समाप्त करें
+    if (isCallConnected && otherIds.length === 0) {
+      toast(currentLang === 'hi' ? 'सामने वाले ने कॉल समाप्त कर दी' : 'Call ended');
+      hangup(true);
+      return;
+    }
+
     if (ids.length > MAX_CALL_MEMBERS) { toast(`Maximum ${MAX_CALL_MEMBERS} members allowed`); return; }
     ids.forEach(pId => {
       if (pId !== myUserId) {
@@ -5105,10 +5114,6 @@ function initiatePeerConnection(peerId, peerName) {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 65: REMOTE VIDEO CELL & PEER UI] — START
-   📌 क्या: remote stream के लिए video element बनाना, cam/mic off
-           overlays दिखाना/छिपाना, grid layout adjust
-   🔗 कहाँ से: initiatePeerConnection ontrack, members listener
-   ⚠️ डिपेंड: remoteGrid DOM
    ═══════════════════════════════════════════════════════════════════════ */
 
 function addRemoteVideoCell(id, stream, peerName) {
@@ -5118,7 +5123,7 @@ function addRemoteVideoCell(id, stream, peerName) {
     cell.id = `remote_cell_${id}`;
     cell.className = 'remote-cell';
     cell.innerHTML = `
-      <video autoplay playsinline></video>
+      <video autoplay playsinline webkit-playsinline></video>
       <div class="remote-mute-badge" id="mute_badge_${id}" hidden>🔇 माइक बंद</div>
       <div class="remote-off-overlay" id="cam_off_${id}" hidden>
         <div class="remote-off-avatar">👤</div>
@@ -5129,8 +5134,25 @@ function addRemoteVideoCell(id, stream, peerName) {
   }
   const v = cell.querySelector('video');
   v.srcObject = stream;
-  v.muted = false;
-  v.play().catch(()=>{});
+  v.playsInline = true;
+  v.autoplay = true;
+
+  // 👈 ऑटोप्ले पॉलिसी फिक्स: अगर ब्राउज़र वीडियो रोके, तो तुरंत म्यूट करके वीडियो चालू करें (प्ले बटन नहीं दिखेगा)
+  const playPromise = v.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(() => {
+      v.muted = true;
+      v.play().catch(()=>{});
+      
+      // स्क्रीन पर टच होते ही आवाज (Audio) स्वतः चालू हो जाएगी
+      const unmute = () => {
+        v.muted = false;
+        v.play().catch(()=>{});
+        window.removeEventListener('pointerdown', unmute);
+      };
+      window.addEventListener('pointerdown', unmute, { once: true });
+    });
+  }
 }
 
 function updateRemotePeerUI(peerId, data) {
@@ -5154,7 +5176,6 @@ function closePeer(id) {
 }
 
 /* ───────── 🟦 [SECTION 65: REMOTE PEER UI] — END ───────── */
-
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 66: ADD PARTICIPANT MODAL] — START
@@ -5427,7 +5448,7 @@ async function hangup(silent = false) {
       });
     }
 
-    // Firebase cleanup (ग्रुप कॉल सुरक्षित निकास)
+   // Firebase cleanup (ग्रुप व 1-on-1 कॉल सुरक्षित निकास)
     if (activeCallId) {
       // 1. अपनी स्वयं की आईडी से activeCallId साफ़ करें
       await update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
@@ -5438,13 +5459,15 @@ async function hangup(silent = false) {
       // 3. जांचें कि क्या रूम में अभी भी अन्य सदस्य मौजूद हैं
       const membersSnap = await get(ref(db, `call_sessions/${activeCallId}/members`));
       const remainingMembers = membersSnap.val() || {};
+      const remainingIds = Object.keys(remainingMembers).filter(id => id !== myUserId);
 
-      // केवल तभी पूरे सेशन को 'ended' करें जब कमरा खाली हो गया हो (कोई सदस्य न बचा हो)
-      if (Object.keys(remainingMembers).length === 0) {
+      // 👈 फिक्स: यदि अब कमरे में 1 या 0 व्यक्ति ही बचा है (यानी बात करने वाला दूसरा कोई नहीं है), तो पूरे सेशन को 'ended' करें
+      if (remainingIds.length <= 1) {
         await update(ref(db, `call_sessions/${activeCallId}`), { status: 'ended' }).catch(()=>{});
         await remove(ref(db, `call_sessions/${activeCallId}/recovery_requests`)).catch(()=>{});
       }
     }
+    await remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
     await remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
   } catch(err) {
     console.warn("Hangup warning:", err);
