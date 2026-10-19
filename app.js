@@ -983,16 +983,11 @@ async function acquireCallMedia(audioOnly = false) {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 18: INCOMING CALL HANDLERS] — START
-   📌 क्या: Push notification से आई incoming call दिखाना, direct accept
-           (notification accept बटन), native launch intent पढ़ना
-   🔗 कहाँ से: setupNativePushListeners, checkNativeLaunchIntent, listenForIncoming
-   ⚠️ डिपेंड: activeCallId, incomingDialog, Firebase user_inbox
-   🎯 पूरी incoming call entry-point chain
    ═══════════════════════════════════════════════════════════════════════ */
 
 function handleIncomingCallNotification(data, isFromForegroundListener = false) {
   if (!data || !data.callId) return;
-  if (activeCallId === data.callId && !incomingDialog.hidden) return;
+  if (activeCallId === data.callId && !incomingDialog.hidden && incomingDialog.style.display !== 'none') return;
 
   activeCallId = data.callId;
   currentCallType = 'incoming';
@@ -1000,12 +995,16 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   currentCallTargetName = data.callerName || 'कोई';
   isAudioOnlyCall = data.audioOnly === true || data.audioOnly === 'true' || data.audioOnly === '1';
 
-  lobbyScreen.hidden = true;
-  chatScreen.hidden = true;
-  callScreen.hidden = true;
+  // 👈 बाकी स्क्रीन छिपाएँ
+  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
+  if (callScreen) { callScreen.hidden = true; callScreen.style.display = 'none'; }
 
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
+  
+  // 👈 इनकमिंग डायलॉग को पूरी तरह विजिबल करें
   incomingDialog.hidden = false;
+  incomingDialog.style.display = 'flex';
 
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
 }
@@ -1029,9 +1028,9 @@ async function handleDirectAcceptCall(callId) {
     callJoinedViaDirectAccept = true;
     remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
 
-    incomingDialog.hidden = true;
-    lobbyScreen.hidden = true;
-    chatScreen.hidden = true;
+    if (incomingDialog) { incomingDialog.hidden = true; incomingDialog.style.display = 'none'; }
+    if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+    if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
 
     setTimeout(async () => {
       if (await acquireCallMedia(isAudioOnlyCall)) {
@@ -1041,7 +1040,6 @@ async function handleDirectAcceptCall(callId) {
   } catch(e) {}
 }
 
-// Native Android से launch intent (notification से app खुलने पर)
 function checkNativeLaunchIntent() {
   if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
     const action = window.AndroidAudio.getLaunchCallAction();
@@ -4346,17 +4344,13 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 59: CALL CANCEL/ACCEPT/REJECT BUTTONS] — START
-   📌 क्या: outgoing dialog का cancel, incoming dialog का accept/reject
-   🔗 कहाँ से: outgoingDialog "रद्द करें", incomingDialog "उठाएँ"/"काटें"
-   ⚠️ डिपेंड: CallAudioManager, acquireCallMedia, recordCallLog
-   🎯 Reject = log + Firebase rejected + locked detection
    ═══════════════════════════════════════════════════════════════════════ */
 
 $('btnCancelCall').onclick = () => {
   CallAudioManager.stopAll();
   outgoingDialog.hidden = true;
+  outgoingDialog.style.display = 'none';
   if (currentCallTargetId) {
-    // Chat में missed call का system message
     const roomId = getChatRoomId(myUserId, currentCallTargetId);
     const label = isAudioOnlyCall ? '📞 मिस्ड ऑडियो कॉल' : '📹 मिस्ड वीडियो कॉल';
     const logId = activeCallId || `call_${Date.now()}`;
@@ -4370,7 +4364,6 @@ $('btnCancelCall').onclick = () => {
       remove(ref(db, `user_inbox/${currentCallTargetId}`)).catch(()=>{});
     }, 3000);
 
-    // Push cancel
     get(ref(db, `users/${currentCallTargetId}`)).then(snap => {
       const token = snap.val()?.fcmToken;
       if (token) {
@@ -4388,12 +4381,16 @@ $('btnCancelCall').onclick = () => {
 $('btnAccept').onclick = async () => {
   CallAudioManager.stopAll();
   incomingDialog.hidden = true;
-  if (await acquireCallMedia(isAudioOnlyCall)) joinCallSession();
+  incomingDialog.style.display = 'none';
+  if (await acquireCallMedia(isAudioOnlyCall)) {
+    joinCallSession();
+  }
 };
 
 $('btnReject').onclick = async () => {
   CallAudioManager.stopAll();
   incomingDialog.hidden = true;
+  incomingDialog.style.display = 'none';
   clearOngoingCallNotification();
 
   recordCallLog({
@@ -4416,12 +4413,18 @@ $('btnReject').onclick = async () => {
     callJoinedViaDirectAccept = false;
 
     callScreen.hidden = true;
+    callScreen.style.display = 'none';
     chatScreen.hidden = true;
+    chatScreen.style.display = 'none';
     lobbyScreen.hidden = false;
+    lobbyScreen.style.display = '';
   } else {
     callScreen.hidden = true;
+    callScreen.style.display = 'none';
     chatScreen.hidden = true;
+    chatScreen.style.display = 'none';
     lobbyScreen.hidden = true;
+    lobbyScreen.style.display = 'none';
   }
 
   closeIfLocked();
@@ -4551,6 +4554,10 @@ if ($('btnEnterPip')) {
    ⚠️ डिपेंड: peerConnections, localStream, callReconnectingOverlay
    🎯 High: 5 Mbps / Medium: 2.5 Mbps
    ═══════════════════════════════════════════════════════════════════════ */
+function applySDPBitrate(sdp) {
+  if (!sdp) return sdp;
+  return sdp.replace(/a=mid:video\r\n/g, 'a=mid:video\r\nb=AS:1800\r\n');
+}
 
 async function boostPeerBitrate(pc) {
   try {
@@ -4892,11 +4899,6 @@ function teardownCallNetworkRecovery() {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 63: JOIN CALL SESSION (Main WebRTC Entry)] — START
-   📌 क्या: Call से connect होने पर सारी setup — media, timer, network
-           recovery, members live watch, खुद को member list में add
-   🔗 कहाँ से: btnAccept, startCall का answer listener, handleDirectAcceptCall
-   ⚠️ डिपेंड: initKidsQuizListener, initRiddleGkListener, setupCallNetworkRecovery
-   🎯 Foreground service, wake lock, member cleanup onDisconnect
    ═══════════════════════════════════════════════════════════════════════ */
 
 async function joinCallSession() {
@@ -4913,13 +4915,17 @@ async function joinCallSession() {
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = null;
   stopAllCallTones();
-    if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+
+  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
   if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
+  if (incomingDialog) { incomingDialog.hidden = true; incomingDialog.style.display = 'none'; }
+  if (outgoingDialog) { outgoingDialog.hidden = true; outgoingDialog.style.display = 'none'; }
+  
   if (callScreen) { 
     callScreen.hidden = false; 
-    callScreen.style.display = ''; // 👈 इनलाइन none हटाया गया ताकि स्क्रीन दिखे
+    callScreen.style.display = 'flex'; // 👈 कॉल स्क्रीन पूरी तरह खोलें
   }
-  isCallConnected = true;
+
   isHangingUp = false;
   ignoreBackUntil = Date.now() + 2000;
   await requestWakeLock();
@@ -4937,17 +4943,16 @@ async function joinCallSession() {
   startTimer();
   scheduleAutoHide();
 
-  // 🆕 NETWORK RECOVERY HOOK — network switch auto-reconnect
+  // Network recovery
   setupCallNetworkRecovery();
 
-  // Foreground service (native)
+  // Native foreground service
   if (window.AndroidBridge && typeof window.AndroidBridge.startCallForegroundService === 'function') {
     window.AndroidBridge.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
   } else if (window.AndroidAudio && typeof window.AndroidAudio.startCallForegroundService === 'function') {
     window.AndroidAudio.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
   }
 
-  // Fun mode listeners (batch 4 से hoisted)
   initKidsQuizListener();
   initRiddleGkListener();
   listenRemoteCanvas();
@@ -4976,14 +4981,17 @@ async function joinCallSession() {
     }
   });
 
-  // Members live — हर new member के लिए peer connection
+  // 👈 Members live watch — ब्लैक स्क्रीन व तुरंत कटने का फिक्स
+  let initialGracePeriod = true;
+  setTimeout(() => { initialGracePeriod = false; }, 4000); // 4 सेकंड का सुरक्षित समय
+
   onValue(ref(db, `call_sessions/${activeCallId}/members`), snap => {
     const members = snap.val() || {};
     const ids = Object.keys(members);
     const otherIds = ids.filter(pId => pId !== myUserId);
 
-    // 👈 फिक्स: अगर कॉल कनेक्ट हो चुकी है और कमरे में कोई दूसरा सदस्य नहीं बचा, तो तुरंत कॉल समाप्त करें
-    if (isCallConnected && otherIds.length === 0) {
+    // केवल तभी कॉल काटें जब 4 सेकंड बीत चुके हों और सच में सामने वाला सदस्य जा चुका हो
+    if (!initialGracePeriod && isCallConnected && otherIds.length === 0) {
       toast(currentLang === 'hi' ? 'सामने वाले ने कॉल समाप्त कर दी' : 'Call ended');
       hangup(true);
       return;
@@ -5006,25 +5014,23 @@ async function joinCallSession() {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 64: PEER CONNECTION (WebRTC per Peer)] — START
-   📌 क्या: हर remote user के लिए RTCPeerConnection बनाना, offer/answer
-           signaling, ICE candidates exchange, track receive + Auto ICE Restart
-   🔗 कहाँ से: joinCallSession → members listener
-   ⚠️ डिपेंड: ICE_SERVERS, peerConnections, localStream, applySDPBitrate
-   🎯 Smaller userId = initiator (offerer), larger = answerer
    ═══════════════════════════════════════════════════════════════════════ */
 
 function initiatePeerConnection(peerId, peerName) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
   peerConnections[peerId] = pc;
 
-  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  if (localStream) {
+    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  }
   if (isAudioOnlyCall && (!localStream || localStream.getVideoTracks().length === 0)) {
     try { pc.addTransceiver('video', { direction: 'sendrecv' }); } catch(e){}
   }
   boostPeerBitrate(pc);
 
   pc.ontrack = e => {
-    addRemoteVideoCell(peerId, e.streams[0], peerName);
+    const stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+    addRemoteVideoCell(peerId, stream, peerName);
     updateRemoteGridClass();
     if (isAudioOnlyCall && !speakerEnabled) {
       setTimeout(() => { setHardwareSpeaker(false); }, 300);
@@ -5035,30 +5041,34 @@ function initiatePeerConnection(peerId, peerName) {
   const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${peerId}`;
   const peerPath = `call_sessions/${activeCallId}/signals/${peerId}__${myUserId}`;
 
-  pc.onicecandidate = e => { if (e.candidate) push(ref(db, `${myPath}/candidates`), e.candidate.toJSON()); };
+  pc.onicecandidate = e => { 
+    if (e.candidate) push(ref(db, `${myPath}/candidates`), e.candidate.toJSON()).catch(()=>{}); 
+  };
   pc.pendingIce = [];
 
   onChildAdded(ref(db, `${peerPath}/candidates`), async snap => {
     const c = snap.val();
     if (!c) return;
     const cand = new RTCIceCandidate(c);
-    if (pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
-    else pc.pendingIce.push(cand);
+    if (pc.remoteDescription) { 
+      try { await pc.addIceCandidate(cand); } catch(e){} 
+    } else {
+      pc.pendingIce.push(cand);
+    }
   });
 
   pc.flushIce = async () => {
     const p = pc.pendingIce || [];
     pc.pendingIce = [];
-    for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
+    for (const cand of p) { 
+      try { await pc.addIceCandidate(cand); } catch(e){} 
+    }
   };
 
-  // 🔄 नेटवर्क टूटने / कमजोर होने पर ऑटोमैटिक ICE Restart हैंडलर
   pc.oniceconnectionstatechange = () => {
     console.log(`[ICE-State] ${peerId}: ${pc.iceConnectionState}`);
-
     if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
       setTimeout(() => {
-        // यदि 2 सेकंड बाद भी कनेक्शन नहीं जुड़ा, तो पुनः रीस्टार्ट ट्रिगर करें
         if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
           console.log(`[Auto-ICE-Restart] Triggering for ${peerId}`);
           if (myUserId < peerId) {
@@ -5081,28 +5091,36 @@ function initiatePeerConnection(peerId, peerName) {
   };
 
   if (myUserId < peerId) {
-    // मैं initiator → offer बनाओ
     pc.createOffer()
       .then(o => pc.setLocalDescription(new RTCSessionDescription({ type: o.type, sdp: applySDPBitrate(o.sdp) })))
-      .then(() => set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type }));
+      .then(() => set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type }))
+      .catch(err => console.error("Offer error:", err));
 
     onValue(ref(db, `${peerPath}/answer`), snap => {
       const a = snap.val();
       if (a && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== a.sdp)) {
-        pc.setRemoteDescription(new RTCSessionDescription(a)).then(async () => { await pc.flushIce(); boostPeerBitrate(pc); });
+        pc.setRemoteDescription(new RTCSessionDescription(a))
+          .then(async () => { 
+            await pc.flushIce(); 
+            boostPeerBitrate(pc); 
+          })
+          .catch(err => console.error("SetRemote Answer error:", err));
       }
     });
   } else {
-    // मैं answerer → offer सुनो, answer भेजो
     onValue(ref(db, `${peerPath}/offer`), async snap => {
       const o = snap.val();
       if (o && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== o.sdp)) {
-        await pc.setRemoteDescription(new RTCSessionDescription(o));
-        await pc.flushIce();
-        const a = await pc.createAnswer();
-        await pc.setLocalDescription(new RTCSessionDescription({ type: a.type, sdp: applySDPBitrate(a.sdp) }));
-        set(ref(db, `${myPath}/answer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
-        boostPeerBitrate(pc);
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(o));
+          await pc.flushIce();
+          const a = await pc.createAnswer();
+          await pc.setLocalDescription(new RTCSessionDescription({ type: a.type, sdp: applySDPBitrate(a.sdp) }));
+          set(ref(db, `${myPath}/answer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
+          boostPeerBitrate(pc);
+        } catch(err) {
+          console.error("Answer create error:", err);
+        }
       }
     });
   }
