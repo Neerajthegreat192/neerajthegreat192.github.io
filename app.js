@@ -4424,17 +4424,13 @@ async function boostPeerBitrate(pc) {
       if (sender.track && sender.track.kind === 'video') {
         const p = sender.getParameters();
         if (!p.encodings?.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = 5000000;
+        // 5 Mbps से घटाकर सेफ 1.8 Mbps किया गया (बैटरी की बचत)
+        p.encodings[0].maxBitrate = 1800000;
         p.encodings[0].networkPriority = 'high';
         await sender.setParameters(p);
       }
     }
   } catch(e) {}
-}
-
-function applySDPBitrate(sdp, bitrateKbps = 5000) {
-  if (!sdp || !sdp.includes('a=mid:video')) return sdp;
-  return sdp.replace(/a=mid:video(.*)/g, `a=mid:video$1\r\nb=AS:${bitrateKbps}\r\nb=TIAS:${bitrateKbps * 1000}`);
 }
 
 async function applyCallQuality(level) {
@@ -4443,15 +4439,22 @@ async function applyCallQuality(level) {
   qualityLevel = next;
   try {
     const vt = localStream?.getVideoTracks?.()[0];
-    if (vt) await vt.applyConstraints(next === 'high' ? { width:{ideal:1920,min:1280}, height:{ideal:1080,min:720}, frameRate:{ideal:30,min:24} } : { width:{ideal:1280,min:960}, height:{ideal:720,min:540}, frameRate:{ideal:30,min:24} });
+    if (vt) {
+      await vt.applyConstraints(next === 'high' 
+        ? { width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 24, min: 15 } }
+        : { width: { ideal: 640, min: 480 }, height: { ideal: 480, min: 360 }, frameRate: { ideal: 18, min: 12 } }
+      );
+    }
   } catch(e) {}
+
   for (const pc of Object.values(peerConnections)) {
     try {
       for (const s of pc.getSenders()) {
         if (s.track?.kind !== 'video') continue;
         const p = s.getParameters();
         if (!p.encodings?.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = next === 'high' ? 5000000 : 2500000;
+        // हाई पर 1.8 Mbps, मीडियम पर 600 kbps
+        p.encodings[0].maxBitrate = next === 'high' ? 1800000 : 600000;
         await s.setParameters(p);
       }
     } catch(e) {}
@@ -4858,9 +4861,9 @@ async function joinCallSession() {
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 64: PEER CONNECTION (WebRTC per Peer)] — START
    📌 क्या: हर remote user के लिए RTCPeerConnection बनाना, offer/answer
-           signaling, ICE candidates exchange, track receive
+           signaling, ICE candidates exchange, track receive + Auto ICE Restart
    🔗 कहाँ से: joinCallSession → members listener
-   ⚠️ डिपेंड: ICE_SERVERS, peerConnections, localStream
+   ⚠️ डिपेंड: ICE_SERVERS, peerConnections, localStream, applySDPBitrate
    🎯 Smaller userId = initiator (offerer), larger = answerer
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -4903,6 +4906,34 @@ function initiatePeerConnection(peerId, peerName) {
     for (const cand of p) { try { await pc.addIceCandidate(cand); } catch(e){} }
   };
 
+  // 🔄 नेटवर्क टूटने / कमजोर होने पर ऑटोमैटिक ICE Restart हैंडलर
+  pc.oniceconnectionstatechange = () => {
+    console.log(`[ICE-State] ${peerId}: ${pc.iceConnectionState}`);
+
+    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      setTimeout(() => {
+        // यदि 2 सेकंड बाद भी कनेक्शन नहीं जुड़ा, तो पुनः रीस्टार्ट ट्रिगर करें
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          console.log(`[Auto-ICE-Restart] Triggering for ${peerId}`);
+          if (myUserId < peerId) {
+            pc.createOffer({ iceRestart: true })
+              .then(o => pc.setLocalDescription(new RTCSessionDescription({ type: o.type, sdp: applySDPBitrate(o.sdp) })))
+              .then(() => set(ref(db, `${myPath}/offer`), {
+                sdp: pc.localDescription.sdp,
+                type: pc.localDescription.type
+              }))
+              .catch(e => console.warn('ICE restart offer failed:', e));
+          } else {
+            set(ref(db, `call_sessions/${activeCallId}/recovery_requests/${myUserId}__${peerId}`), {
+              requestedAt: Date.now(),
+              from: myUserId
+            }).catch(e => console.warn('Recovery request failed:', e));
+          }
+        }
+      }, 2000);
+    }
+  };
+
   if (myUserId < peerId) {
     // मैं initiator → offer बनाओ
     pc.createOffer()
@@ -4932,6 +4963,7 @@ function initiatePeerConnection(peerId, peerName) {
 }
 
 /* ───────── 🟦 [SECTION 64: PEER CONNECTION] — END ───────── */
+
 
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5200,8 +5232,10 @@ $('hangBtn').onclick = (e) => {
    📌 क्या: call end करने का पूरा flow — duration calc, Firebase cleanup,
            peer close, tracks stop, UI reset, native foreground service stop
    🔗 कहाँ से: hangBtn, btnReject, listenForIncoming, startCall timeouts
-   ⚠️ डिपेंड: cleanupKidsModules (batch 4), teardownCallNetworkRecovery, callReconnectingOverlay
-   🎯 Call log record + audio end tone + locked detection + overlay reset
+   ⚠️ डिपेंड: cleanupKidsModules (batch 4), teardownCallNetworkRecovery, 
+              callReconnectingOverlay, hideOngoingCallBanner
+   🎯 Call log record + audio end tone + locked detection + overlay reset + 
+      Group Call Safe Exit + Ongoing Banner Hide
    ═══════════════════════════════════════════════════════════════════════ */
 
 async function hangup(silent = false) {
@@ -5256,12 +5290,23 @@ async function hangup(silent = false) {
       });
     }
 
-    // Firebase cleanup
+    // Firebase cleanup (ग्रुप कॉल सुरक्षित निकास)
     if (activeCallId) {
+      // 1. अपनी स्वयं की आईडी से activeCallId साफ़ करें
       await update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
-      await update(ref(db, `call_sessions/${activeCallId}`), { status: 'ended' }).catch(()=>{});
+
+      // 2. केवल खुद को कॉल सेशन के members से हटाएं
       await remove(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`)).catch(()=>{});
-      await remove(ref(db, `call_sessions/${activeCallId}/recovery_requests`)).catch(()=>{});
+
+      // 3. जांचें कि क्या रूम में अभी भी अन्य सदस्य मौजूद हैं
+      const membersSnap = await get(ref(db, `call_sessions/${activeCallId}/members`));
+      const remainingMembers = membersSnap.val() || {};
+
+      // केवल तभी पूरे सेशन को 'ended' करें जब कमरा खाली हो गया हो (कोई सदस्य न बचा हो)
+      if (Object.keys(remainingMembers).length === 0) {
+        await update(ref(db, `call_sessions/${activeCallId}`), { status: 'ended' }).catch(()=>{});
+        await remove(ref(db, `call_sessions/${activeCallId}/recovery_requests`)).catch(()=>{});
+      }
     }
     await remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
   } catch(err) {
@@ -5306,17 +5351,31 @@ async function hangup(silent = false) {
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
 
-    // 🔄 Reconnecting overlay reset (kisi bhi haal me call katne par overlay hide rahe)
+    // 🔄 Reconnecting overlay reset
     const overlay = $('callReconnectingOverlay');
     if (overlay) overlay.hidden = true;
+
+    // 🟢 ऑनगोइंग कॉल मिनी-बैनर छिपाएँ (यदि कॉल मिनिमाइज़्ड थी)
+    if (typeof hideOngoingCallBanner === 'function') {
+      hideOngoingCallBanner();
+    } else {
+      const ongoingBanner = $('ongoingCallBanner');
+      if (ongoingBanner) ongoingBanner.hidden = true;
+    }
 
     const wasLocked = isDeviceLocked();
     if (!wasLocked) {
       callScreen.hidden = true;
       incomingDialog.hidden = true;
       outgoingDialog.hidden = true;
-      chatScreen.hidden = true;
-      lobbyScreen.hidden = false;
+      
+      // यदि यूज़र कॉल मिनिमाइज़ करके चैट कर रहा था, तो चैट स्क्रीन खुली रहने दें
+      if (currentChatTargetId && !chatScreen.hidden) {
+        lobbyScreen.hidden = true;
+      } else {
+        chatScreen.hidden = true;
+        lobbyScreen.hidden = false;
+      }
     } else {
       callScreen.hidden = true;
       incomingDialog.hidden = true;
@@ -5332,24 +5391,86 @@ async function hangup(silent = false) {
 
 /* ───────── 🟦 [SECTION 70: HANGUP] — END ───────── */
 
+
 /* ═══════════════════════════════════════════════════════════════════════
-   🟦 [SECTION 71: CALL TIMER + WAKE LOCK] — START
-   📌 क्या: 00:00 से बढ़ता timer, screen को on रखने के लिए WakeLock
-   🔗 कहाँ से: joinCallSession (start), hangup (stop)
-   ⚠️ डिपेंड: navigator.wakeLock (optional)
+   🟦 [SECTION 71: CALL MINIMIZE, TIMER & WAKE LOCK] — START
+   📌 क्या: Call minimize/restore logic, timer sync with ongoing banner,
+           00:00 से बढ़ता timer, screen को on रखने के लिए WakeLock
+   🔗 कहाँ से: joinCallSession (start), hangup (stop), back button
+   ⚠️ डिपेंड: navigator.wakeLock (optional), ongoingCallBanner DOM
    ═══════════════════════════════════════════════════════════════════════ */
+
+function minimizeCallScreen() {
+  if (!isCallConnected || callScreen.hidden) return;
+
+  callScreen.hidden = true;
+
+  // अगर पहले से किसी चैट में थे तो चैट स्क्रीन दिखाएं, नहीं तो लॉबी स्क्रीन
+  if (currentChatTargetId) {
+    chatScreen.hidden = false;
+    lobbyScreen.hidden = true;
+  } else {
+    lobbyScreen.hidden = false;
+    chatScreen.hidden = true;
+  }
+
+  showOngoingCallBanner();
+  toast(currentLang === 'hi' ? '📞 कॉल बैकग्राउंड में जारी है' : '📞 Call running in background');
+}
+
+function restoreCallScreen() {
+  if (!isCallConnected) return;
+
+  hideOngoingCallBanner();
+  lobbyScreen.hidden = true;
+  chatScreen.hidden = true;
+  callScreen.hidden = false;
+
+  controlsBar.classList.remove('fade-out');
+  const topBar = $('callTopBar');
+  if (topBar) topBar.classList.remove('fade-out');
+  scheduleAutoHide();
+}
+
+function showOngoingCallBanner() {
+  const banner = $('ongoingCallBanner');
+  if (!banner) return;
+  const nameEl = $('ongoingCallTargetName');
+  if (nameEl) nameEl.textContent = currentCallTargetName || (currentLang === 'hi' ? 'कॉल जारी है' : 'Call in progress');
+  banner.hidden = false;
+
+  banner.onclick = restoreCallScreen;
+  const retBtn = $('ongoingCallReturnBtn');
+  if (retBtn) {
+    retBtn.onclick = (e) => {
+      e.stopPropagation();
+      restoreCallScreen();
+    };
+  }
+}
+
+function hideOngoingCallBanner() {
+  const banner = $('ongoingCallBanner');
+  if (banner) banner.hidden = true;
+}
 
 function startTimer() {
   callStartTime = Date.now();
   if (timerTimer) clearInterval(timerTimer);
   timerTimer = setInterval(() => {
     const diff = Math.floor((Date.now() - callStartTime) / 1000);
-    $('callTimer').textContent = `${String(Math.floor(diff/60)).padStart(2,'0')}:${String(diff%60).padStart(2,'0')}`;
+    const timeStr = `${String(Math.floor(diff/60)).padStart(2,'0')}:${String(diff%60).padStart(2,'0')}`;
+    $('callTimer').textContent = timeStr;
+    const miniTimer = $('ongoingCallTimer');
+    if (miniTimer) miniTimer.textContent = timeStr;
   }, 1000);
 }
+
 function stopTimer() {
   if (timerTimer) { clearInterval(timerTimer); timerTimer = null; }
   $('callTimer').textContent = '00:00';
+  const miniTimer = $('ongoingCallTimer');
+  if (miniTimer) miniTimer.textContent = '00:00';
 }
 
 async function requestWakeLock() {
@@ -5364,10 +5485,10 @@ function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); w
    🟦 [SECTION 72: HARDWARE BACK BUTTON HANDLER] — START
    📌 क्या: Android hardware back button को layered close क्रम में handle
            करना — modal → message menu → media viewer → attach menu →
-           game → voice dock → reply → chat → call → incoming → app exit
+           game → voice dock → reply → call minimize → chat → app exit
    🔗 कहाँ से: initApp() → setupHardwareBackButton()
    ⚠️ डिपेंड: closeTictactoeGame, closeRiddleGame, closeKidsQuiz (batch 4),
-              closeChat, hangup, ignoreBackUntil
+              closeChat, hangup, minimizeCallScreen, ignoreBackUntil
    🎯 Web popstate + Native Capacitor backButton दोनों support
    ⏱️ Double back press पर app exit (2s window)
    ═══════════════════════════════════════════════════════════════════════ */
@@ -5375,7 +5496,7 @@ function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); w
 let backPressedOnce = false;
 
 function setupHardwareBackButton() {
-  // Web back (popstate) — layered close
+  // 1️⃣ Web back (popstate) — layered close
   window.addEventListener('popstate', (e) => {
     // Call शुरू होने के 2s तक back ignore करो
     if (Date.now() < ignoreBackUntil) {
@@ -5400,15 +5521,23 @@ function setupHardwareBackButton() {
     if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!voiceDock.hidden) { discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if ($('replyPreviewBox')) { cancelReply(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
+    
+    // 👈 कॉल के दौरान बैक दबाने पर कॉल काटने के बजाय मिनिमाइज़ करें
+    if (!callScreen.hidden) {
+      minimizeCallScreen();
+      history.pushState(null, '', window.location.href);
+      e.preventDefault();
+      return;
+    }
+
     if (!chatScreen.hidden) { closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!outgoingDialog.hidden) { $('btnCancelCall').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
     if (!incomingDialog.hidden) { $('btnReject').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
   });
 
   history.pushState(null, '', window.location.href);
 
-  // Native back button (Capacitor App plugin)
+  // 2️⃣ Native back button (Capacitor App plugin)
   const appPlugin = getAppPlugin();
   if (!isNativeApp() || !appPlugin) return;
 
@@ -5429,8 +5558,14 @@ function setupHardwareBackButton() {
     if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
     if (!voiceDock.hidden) { discardRecording(); return; }
     if ($('replyPreviewBox')) { cancelReply(); return; }
+
+    // 👈 नेटिव बैक बटन पर भी कॉल मिनिमाइज़ करें
+    if (!callScreen.hidden) {
+      minimizeCallScreen();
+      return;
+    }
+
     if (!chatScreen.hidden) { closeChat(); return; }
-    if (!callScreen.hidden) { if (confirm('क्या आप कॉल काटना चाहते हैं?')) hangup(); return; }
     if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
     if (!incomingDialog.hidden) { $('btnReject').click(); return; }
 
@@ -5445,6 +5580,7 @@ function setupHardwareBackButton() {
 }
 
 /* ───────── 🟦 [SECTION 72: HARDWARE BACK] — END ───────── */
+
 
 
 /* ═══════════════════════════════════════════════════════════════════════
