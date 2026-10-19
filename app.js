@@ -1015,6 +1015,7 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
 }
 
 async function handleDirectAcceptCall(callId) {
+async function handleDirectAcceptCall(callId) {
   try {
     stopAllCallTones();
     const sSnap = await get(ref(db, `call_sessions/${callId}`));
@@ -1033,9 +1034,17 @@ async function handleDirectAcceptCall(callId) {
     callJoinedViaDirectAccept = true;
     remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
 
-    incomingDialog.hidden = true;
-    lobbyScreen.hidden = true;
-    chatScreen.hidden = true;
+    // Sabhi dusri screens hide karein
+    if (incomingDialog) { incomingDialog.hidden = true; incomingDialog.style.display = 'none'; }
+    if (outgoingDialog) { outgoingDialog.hidden = true; outgoingDialog.style.display = 'none'; }
+    if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+    if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
+
+    // Call screen ko turant visible karein taaki black screen na aaye
+    if (callScreen) {
+      callScreen.hidden = false;
+      callScreen.style.display = 'flex';
+    }
 
     setTimeout(async () => {
       if (await acquireCallMedia(isAudioOnlyCall)) {
@@ -1044,6 +1053,7 @@ async function handleDirectAcceptCall(callId) {
     }, 300);
   } catch(e) {}
 }
+
 
 function checkNativeLaunchIntent() {
   if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
@@ -4957,10 +4967,24 @@ async function joinCallSession() {
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = null;
   stopAllCallTones();
-  lobbyScreen.hidden = true;
-  chatScreen.hidden = true;
-  callScreen.hidden = false;
-  isCallConnected = true;
+
+  // 👈 सभी अन्य स्क्रीन और डायलॉग्स को पूरी तरह छिपाएं
+  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
+  if (incomingDialog) { incomingDialog.hidden = true; incomingDialog.style.display = 'none'; }
+  if (outgoingDialog) { outgoingDialog.hidden = true; outgoingDialog.style.display = 'none'; }
+
+  // 👈 ब्लैक स्क्रीन फिक्स: कॉल स्क्रीन और कंट्रोल बार को सीधे flex डिस्प्ले दें
+  if (callScreen) {
+    callScreen.hidden = false;
+    callScreen.style.display = 'flex';
+  }
+  if (controlsBar) {
+    controlsBar.classList.remove('fade-out');
+  }
+  if ($('callTopBar')) {$('callTopBar').classList.remove('fade-out');
+  }
+
   isHangingUp = false;
   ignoreBackUntil = Date.now() + 2000;
   await requestWakeLock();
