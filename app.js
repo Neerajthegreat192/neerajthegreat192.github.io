@@ -842,8 +842,80 @@ function toast(msg) {
 }
 function safeName(n) { return String(n||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isNeerajBadola(n) { const s = (n||'').toLowerCase().replace(/\s+/g,' ').trim(); return (s.includes('neeraj')&&s.includes('badola'))||(s.includes('नीरज')&&s.includes('बडोला')); }
-function formatClockTime(ts) { if (!ts) return ''; return new Date(Number(ts)).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:true }); }
-function formatLastSeen(ts) { if (!ts) return ''; return `Last seen ${formatClockTime(ts)}`; }
+// 🕒 केवल समय (उदा. 05:30 PM)
+function formatClockTime(ts) {
+  if (!ts) return '';
+  return new Date(Number(ts)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+// 📅 दो तिथियों के बीच कैलेंडर दिनों का अंतर
+function getCalendarDayDiff(targetTs) {
+  const target = new Date(Number(targetTs));
+  const now = new Date();
+  
+  const targetDate = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  const diffMs = nowDate - targetDate;
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
+
+// 👁️ स्मार्ट लास्ट टाइम — कॉम्पैक्ट फॉर्मेट (बिना 'Last seen' के)
+function formatLastSeen(ts) {
+  if (!ts) return '';
+  const diffDays = getCalendarDayDiff(ts);
+  const timeStr = formatClockTime(ts);
+
+  if (diffDays === 0) {
+    return `Today, ${timeStr}`;
+  } else if (diffDays === 1) {
+    return `Yesterday, ${timeStr}`;
+  } else {
+    const d = new Date(Number(ts));
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const dateFormatted = `${day}/${month}/${year}`;
+    
+    return `${dateFormatted}, ${timeStr}`;
+  }
+}
+
+
+// 💬 चैट लिस्ट (Lobby) के दाईं ओर दिखने वाला समय / तारीख
+function formatSnippetTime(ts) {
+  if (!ts) return '';
+  const diffDays = getCalendarDayDiff(ts);
+
+  if (diffDays === 0) {
+    return formatClockTime(ts);
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[new Date(Number(ts)).getDay()];
+  } else {
+    const d = new Date(Number(ts));
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(-2)}`;
+  }
+}
+
+// 🏷️ चैट स्क्रीन में संदेशों के बीच दिखने वाला डेट डिवाइडर
+function formatDateDivider(ts) {
+  if (!ts) return '';
+  const diffDays = getCalendarDayDiff(ts);
+
+  if (diffDays === 0) {
+    return 'TODAY';
+  } else if (diffDays === 1) {
+    return 'YESTERDAY';
+  } else {
+    const d = new Date(Number(ts));
+    const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
+}
+
 function formatFileSize(bytes) {
   if (!bytes) return '0 B';
   if (bytes < 1024) return bytes + ' B';
@@ -1808,7 +1880,7 @@ function renderContacts() {
       ? `<span class="typing-pulse">${translations[currentLang].typing}</span>`
       : (snippet ? `${getTickBadge(snippet)} <span>${safeName(snippet.text)}</span>` : `<span style="color:#64748b;font-style:italic">${currentLang==='hi'?'बातचीत शुरू करें...':'Start a conversation...'}</span>`);
 
-    const timeHtml = snippet?.time ? formatClockTime(snippet.time) : '';
+    const timeHtml = snippet?.time ? formatSnippetTime(snippet.time) : '';
 
     card.innerHTML = `
       <div class="contact-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
@@ -2349,10 +2421,6 @@ async function forwardMessageTo(targetId, m, targetName) {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 34: CHAT OPEN / CLOSE] — START
-   📌 क्या: chat screen खोलना (target user set + status listen), बंद करना
-   🔗 कहाँ से: contact card tap, notification click, deep link
-   ⚠️ डिपेंड: chatUnsub, targetStatusUnsub, loadChatMessages()
-   🎯 chat खुलते ही unread count 0, badge हट जाता है
    ═══════════════════════════════════════════════════════════════════════ */
 
 let chatUnsub = null;
@@ -2397,11 +2465,21 @@ function openChat(tId, tName) {
       const online = !!u.online;
       if (isTyping) { statusEl.textContent = translations[currentLang]?.typing || 'लिख रहे हैं...'; statusEl.style.color = 'var(--success)'; }
       else if (online) { statusEl.textContent = translations[currentLang]?.online || 'ऑनलाइन'; statusEl.style.color = 'var(--success)'; }
-      else { statusEl.textContent = formatLastSeen(u.lastSeen) || (translations[currentLang]?.offline || 'ऑफलाइन'); statusEl.style.color = '#94a3b8'; }
+      else { statusEl.textContent = formatLastSeen(u.lastSeen) || (translations[currentLang]?.offline || 'ऑफलाइन'); statusEl.style.color = '#8696a0'; }
     });
 
-    if (lobbyScreen) lobbyScreen.hidden = true;
-    if (chatScreen) chatScreen.hidden = false;
+    // 👈 स्क्रीन विजिबिलिटी
+    if (lobbyScreen) {
+      lobbyScreen.hidden = true;
+      lobbyScreen.style.display = 'none';
+    }
+    if (chatScreen) {
+      chatScreen.hidden = false;
+      chatScreen.style.display = 'flex';
+    }
+
+    // 👈 ब्राउज़र को बाहर जाने से रोकने के लिए हिस्ट्री में सुरक्षित स्टेट जोड़ें
+    history.pushState({ screen: 'chat' }, '', window.location.href);
 
     if (chatInput) {
       chatInput.value = '';
@@ -2424,13 +2502,25 @@ function closeChat() {
   if (activePlayingAudio) { activePlayingAudio.pause(); activePlayingAudio = null; }
   currentChatTargetId = null;
   update(ref(db, `users/${myUserId}`), { typingTo: null }).catch(()=>{});
-  if (chatScreen) chatScreen.hidden = true;
-  if (lobbyScreen) lobbyScreen.hidden = false;
+  
+  // 👈 चैट छिपाएँ और लॉबी स्क्रीन दिखाएँ
+  if (chatScreen) {
+    chatScreen.hidden = true;
+    chatScreen.style.display = 'none';
+  }
+  if (lobbyScreen) {
+    lobbyScreen.hidden = false;
+    lobbyScreen.style.display = '';
+  }
   renderContacts();
 }
-$('chatBackBtn').onclick = closeChat;
-$('chatCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, false); };
-$('chatVoiceCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, true); };
+
+$('chatBackBtn').onclick = () => {
+  closeChat();
+};
+$('chatCallBtn').onclick = () => { if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, false); };$('chatVoiceCallBtn').onclick = () => { 
+  if (currentChatTargetId) startCall(currentChatTargetId, currentChatTargetName, true); 
+};
 
 /* ───────── 🟦 [SECTION 34: CHAT OPEN/CLOSE] — END ───────── */
 
@@ -2539,6 +2629,8 @@ function loadChatMessages() {
     let shouldScroll = false;
     const isNearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 120;
 
+     let lastRenderedDateKey = null;
+
     sortedKeys.forEach(msgId => {
       const m = msgs[msgId];
       if (isDeletedForMe(msgId)) return;
@@ -2579,6 +2671,19 @@ function loadChatMessages() {
         }
         return;
       }
+       
+   // 📅 तारीख बदलने पर व्हाट्सएप स्टाइल डेट डिवाइडर लगाना
+   if (m.time) {
+     const dObj = new Date(Number(m.time));
+     const dateKey = `${dObj.getFullYear()}-${dObj.getMonth()}-${dObj.getDate()}`;
+     if (dateKey !== lastRenderedDateKey) {
+       lastRenderedDateKey = dateKey;
+       const divider = document.createElement('div');
+       divider.className = 'chat-date-divider';
+       divider.innerHTML = `<span>${formatDateDivider(m.time)}</span>`;
+       body.appendChild(divider);
+     }
+   }
 
       // ===== नया message bubble बनाओ =====
       el = document.createElement('div');
@@ -4075,11 +4180,21 @@ async function sendPushNotification(token, callerName, isVoice = false) {
            target के inbox में calling flag, ring tone बजाना,
            answer/reject/busy/ended की live monitoring
    🔗 कहाँ से: contact card click, call log click, chat call buttons
-   ⚠️ डिपेंड: CallAudioManager, acquireCallMedia, sendPushNotification
+   ⚠️ डिपेंड: CallAudioManager, acquireCallMedia, sendPushNotification,
+              restoreCallScreen
    🎯 45s timeout, busy/reject पर 2.5s busy tone फिर hangup
    ═══════════════════════════════════════════════════════════════════════ */
 
 async function startCall(remoteId, remoteName, audioOnly = false) {
+  // अगर पहले से कॉल चल रही है (बैकग्राउंड/मिनी मोड में), तो नई कॉल न लगाएँ
+  if (isCallConnected && activeCallId) {
+    toast(currentLang === 'hi' ? 'पहले से कॉल जारी है' : 'Call already in progress');
+    if (typeof restoreCallScreen === 'function') {
+      restoreCallScreen();
+    }
+    return;
+  }
+
   // कॉल मिलाते ही कनेक्टिंग टोन चालू करें
   CallAudioManager.playConnecting();
 
@@ -4106,9 +4221,22 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
   currentCallTargetId = remoteId;
   currentCallTargetName = remoteName;
 
+  // 👈 चैट और लॉबी को छिपाएँ ताकि आउटगोइंग डायलॉग सामने आए
+  if (chatScreen) {
+    chatScreen.hidden = true;
+    chatScreen.style.display = 'none';
+  }
+  if (lobbyScreen) {
+    lobbyScreen.hidden = true;
+    lobbyScreen.style.display = 'none';
+  }
+
   $('outgoingName').textContent = remoteName + (audioOnly ? (currentLang==='hi'?' (ऑडियो)...':' (Audio)...') : (currentLang==='hi'?' (वीडियो)...':' (Video)...'));
   $('outgoingStatusText').textContent = currentLang==='hi'?'कनेक्ट किया जा रहा है...':'Connecting...';
+
+  // 👈 डायलॉग को पूरी तरह विजिबल करें
   outgoingDialog.hidden = false;
+  outgoingDialog.style.display = 'flex';
 
   await update(ref(db, `users/${myUserId}`), { activeCallId }).catch(()=>{});
 
@@ -4155,6 +4283,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
       CallAudioManager.playBusy();
       setTimeout(() => {
         outgoingDialog.hidden = true;
+        outgoingDialog.style.display = 'none';
         hangup(true);
       }, 2500);
     }
@@ -4166,6 +4295,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
       CallAudioManager.playBusy();
       setTimeout(() => {
         outgoingDialog.hidden = true;
+        outgoingDialog.style.display = 'none';
         hangup(true);
       }, 2500);
     }
@@ -4184,6 +4314,8 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
     if (activeCallId && !isCallConnected) {
       CallAudioManager.stopAll();
       toast(currentLang==='hi'?'⏱ कॉल का जवाब नहीं मिला':'⏱ No answer');
+      outgoingDialog.hidden = true;
+      outgoingDialog.style.display = 'none';
       hangup(true);
     }
   }, 45000);
@@ -4200,6 +4332,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
     if (snap.exists()) {
       CallAudioManager.stopAll();
       outgoingDialog.hidden = true;
+      outgoingDialog.style.display = 'none';
       unsubAns();
       joinCallSession();
     }
@@ -4209,6 +4342,7 @@ async function startCall(remoteId, remoteName, audioOnly = false) {
 
 /* ───────── 🟦 [SECTION 58: START CALL] — END ───────── */
 
+        
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 59: CALL CANCEL/ACCEPT/REJECT BUTTONS] — START
@@ -4779,9 +4913,12 @@ async function joinCallSession() {
   clearTimeout(callTimeoutTimer);
   callTimeoutTimer = null;
   stopAllCallTones();
-  lobbyScreen.hidden = true;
-  chatScreen.hidden = true;
-  callScreen.hidden = false;
+    if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
+  if (callScreen) { 
+    callScreen.hidden = false; 
+    callScreen.style.display = ''; // 👈 इनलाइन none हटाया गया ताकि स्क्रीन दिखे
+  }
   isCallConnected = true;
   isHangingUp = false;
   ignoreBackUntil = Date.now() + 2000;
@@ -5355,33 +5492,57 @@ async function hangup(silent = false) {
     const overlay = $('callReconnectingOverlay');
     if (overlay) overlay.hidden = true;
 
-    // 🟢 ऑनगोइंग कॉल मिनी-बैनर छिपाएँ (यदि कॉल मिनिमाइज़्ड थी)
+    // 🟢 ऑनगोइंग कॉल मिनी-बैनर छिपाएँ
     if (typeof hideOngoingCallBanner === 'function') {
       hideOngoingCallBanner();
     } else {
       const ongoingBanner = $('ongoingCallBanner');
-      if (ongoingBanner) ongoingBanner.hidden = true;
+      if (ongoingBanner) {
+        ongoingBanner.hidden = true;
+        ongoingBanner.style.display = 'none';
+      }
     }
 
     const wasLocked = isDeviceLocked();
     if (!wasLocked) {
       callScreen.hidden = true;
+      callScreen.style.display = 'none';
       incomingDialog.hidden = true;
+      incomingDialog.style.display = 'none';
       outgoingDialog.hidden = true;
+      outgoingDialog.style.display = 'none';
       
-      // यदि यूज़र कॉल मिनिमाइज़ करके चैट कर रहा था, तो चैट स्क्रीन खुली रहने दें
-      if (currentChatTargetId && !chatScreen.hidden) {
-        lobbyScreen.hidden = true;
+      // 👈 अगर यूज़र चैट में था, तो कॉल कटते ही चैट स्क्रीन पर वापस लाएँ
+      if (currentChatTargetId) {
+        if (lobbyScreen) {
+          lobbyScreen.hidden = true;
+          lobbyScreen.style.display = 'none';
+        }
+        if (chatScreen) {
+          chatScreen.hidden = false;
+          chatScreen.style.display = 'flex';
+        }
       } else {
-        chatScreen.hidden = true;
-        lobbyScreen.hidden = false;
+        if (chatScreen) {
+          chatScreen.hidden = true;
+          chatScreen.style.display = 'none';
+        }
+        if (lobbyScreen) {
+          lobbyScreen.hidden = false;
+          lobbyScreen.style.display = '';
+        }
       }
     } else {
       callScreen.hidden = true;
+      callScreen.style.display = 'none';
       incomingDialog.hidden = true;
+      incomingDialog.style.display = 'none';
       outgoingDialog.hidden = true;
+      outgoingDialog.style.display = 'none';
       chatScreen.hidden = true;
+      chatScreen.style.display = 'none';
       lobbyScreen.hidden = true;
+      lobbyScreen.style.display = 'none';
     }
     isHangingUp = false;
 
@@ -5392,26 +5553,28 @@ async function hangup(silent = false) {
 /* ───────── 🟦 [SECTION 70: HANGUP] — END ───────── */
 
 
+
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 71: CALL MINIMIZE, TIMER & WAKE LOCK] — START
-   📌 क्या: Call minimize/restore logic, timer sync with ongoing banner,
-           00:00 से बढ़ता timer, screen को on रखने के लिए WakeLock
-   🔗 कहाँ से: joinCallSession (start), hangup (stop), back button
-   ⚠️ डिपेंड: navigator.wakeLock (optional), ongoingCallBanner DOM
    ═══════════════════════════════════════════════════════════════════════ */
 
 function minimizeCallScreen() {
   if (!isCallConnected || callScreen.hidden) return;
 
   callScreen.hidden = true;
+  callScreen.style.display = 'none';
 
   // अगर पहले से किसी चैट में थे तो चैट स्क्रीन दिखाएं, नहीं तो लॉबी स्क्रीन
   if (currentChatTargetId) {
     chatScreen.hidden = false;
+    chatScreen.style.display = 'flex';
     lobbyScreen.hidden = true;
+    lobbyScreen.style.display = 'none';
   } else {
     lobbyScreen.hidden = false;
+    lobbyScreen.style.display = '';
     chatScreen.hidden = true;
+    chatScreen.style.display = 'none';
   }
 
   showOngoingCallBanner();
@@ -5422,9 +5585,11 @@ function restoreCallScreen() {
   if (!isCallConnected) return;
 
   hideOngoingCallBanner();
-  lobbyScreen.hidden = true;
-  chatScreen.hidden = true;
+  if (lobbyScreen) { lobbyScreen.hidden = true; lobbyScreen.style.display = 'none'; }
+  if (chatScreen) { chatScreen.hidden = true; chatScreen.style.display = 'none'; }
+  
   callScreen.hidden = false;
+  callScreen.style.display = '';
 
   controlsBar.classList.remove('fade-out');
   const topBar = $('callTopBar');
@@ -5435,23 +5600,17 @@ function restoreCallScreen() {
 function showOngoingCallBanner() {
   const banner = $('ongoingCallBanner');
   if (!banner) return;
-  const nameEl = $('ongoingCallTargetName');
-  if (nameEl) nameEl.textContent = currentCallTargetName || (currentLang === 'hi' ? 'कॉल जारी है' : 'Call in progress');
   banner.hidden = false;
-
+  banner.style.display = 'flex';
   banner.onclick = restoreCallScreen;
-  const retBtn = $('ongoingCallReturnBtn');
-  if (retBtn) {
-    retBtn.onclick = (e) => {
-      e.stopPropagation();
-      restoreCallScreen();
-    };
-  }
 }
 
 function hideOngoingCallBanner() {
   const banner = $('ongoingCallBanner');
-  if (banner) banner.hidden = true;
+  if (banner) {
+    banner.hidden = true;
+    banner.style.display = 'none';
+  }
 }
 
 function startTimer() {
@@ -5480,7 +5639,7 @@ function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); w
 
 /* ───────── 🟦 [SECTION 71: TIMER + WAKE LOCK] — END ───────── */
 
-/* ═══ यहाँ BATCH 3A खत्म होता है ═══ */
+
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 72: HARDWARE BACK BUTTON HANDLER] — START
    📌 क्या: Android hardware back button को layered close क्रम में handle
@@ -5498,56 +5657,30 @@ let backPressedOnce = false;
 function setupHardwareBackButton() {
   // 1️⃣ Web back (popstate) — layered close
   window.addEventListener('popstate', (e) => {
-    // Call शुरू होने के 2s तक back ignore करो
+    // 🛡️ Browser ko homepage par jaane se rokne ke liye turant history trap lagana
+    history.pushState(null, '', window.location.href);
+
+    // Call shuru hone ke 2s tak back ignore karo
     if (Date.now() < ignoreBackUntil) {
-      history.pushState(null, '', window.location.href);
-      e.preventDefault();
       return;
     }
+
+    // 1. Open modals band karein
     const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
     for (const m of openModals) {
-      if (m && !m.hidden) { m.hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    }
-    if ($('msgLongPressMenu')) { closeMessageMenu(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
-      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
-      history.pushState(null, '', window.location.href); e.preventDefault(); return;
-    }
-    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!voiceDock.hidden) { discardRecording(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if ($('replyPreviewBox')) { cancelReply(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    
-    // 👈 कॉल के दौरान बैक दबाने पर कॉल काटने के बजाय मिनिमाइज़ करें
-    if (!callScreen.hidden) {
-      minimizeCallScreen();
-      history.pushState(null, '', window.location.href);
-      e.preventDefault();
-      return;
+      if (m && !m.hidden && m.style.display !== 'none') {
+        m.hidden = true;
+        m.style.display = 'none';
+        return;
+      }
     }
 
-    if (!chatScreen.hidden) { closeChat(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-    if (!incomingDialog.hidden) { $('btnReject').click(); history.pushState(null, '', window.location.href); e.preventDefault(); return; }
-  });
-
-  history.pushState(null, '', window.location.href);
-
-  // 2️⃣ Native back button (Capacitor App plugin)
-  const appPlugin = getAppPlugin();
-  if (!isNativeApp() || !appPlugin) return;
-
-  appPlugin.addListener('backButton', () => {
-    if (Date.now() < ignoreBackUntil) return;
-    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
-    for (const m of openModals) { if (m && !m.hidden) { m.hidden = true; return; } }
+    // 2. Sub-menu aur viewers band karein
     if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
     if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
     if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
+
+    // 3. Games aur drawing tools band karein
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
     if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; }
     if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
@@ -5556,22 +5689,98 @@ function setupHardwareBackButton() {
       return;
     }
     if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
+
+    // 4. Voice recording aur reply box band karein
     if (!voiceDock.hidden) { discardRecording(); return; }
     if ($('replyPreviewBox')) { cancelReply(); return; }
 
-    // 👈 नेटिव बैक बटन पर भी कॉल मिनिमाइज़ करें
-    if (!callScreen.hidden) {
+    // 👈 5. Call chal rahi ho to back dabane par call minimize karein
+    if (!callScreen.hidden && callScreen.style.display !== 'none') {
       minimizeCallScreen();
       return;
     }
 
-    if (!chatScreen.hidden) { closeChat(); return; }
+    // 👈 6. Chat screen khuli ho to back dabane par chat band karke lobby screen layein
+    const isChatOpen = (!chatScreen.hidden && chatScreen.style.display !== 'none') || currentChatTargetId !== null;
+    if (isChatOpen) {
+      closeChat();
+      return;
+    }
+
+    // 7. Calling dialogs
     if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
     if (!incomingDialog.hidden) { $('btnReject').click(); return; }
 
-    // Double back = app exit
-    if (backPressedOnce) { getAppPlugin().exitApp(); }
-    else {
+    // 8. Lobby screen par 2 second ke andar dobara back dabane par hi bahar niklein
+    if (backPressedOnce) {
+      window.history.go(-2);
+    } else {
+      backPressedOnce = true;
+      toast(currentLang === 'hi' ? 'बाहर निकलने के लिए दोबारा बैक दबाएँ' : 'Press back again to exit');
+      setTimeout(() => { backPressedOnce = false; }, 2000);
+    }
+  });
+
+  // Base history state register karein
+  history.pushState(null, '', window.location.href);
+
+  // 2️⃣ Native back button (Capacitor App plugin)
+  const appPlugin = getAppPlugin();
+  if (!isNativeApp() || !appPlugin) return;
+
+  appPlugin.addListener('backButton', () => {
+    if (Date.now() < ignoreBackUntil) return;
+
+    // 1. Open modals
+    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
+    for (const m of openModals) {
+      if (m && !m.hidden && m.style.display !== 'none') {
+        m.hidden = true;
+        m.style.display = 'none';
+        return;
+      }
+    }
+
+    // 2. Sub-menu aur viewers
+    if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
+
+    // 3. Games
+    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
+    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; }
+    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
+      return;
+    }
+    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
+
+    // 4. Voice recording aur reply
+    if (!voiceDock.hidden) { discardRecording(); return; }
+    if ($('replyPreviewBox')) { cancelReply(); return; }
+
+    // 👈 5. Call screen ko minimize karein
+    if (!callScreen.hidden && callScreen.style.display !== 'none') {
+      minimizeCallScreen();
+      return;
+    }
+
+    // 👈 6. Chat screen ko band karke lobby par aayein
+    const isChatOpen = (!chatScreen.hidden && chatScreen.style.display !== 'none') || currentChatTargetId !== null;
+    if (isChatOpen) {
+      closeChat();
+      return;
+    }
+
+    // 7. Calling dialogs
+    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
+    if (!incomingDialog.hidden) { $('btnReject').click(); return; }
+
+    // 8. Double back = app exit
+    if (backPressedOnce) {
+      getAppPlugin().exitApp();
+    } else {
       backPressedOnce = true;
       toast(currentLang === 'hi' ? 'बाहर निकलने के लिए दोबारा बैक दबाएँ' : 'Press back again to exit');
       setTimeout(() => { backPressedOnce = false; }, 2000);
@@ -5580,6 +5789,7 @@ function setupHardwareBackButton() {
 }
 
 /* ───────── 🟦 [SECTION 72: HARDWARE BACK] — END ───────── */
+
 
 
 
