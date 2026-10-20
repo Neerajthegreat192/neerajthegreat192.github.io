@@ -1067,13 +1067,8 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   if (!data || !data.callId) return;
   if (activeCallId === data.callId && !incomingDialog.hidden) return;
 
-  // 🆕 lock screen / background में native ringtone को बिल्कुल मत छेड़ो
-  const appIsVisible = !document.hidden && document.visibilityState === 'visible';
-
-  // केवल app visible हो तभी native tray/ringtone clear करो
-  if (isFromForegroundListener && appIsVisible) {
-    try { clearOngoingCallNotification(); } catch(e) {}
-  }
+  // 🆕 ringtone किसी भी हालत में मत बंद करो — user के accept/reject पर ही बंद होगा
+  // (पुराना clearOngoingCallNotification यहाँ से पूरी तरह हटा दें)
 
   activeCallId = data.callId;
   currentCallType = 'incoming';
@@ -1088,8 +1083,9 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
   incomingDialog.hidden = false;
 
-  // 🆕 web ringtone भी सिर्फ app visible हो तभी — lock screen पर native ही रिंग करे
-  if (appIsVisible) {
+  // 🆕 app visible हो तभी web ringtone — native भी साथ में रिंग कर रहा होगा तो कोई बात नहीं
+  // (web ringtone native के बंद होने पर fallback की तरह काम करेगा)
+  if (!document.hidden) {
     try { startIncomingRingtone(); } catch(e) {}
   }
 
@@ -1149,11 +1145,10 @@ function checkNativeLaunchIntent() {
       handleDirectAcceptCall(callId);
       return;
     } else if (action === "SHOW_INCOMING" && callId) {
-  window.AndroidAudio.clearLaunchCallAction();
-  // 🆕 launch पर भी ट्रे notification हटाओ (duplicate से बचाव)
-  try { clearOngoingCallNotification(); } catch(e) {}
-  handleIncomingCallNotification({ callId, callerName, audioOnly }, false);
-  return;
+      window.AndroidAudio.clearLaunchCallAction();
+      // 🆕 clearOngoingCallNotification यहाँ मत कॉल करो — native ringtone चलता रहे
+      handleIncomingCallNotification({ callId, callerName, audioOnly }, false);
+      return;
     } else if (action === "REJECT" && callId) {
       window.AndroidAudio.clearLaunchCallAction();
       stopAllCallTones();
@@ -1179,6 +1174,14 @@ function updateHeaderTitle() {
   myHeaderName.textContent = myUserName || (currentLang === 'hi' ? 'एचडी कॉलिंग' : 'HD Calling');
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
+// 🆕 जब app foreground आए और incoming dialog खुला हो पर ringtone न बज रही हो
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible'
+      && incomingDialog && !incomingDialog.hidden
+      && !isCallConnected && !incomingRingActive) {
+    try { ensureAudioContext(); startIncomingRingtone(); } catch(e) {}
+  }
+});
 
 /* ───────── 🟦 [SECTION 18: INCOMING CALL HANDLERS] — END ───────── */
 
@@ -5722,13 +5725,23 @@ if (!wasLocked) {
     });
   }
 
-  if (callIdToCleanup) {
-    update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
-    update(ref(db, `call_sessions/${callIdToCleanup}`), { status: 'ended' }).catch(()=>{});
-    remove(ref(db, `call_sessions/${callIdToCleanup}/members/${myUserId}`)).catch(()=>{});
-    remove(ref(db, `call_sessions/${callIdToCleanup}/recovery_requests`)).catch(()=>{});
-  }
-  remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
+ if (callIdToCleanup) {
+  update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
+  update(ref(db, `call_sessions/${callIdToCleanup}`), { status: 'ended' }).catch(()=>{});
+  remove(ref(db, `call_sessions/${callIdToCleanup}/members/${myUserId}`)).catch(()=>{});
+  remove(ref(db, `call_sessions/${callIdToCleanup}/recovery_requests`)).catch(()=>{});
+}
+remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
+
+   // 🆕 अगर मैं caller हूँ और कॉल connect नहीं हुई — receiver को cancel signal भेजो
+// (timeout, manually cancel, या कोई भी disconnect जहाँ मैंने उठाया नहीं)
+if (wasCaller && !wasConnected && targetIdToLog) {
+  update(ref(db, `user_inbox/${targetIdToLog}`), { status: 'cancelled' }).catch(()=>{});
+  // थोड़ी देर बाद receiver की inbox clear कर दो
+  setTimeout(() => {
+    remove(ref(db, `user_inbox/${targetIdToLog}`)).catch(()=>{});
+  }, 3000);
+}
 }
 
 /* ───────── 🟦 [SECTION 70: HANGUP] — END ───────── */
