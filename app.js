@@ -1,5 +1,5 @@
 /* ═════════════════════════════════════════════════════════════════════════
-   📦 app.js v1.24.1 — REFACTORED (Comments + Firebase PIN + Network Reconnect)
+   📦 app.js v1.25.1 — REFACTORED (Comments + Firebase PIN + Network Reconnect)
    📅 Structure:
       1A → Config / Native / DOM / Translations / State
       1B → Presence / Lobby / Admin PIN (Firebase) / Call Logs / Contacts
@@ -742,10 +742,11 @@ async function runFullPermissionFlow() {
    📌 क्या: Web Audio API से beep/tick/cheer/oops/ringing बजाना
    🔗 कहाँ से: chat send/receive, quiz जीतना/हारना, incoming call, outgoing call
    ⚠️ डिपेंड: audioCtx (lazy init), browser autoplay policy (pointerdown unlock)
-   🎯 सभी audio HTML5 Audio या Web Audio API
+   🆕 Web incoming ringtone अब असली dual-tone "ring-ring" pattern में बजती है
    ═══════════════════════════════════════════════════════════════════════ */
 
 let audioCtx = null, outgoingRingTimer = null;
+let incomingRingTimer = null, incomingRingActive = false;
 
 function ensureAudioContext() {
   try {
@@ -824,14 +825,58 @@ function playBeepTone() {
   } catch(e) {}
 }
 
+// 🆕 Incoming ring burst — dual-tone "ring-ring" pattern (0.4s + gap + 0.4s)
+function playIncomingRingBurst() {
+  try {
+    const ctx = ensureAudioContext(); if (!ctx) return;
+    const now = ctx.currentTime;
+    const tone = (start, dur) => {
+      const o1 = ctx.createOscillator(), o2 = ctx.createOscillator();
+      const g = ctx.createGain();
+      o1.type = 'sine'; o1.frequency.value = 440;
+      o2.type = 'sine'; o2.frequency.value = 480;
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.22, start + 0.02);
+      g.gain.setValueAtTime(0.22, start + dur - 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      o1.connect(g); o2.connect(g); g.connect(ctx.destination);
+      o1.start(start); o1.stop(start + dur + 0.02);
+      o2.start(start); o2.stop(start + dur + 0.02);
+    };
+    tone(now, 0.4);
+    tone(now + 0.55, 0.4);
+  } catch(e) {}
+}
+
 function startOutgoingCallTone() {
   stopIncomingRingtone(); stopOutgoingCallTone();
   playBeepTone(); outgoingRingTimer = setInterval(playBeepTone, 3000);
 }
 function stopOutgoingCallTone() { if (outgoingRingTimer) { clearInterval(outgoingRingTimer); outgoingRingTimer = null; } }
-function startIncomingRingtone() {}
-function stopIncomingRingtone() { stopNativeRinging(); }
-function stopAllCallTones() { stopOutgoingCallTone(); stopNativeRinging(); }
+
+// 🆕 अब web/browser पर असली incoming ringtone बजती है (हर 2s में ring-ring)
+function startIncomingRingtone() {
+  if (incomingRingActive) return;
+  incomingRingActive = true;
+  playIncomingRingBurst();
+  incomingRingTimer = setInterval(() => {
+    if (!incomingRingActive) return;
+    playIncomingRingBurst();
+  }, 2000);
+}
+
+function stopIncomingRingtone() {
+  incomingRingActive = false;
+  if (incomingRingTimer) { clearInterval(incomingRingTimer); incomingRingTimer = null; }
+  stopNativeRinging();
+}
+
+function stopAllCallTones() {
+  stopOutgoingCallTone();
+  stopIncomingRingtone();
+  stopNativeRinging();
+}
+
 document.addEventListener('pointerdown', () => { ensureAudioContext(); }, {passive:true});
 
 /* ───────── 🟦 [SECTION 16: SOUNDS] — END ───────── */
@@ -946,11 +991,27 @@ function getFileIcon(mimeType, fileName) {
 
 function clearOngoingCallNotification() {
   stopNativeRinging();
+
+  // 🆕 Native सिस्टम ट्रे नोटिफिकेशन तुरंत रद्द (safety-guarded)
+  try {
+    if (window.AndroidAudio && typeof window.AndroidAudio.cancelIncomingCallNotification === 'function') {
+      window.AndroidAudio.cancelIncomingCallNotification();
+    }
+  } catch(e) {}
+  try {
+    if (window.AndroidBridge && typeof window.AndroidBridge.cancelIncomingCallNotification === 'function') {
+      window.AndroidBridge.cancelIncomingCallNotification();
+    }
+  } catch(e) {}
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(reg => {
       reg.getNotifications().then(notifications => {
         notifications.forEach(n => {
-          if (n.tag && n.tag.includes('incoming-call')) n.close();
+          // 🆕 'incoming-call' के अलावा 'call_' prefix वाली भी बंद करो
+          if (n.tag && (n.tag.includes('incoming-call') || n.tag.startsWith('call_'))) {
+            try { n.close(); } catch(e) {}
+          }
         });
       });
     }).catch(()=>{});
@@ -998,6 +1059,11 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   if (!data || !data.callId) return;
   if (activeCallId === data.callId && !incomingDialog.hidden) return;
 
+  // 🆕 Foreground में in-app डायलॉग खोलने से पहले सिस्टम ट्रे नोटिफिकेशन हटाओ
+  if (isFromForegroundListener) {
+    try { clearOngoingCallNotification(); } catch(e) {}
+  }
+
   activeCallId = data.callId;
   currentCallType = 'incoming';
   currentCallTargetId = data.callerId || '';
@@ -1010,6 +1076,9 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
 
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
   incomingDialog.hidden = false;
+
+  // 🆕 Web/browser पर भी incoming ringtone बजाओ
+  try { startIncomingRingtone(); } catch(e) {}
 
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
 }
@@ -1067,9 +1136,11 @@ function checkNativeLaunchIntent() {
       handleDirectAcceptCall(callId);
       return;
     } else if (action === "SHOW_INCOMING" && callId) {
-      window.AndroidAudio.clearLaunchCallAction();
-      handleIncomingCallNotification({ callId, callerName, audioOnly }, false);
-      return;
+  window.AndroidAudio.clearLaunchCallAction();
+  // 🆕 launch पर भी ट्रे notification हटाओ (duplicate से बचाव)
+  try { clearOngoingCallNotification(); } catch(e) {}
+  handleIncomingCallNotification({ callId, callerName, audioOnly }, false);
+  return;
     } else if (action === "REJECT" && callId) {
       window.AndroidAudio.clearLaunchCallAction();
       stopAllCallTones();
@@ -1155,19 +1226,15 @@ CallAudioManager.init(); // इसे शुरू करना ज़रूर�
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 20: PRESENCE & LISTENERS (GHOST USER & OTA WIPE FIX)] — START
-   📌 क्या: Firebase `.info/connected` से presence track, users list live,
-           self account status monitor (reset detect), incoming call listen,
-           latest chat previews listen, call logs listen
-   🔗 कहाँ से: initPresence() → checkUser() → initApp()
-   ⚠️ डिपेंड: myUserId, myUserName, allOnlineUsers, db
-   🔥 GHOST USER FIX: onDisconnect पर online=false + cleanup पुराने listeners
-   🎯 पूरी presence chain — सबसे critical section
+   🆕 presenceUnsubs[] registry — सभी presence-side listeners एक जगह
+       (call_logs, chat previews, media signals, incoming calls)
    ═══════════════════════════════════════════════════════════════════════ */
 
 let connectedUnsub = null;
 let usersListUnsub = null;
 let activePresenceUserRef = null;
 let activePresenceInboxRef = null;
+let presenceUnsubs = [];   // 🆕 all presence-side listeners
 
 function clearUserSessionOnly() {
   const keysToRemove = [
@@ -1185,6 +1252,11 @@ function clearUserSessionOnly() {
 async function cleanupOldPresence() {
   if (connectedUnsub) { connectedUnsub(); connectedUnsub = null; }
   if (selfStatusUnsub) { selfStatusUnsub(); selfStatusUnsub = null; }
+
+  // 🆕 सभी presence-side listeners unsubscribe (duplicate / leak से बचाव)
+  presenceUnsubs.forEach(fn => { try { fn(); } catch(e) {} });
+  presenceUnsubs = [];
+
   if (activePresenceUserRef) {
     try { await onDisconnect(activePresenceUserRef).cancel(); } catch(e) {}
     activePresenceUserRef = null;
@@ -1208,18 +1280,18 @@ async function initPresence() {
   activePresenceUserRef = userRef;
   activePresenceInboxRef = inboxRef;
 
-  // Disconnect पर safety handlers register करना
+  // Disconnect safety handlers
   await onDisconnect(userRef).update({
     online: false, lastSeen: serverTimestamp(), onlineSince: null,
     activeCallId: null, isBusy: false, typingTo: null
   }).catch(()=>{});
   await onDisconnect(inboxRef).remove().catch(()=>{});
 
-  // शुरुआती online state सेट
+  // शुरुआती online state
   await update(userRef, {
-  id: currentUid, name: myUserName, online: true,
-  onlineSince: serverTimestamp(), lastSeen: serverTimestamp(), activeCallId: null
-}).catch(e => console.warn('Presence write warning (ignored):', e));
+    id: currentUid, name: myUserName, online: true,
+    onlineSince: serverTimestamp(), lastSeen: serverTimestamp(), activeCallId: null
+  }).catch(e => console.warn('Presence write warning (ignored):', e));
 
   if (myFcmToken) {
     await update(userRef, { fcmToken: myFcmToken }).catch(()=>{});
@@ -1229,7 +1301,7 @@ async function initPresence() {
     try { window.AndroidBridge.syncUser(currentUid); } catch(e){}
   }
 
-  // Firebase connection status track
+  // Firebase connection status
   connectedUnsub = onValue(connectedRef, async snap => {
     if (!myUserId || myUserId !== currentUid) return;
 
@@ -1243,7 +1315,7 @@ async function initPresence() {
     }
   });
 
-  // सभी users की live list
+  // सभी users live list
   if (usersListUnsub) usersListUnsub();
   usersListUnsub = onValue(ref(db, 'users'), snap => {
     allOnlineUsers = snap.val() || {};
@@ -1257,17 +1329,18 @@ async function initPresence() {
     renderOnlineStrip();
   });
 
+  // 🆕 सभी presence-side listeners — अब registry से cleanup होंगे
   listenSelfAccountStatus();
-  listenForIncoming();
-  listenForLatestChatPreviews();
-  listenForCallLogs();
+  listenForIncoming();                // Section 57 — presenceUnsubs में push करता है
+  listenForLatestChatPreviews();      // Section 27 — push करता है
+  listenForCallLogs();                // Section 26 — push करता है
 
   if (typeof listenForIncomingMediaSignals === 'function') {
-    listenForIncomingMediaSignals();
+    listenForIncomingMediaSignals();  // Section 43 — push करता है
   }
 }
 
-// अगर admin ने user की ID delete कर दी है, तो detect करके session clear
+// अगर admin ने user की ID delete कर दी है — reset detect
 function listenSelfAccountStatus() {
   if (selfStatusUnsub) selfStatusUnsub();
   const watchedUid = myUserId;
@@ -1281,14 +1354,13 @@ function listenSelfAccountStatus() {
       myUserId = ''; myUserName = '';
       myHeaderName.textContent = '...';
       chatScreen.hidden = true; callScreen.hidden = true; lobbyScreen.hidden = true;
-      $('nameInput').value = '';$('nameModal').hidden = false;
+      $('nameInput').value = ''; $('nameModal').hidden = false;
       toast(currentLang === 'hi' ? '⚠️ आपकी आईडी रीसेट हो गई है।' : '⚠️ Your ID was reset.');
     }
   });
 }
 
 /* ───────── 🟦 [SECTION 20: PRESENCE] — END ───────── */
-
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 21: BOOT FLOW & NAME SAVE] — START
@@ -1300,7 +1372,8 @@ function listenSelfAccountStatus() {
    🎯 पहली बार app खोलने का पूरा flow
    ═══════════════════════════════════════════════════════════════════════ */
 
-function checkUser() {
+async function checkUser() {
+  // 🆕 शुरू से ही सभी screens छिपी रहें — lobby तभी खुलेगी जब intent न हो
   lobbyScreen.hidden = true;
   lobbyScreen.style.display = 'none';
   chatScreen.hidden = true;
@@ -1327,17 +1400,37 @@ function checkUser() {
   $('nameModal').hidden = true;
   $('permNoticeModal').hidden = true;
 
-  // 👈 जांचें कि क्या ऐप नोटिफिकेशन से कॉल स्वीकार करने के लिए खुली है
-  let isDirectCallOpening = false;
-  if (window.AndroidAudio && typeof window.AndroidAudio.getLaunchCallAction === 'function') {
-    const act = window.AndroidAudio.getLaunchCallAction();
-    if (act === "ACCEPT" || act === "SHOW_INCOMING") {
-      isDirectCallOpening = true;
-    }
+  // 🆕 Native bridge ready होने तक brief wait करके call/chat launch intent जाँचें
+  // (bridge देर से inject होता है — इसलिए 600ms तक retry, ताकि लॉबी फ्लैश न हो)
+  let hasLaunchIntent = false;
+  const native = isNativeApp();
+  const maxRetries = native ? 12 : 0;
+
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      if (window.AndroidAudio) {
+        let act = '', cid = '';
+        if (typeof window.AndroidAudio.getLaunchCallAction === 'function') {
+          act = window.AndroidAudio.getLaunchCallAction() || '';
+        }
+        if (typeof window.AndroidAudio.getLaunchCallId === 'function') {
+          cid = window.AndroidAudio.getLaunchCallId() || '';
+        }
+        if ((act === "ACCEPT" || act === "SHOW_INCOMING") && cid) {
+          hasLaunchIntent = true;
+        }
+        if (!hasLaunchIntent && typeof window.AndroidAudio.getLaunchChatTargetId === 'function') {
+          const chatId = window.AndroidAudio.getLaunchChatTargetId();
+          if (chatId) hasLaunchIntent = true;
+        }
+        break; // bridge मिल गया — loop खत्म
+      }
+    } catch(e) {}
+    if (i < maxRetries) await new Promise(r => setTimeout(r, 50));
   }
 
-  // अगर कॉल उठाने के लिए खुले हैं, तो लॉबी स्क्रीन को बिल्कुल न दिखाएं
-  if (!isDirectCallOpening) {
+  // 🆕 intent है तो lobby कभी नहीं खुलेगी — call/chat screen सीधे आएगी
+  if (!hasLaunchIntent) {
     lobbyScreen.hidden = false;
     lobbyScreen.style.display = '';
   }
@@ -1618,13 +1711,15 @@ async function recordCallLog(entry) {
       callId: logId, targetId: entry.targetId, name: entry.name || 'उपयोगकर्ता',
       type: entry.type, callMode: entry.callMode || 'video', duration: entry.duration || '00:01', time: entry.time || Date.now()
     };
+    // ✅ Local UI पहले तुरंत अपडेट
     const existingIdx = allCallLogs.findIndex(x => x.callId === logId);
     if (existingIdx >= 0) allCallLogs[existingIdx] = myLogEntry;
     else allCallLogs.unshift(myLogEntry);
     localStorage.setItem('cached_call_logs', JSON.stringify(allCallLogs));
     renderCallLogs();
 
-    await set(ref(db, `call_logs/${myUserId}/${logId}`), myLogEntry);
+    // 🆕 Firebase writes fire-and-forget (no await — UI already updated)
+    set(ref(db, `call_logs/${myUserId}/${logId}`), myLogEntry).catch(()=>{});
 
     if (entry.targetId && entry.targetId !== myUserId) {
       const remoteType = entry.type === 'outgoing' ? 'incoming' : (entry.type === 'incoming' ? 'outgoing' : 'missed');
@@ -1632,13 +1727,13 @@ async function recordCallLog(entry) {
         callId: logId, targetId: myUserId, name: myUserName,
         type: remoteType, callMode: entry.callMode || 'video', duration: entry.duration || '00:01', time: entry.time || Date.now()
       };
-      await set(ref(db, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
+      set(ref(db, `call_logs/${entry.targetId}/${logId}`), remoteLogEntry).catch(()=>{});
     }
   } catch(e) {}
 }
 
 function listenForCallLogs() {
-  onValue(ref(db, `call_logs/${myUserId}`), snap => {
+  const unsub = onValue(ref(db, `call_logs/${myUserId}`), snap => {
     const raw = snap.val() || {};
     const list = Object.keys(raw).map(k => raw[k]);
     if (list.length > 0) {
@@ -1647,6 +1742,7 @@ function listenForCallLogs() {
       renderCallLogs();
     }
   });
+  presenceUnsubs.push(unsub);   // 🆕
 }
 
 function renderCallLogs() {
@@ -1713,7 +1809,7 @@ const lastKnownMessageTimes = {};
 
 // ✅ FIX: सटीक targetId एक्सट्रैक्शन और गारंटीड लॉबी रेंडर
 function listenForLatestChatPreviews() {
-  onValue(ref(db, 'chats'), snap => {
+  const unsub = onValue(ref(db, 'chats'), snap => {
     try {
       const rooms = snap.val() || {};
       const currentUid = String(myUserId || '').trim();
@@ -1820,6 +1916,7 @@ function listenForLatestChatPreviews() {
       console.warn('Chat listener root error:', err);
     }
   });
+presenceUnsubs.push(unsub);   // 🆕
 }
 
 function triggerSystemMessageNotification(sender, text, targetId) {
@@ -1963,10 +2060,10 @@ if ($('shareAppWhatsappBtn')) {$('shareAppWhatsappBtn').onclick = () => {
     window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(promoMsg), '_blank');
   };
 }
-
 /* ───────── 🟦 [SECTION 27: CONTACTS & PREVIEWS] — END ───────── */
 
-/* ═══ यहाँ BATCH 1B खत्म होता है ═══ */
+
+
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 28: LONG-PRESS MESSAGE MENU] — START
    📌 क्या: किसी भी chat bubble पर 500ms देर तक दबाने से context menu
@@ -2986,15 +3083,18 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId, mediaMe
     const token = tSnap.val()?.fcmToken;
     if (!token) return;
 
+    // 🆕 Chat push में अब callId नहीं — receiver इसे call नहीं समझेगा
     const payload = {
       token,
       title: myUserName,
       body: textContent,
-      callerName: myUserName,
-      callId: "CHAT_" + myUserId,
       senderId: myUserId,
+      senderName: myUserName,
       roomId: roomId,
-      messageId: msgId
+      messageId: msgId,
+      isChat: true,
+      chatTargetId: myUserId,      // receiver इस ID के साथ chat खोलेगा
+      chatTargetName: myUserName
     };
 
     if (mediaMeta) {
@@ -3290,7 +3390,7 @@ async function getOrCreateMediaDataChannel(peerId) {
 function listenForIncomingMediaSignals() {
   const incomingMediaRef = ref(db, `media_signals/${myUserId}`);
 
-  onValue(incomingMediaRef, async snap => {
+  const unsub = onValue(incomingMediaRef, async snap => {
     const allSenders = snap.val() || {};
     for (const senderId of Object.keys(allSenders)) {
       if (!senderId || senderId === myUserId) continue;
@@ -3345,6 +3445,7 @@ function listenForIncomingMediaSignals() {
       await update(ref(db, `media_signals/${myUserId}/${senderId}`), { answered: true }).catch(()=>{});
     }
   });
+   presenceUnsubs.push(unsub);   // 🆕
 }
 
 /* ───────── 🟦 [SECTION 43: MEDIA DATA CHANNEL — RECEIVER] — END ───────── */
@@ -4115,15 +4216,10 @@ $('dockSendBtn').onclick = sendVoiceDock;
 
 /* ───────── 🟦 [SECTION 56: VOICE DOCK SEND] — END ───────── */
 
-/* ═══ यहाँ BATCH 2B खत्म होता है ═══ */
+
+
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 57: LISTEN INCOMING CALLS + MISSED + PUSH] — START
-   📌 क्या: user_inbox/{myUserId} पर live listen — जब कोई call आती है
-           तो ring dialog दिखाना, cancelled/missed/ended handle करना
-           + missed call notification
-   🔗 कहाँ से: initPresence() → listenForIncoming()
-   ⚠️ डिपेंड: activeCallId, currentCallType, Firebase user_inbox
-   🎯 Busy/cancelled/ended detection + missed call logging
    ═══════════════════════════════════════════════════════════════════════ */
 
 currentCallType = 'outgoing';
@@ -4131,7 +4227,7 @@ currentCallType = 'outgoing';
 function listenForIncoming() {
   const incomingRef = ref(db, `user_inbox/${myUserId}`);
 
-  // पहली बार get — अगर app बंद थी और call आ चुकी है
+  // पहली बार get (cold-start)
   get(incomingRef).then(snap => {
     const data = snap.val();
     if (data && data.status === 'calling' && !activeCallId) {
@@ -4139,24 +4235,22 @@ function listenForIncoming() {
     }
   }).catch(()=>{});
 
-  // Live listen
-  onValue(incomingRef, async (snap) => {
+  // Live listen (single listener, captured for cleanup)
+  const unsub = onValue(incomingRef, async (snap) => {
     const data = snap.val();
     if (!data) return;
 
-    // Direct accept से आए user के लिए — अपने inbox को clear करो
+    // Direct accept — अपना inbox clear करो
     if (callJoinedViaDirectAccept && activeCallId === data.callId) {
       remove(incomingRef).catch(()=>{});
       return;
     }
 
     if (data.status === 'calling') {
-      // अगर उसी call में already connected हैं तो skip
       if (activeCallId === data.callId && isCallConnected) {
         remove(incomingRef).catch(()=>{});
         return;
       }
-      // Busy — सामने वाले को बिज़ी बता दो
       if (isCallConnected || (activeCallId && !callScreen.hidden)) {
         await update(ref(db, `call_sessions/${data.callId}`), { status: 'busy' }).catch(()=>{});
         await remove(incomingRef).catch(()=>{});
@@ -4167,7 +4261,6 @@ function listenForIncoming() {
       await update(incomingRef, { status: 'ringing' }).catch(()=>{});
       await update(ref(db, `call_sessions/${data.callId}`), { status: 'ringing' }).catch(()=>{});
     } else if (data.status === 'cancelled' || data.status === 'ended') {
-      // Caller ने cancel कर दिया — missed call log करो
       clearOngoingCallNotification();
       if (!isCallConnected && currentCallType === 'incoming') {
         recordCallLog({
@@ -4180,7 +4273,8 @@ function listenForIncoming() {
           time: Date.now()
         });
 
-        if (!document.hidden) {
+        // ✅ backgrounded हो तभी system notification
+        if (document.hidden) {
           triggerMissedCallNotification(currentCallTargetName, 1);
         }
       }
@@ -4191,6 +4285,8 @@ function listenForIncoming() {
       closeIfLocked();
     }
   });
+
+  presenceUnsubs.push(unsub);
 }
 
 // Missed call के लिए notification
@@ -4225,13 +4321,17 @@ async function sendPushNotification(token, callerName, isVoice = false) {
         title: "इनकमिंग कॉल...",
         body: `${callerName} आपको कॉल कर रहे हैं`,
         callerName: callerName + (isVoice ? "|AUDIO" : "|VIDEO"),
-        callId: activeCallId
+        callerId: myUserId,
+        audioOnly: !!isVoice,
+        callId: activeCallId,
+        isChat: false
       })
     }).catch(()=>{});
   } catch(e) {}
 }
 
 /* ───────── 🟦 [SECTION 57: INCOMING CALL LISTENER] — END ───────── */
+
 
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -4848,9 +4948,11 @@ async function attemptNetworkRecovery() {
           video: isAudioOnlyCall ? false : { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         // पुराने dead tracks हटाओ
-        localStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
-        // नए tracks जोड़ो
-        fresh.getTracks().forEach(t => localStream.addTrack(t));
+        localStream.getTracks().forEach(t => {
+  try { t.stop(); } catch(e) {}
+  try { localStream.removeTrack(t); } catch(e2) {}   // 🆕 track accumulation रोकता है
+});
+fresh.getTracks().forEach(t => localStream.addTrack(t));
         localVideo.srcObject = localStream;
         localVideo.play().catch(()=>{});
       } catch(e) {
@@ -4889,9 +4991,10 @@ async function attemptNetworkRecovery() {
       } catch(e) {
         console.warn('[NetRecovery] ICE restart failed for', pId, e);
         // अगर PC dead है तो fallback: close करके peer फिर से connect करेगा
-        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
-          try { pc.close(); } catch(e2) {}
-          delete peerConnections[pId];
+       if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+       try { pc.close(); } catch(e2) {}
+       (pc._unsubs || []).forEach(fn => { try { fn(); } catch(e3) {} });   // 🆕
+       delete peerConnections[pId];
         }
       }
     } else {
@@ -5065,6 +5168,7 @@ async function joinCallSession() {
 
 function initiatePeerConnection(peerId, peerName) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
+  pc._unsubs = [];   // 🆕 per-peer Firebase listener registry
   peerConnections[peerId] = pc;
 
   if (localStream) {
@@ -5088,27 +5192,29 @@ function initiatePeerConnection(peerId, peerName) {
   const myPath = `call_sessions/${activeCallId}/signals/${myUserId}__${peerId}`;
   const peerPath = `call_sessions/${activeCallId}/signals/${peerId}__${myUserId}`;
 
-  pc.onicecandidate = e => { 
-    if (e.candidate) push(ref(db, `${myPath}/candidates`), e.candidate.toJSON()).catch(()=>{}); 
+  pc.onicecandidate = e => {
+    if (e.candidate) push(ref(db, `${myPath}/candidates`), e.candidate.toJSON()).catch(()=>{});
   };
   pc.pendingIce = [];
 
-  onChildAdded(ref(db, `${peerPath}/candidates`), async snap => {
+  // 🆕 candidate listener — captured for cleanup
+  const candUnsub = onChildAdded(ref(db, `${peerPath}/candidates`), async snap => {
     const c = snap.val();
     if (!c) return;
     const cand = new RTCIceCandidate(c);
-    if (pc.remoteDescription) { 
-      try { await pc.addIceCandidate(cand); } catch(e){} 
+    if (pc.remoteDescription) {
+      try { await pc.addIceCandidate(cand); } catch(e){}
     } else {
       pc.pendingIce.push(cand);
     }
   });
+  pc._unsubs.push(candUnsub);
 
   pc.flushIce = async () => {
     const p = pc.pendingIce || [];
     pc.pendingIce = [];
-    for (const cand of p) { 
-      try { await pc.addIceCandidate(cand); } catch(e){} 
+    for (const cand of p) {
+      try { await pc.addIceCandidate(cand); } catch(e){}
     }
   };
 
@@ -5143,19 +5249,22 @@ function initiatePeerConnection(peerId, peerName) {
       .then(() => set(ref(db, `${myPath}/offer`), { sdp: pc.localDescription.sdp, type: pc.localDescription.type }))
       .catch(err => console.error("Offer error:", err));
 
-    onValue(ref(db, `${peerPath}/answer`), snap => {
+    // 🆕 answer listener — captured for cleanup
+    const ansUnsub = onValue(ref(db, `${peerPath}/answer`), snap => {
       const a = snap.val();
       if (a && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== a.sdp)) {
         pc.setRemoteDescription(new RTCSessionDescription(a))
-          .then(async () => { 
-            await pc.flushIce(); 
-            boostPeerBitrate(pc); 
+          .then(async () => {
+            await pc.flushIce();
+            boostPeerBitrate(pc);
           })
           .catch(err => console.error("SetRemote Answer error:", err));
       }
     });
+    pc._unsubs.push(ansUnsub);
   } else {
-    onValue(ref(db, `${peerPath}/offer`), async snap => {
+    // 🆕 offer listener — captured for cleanup
+    const offUnsub = onValue(ref(db, `${peerPath}/offer`), async snap => {
       const o = snap.val();
       if (o && (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== o.sdp)) {
         try {
@@ -5170,11 +5279,11 @@ function initiatePeerConnection(peerId, peerName) {
         }
       }
     });
+    pc._unsubs.push(offUnsub);
   }
 }
 
 /* ───────── 🟦 [SECTION 64: PEER CONNECTION] — END ───────── */
-
 
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -5235,7 +5344,13 @@ function updateRemoteGridClass() {
 }
 
 function closePeer(id) {
-  if (peerConnections[id]) { peerConnections[id].close(); delete peerConnections[id]; }
+  if (peerConnections[id]) {
+    // 🆕 Firebase listeners cleanup (memory leak रोकता है)
+    (peerConnections[id]._unsubs || []).forEach(fn => { try { fn(); } catch(e) {} });
+    peerConnections[id]._unsubs = [];
+    try { peerConnections[id].close(); } catch(e) {}
+    delete peerConnections[id];
+  }
   removeRemoteVideoCell(id);
   updateRemoteGridClass();
 }
@@ -5455,28 +5570,32 @@ $('hangBtn').onclick = (e) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 async function hangup(silent = false) {
-  try {
-    // Duration calculate
-    let actualDuration = '00:01';
-    if (callStartTime > 0 && isCallConnected) {
-      const elapsedSec = Math.max(1, Math.floor((Date.now() - callStartTime) / 1000));
-      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
-      const ss = String(elapsedSec % 60).padStart(2, '0');
-      actualDuration = `${mm}:${ss}`;
-    }
+  // 🆕 Cleanup से पहले ज़रूरी values capture कर लो
+  let actualDuration = '00:01';
+  if (callStartTime > 0 && isCallConnected) {
+    const elapsedSec = Math.max(1, Math.floor((Date.now() - callStartTime) / 1000));
+    const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+    const ss = String(elapsedSec % 60).padStart(2, '0');
+    actualDuration = `${mm}:${ss}`;
+  }
 
+  const callIdToCleanup = activeCallId;
+  const targetIdToLog = currentCallTargetId;
+  const targetNameToLog = currentCallTargetName || 'उपयोगकर्ता';
+  const wasConnected = isCallConnected;
+  const wasCaller = isCaller;
+  const wasAudioOnly = isAudioOnlyCall;
+
+  try {
     clearOngoingCallNotification();
 
-    // Call end tone logic
     if (isCallConnected && !silent) {
       CallAudioManager.playEnd();
     } else {
       CallAudioManager.stopAll();
     }
 
-    // 🆕 Network recovery cleanup
     teardownCallNetworkRecovery();
-
     stopTimer();
     releaseWakeLock();
     clearTimeout(autoHideTimer);
@@ -5493,38 +5612,13 @@ async function hangup(silent = false) {
       window.AndroidAudio.stopCallForegroundService();
     }
 
-    // Call log
-    if (isCallConnected && currentCallTargetId) {
-      recordCallLog({
-        callId: activeCallId || `call_${Date.now()}`,
-        targetId: currentCallTargetId,
-        name: currentCallTargetName || 'उपयोगकर्ता',
-        type: isCaller ? 'outgoing' : 'incoming',
-        callMode: isAudioOnlyCall ? 'audio' : 'video',
-        duration: actualDuration,
-        time: Date.now()
-      });
-    }
-
-    // Firebase cleanup (Purana sidha aur saral logic jo hamesha chalta hai)
-    if (activeCallId) {
-      await update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
-      await update(ref(db, `call_sessions/${activeCallId}`), { status: 'ended' }).catch(()=>{});
-      await remove(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`)).catch(()=>{});
-      await remove(ref(db, `call_sessions/${activeCallId}/recovery_requests`)).catch(()=>{});
-    }
-    await remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
-  } catch(err) {
-    console.warn("Hangup warning:", err);
-  } finally {
-    // Peer cleanup
+    // ✅ सबसे पहले local cleanup (UI + media) — ताकि screen तुरंत बंद हो
     unsubs.forEach(fn => { try { fn(); } catch(e){} });
     unsubs = [];
     if (callSessionUnsub) { callSessionUnsub(); callSessionUnsub = null; }
     Object.keys(peerConnections).forEach(id => closePeer(id));
     peerConnections = {};
 
-    // Media channels cleanup
     Object.keys(mediaDataChannels).forEach(pid => {
       try { mediaDataChannels[pid].close(); } catch(e) {}
     });
@@ -5534,9 +5628,9 @@ async function hangup(silent = false) {
     });
     mediaPeerConnections = {};
 
-    // Tracks stop
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     remoteGrid.innerHTML = '';
+
     activeCallId = null;
     isCallConnected = false;
     isAudioOnlyCall = false;
@@ -5551,15 +5645,15 @@ async function hangup(silent = false) {
     pipRestoreBtn.hidden = true;
     pipWrap.style.opacity = '1';
     $('camBtn').classList.remove('off');
-    $('micBtn').classList.remove('off');$('speakerBtn').classList.remove('off');
-    if ($('voiceCallArea'))$('voiceCallArea').hidden = true;
+    $('micBtn').classList.remove('off');
+    $('speakerBtn').classList.remove('off');
+    if ($('voiceCallArea')) $('voiceCallArea').hidden = true;
     remoteGrid.style.display = 'grid';
     pipWrap.style.display = 'block';
 
     const overlay = $('callReconnectingOverlay');
     if (overlay) overlay.hidden = true;
-
-    if ($('ongoingCallBanner'))$('ongoingCallBanner').hidden = true;
+    if ($('ongoingCallBanner')) $('ongoingCallBanner').hidden = true;
 
     const wasLocked = isDeviceLocked();
     if (!wasLocked) {
@@ -5581,9 +5675,31 @@ async function hangup(silent = false) {
       lobbyScreen.hidden = true;
     }
     isHangingUp = false;
-
     closeIfLocked();
+  } catch(err) {
+    console.warn("Hangup warning:", err);
   }
+
+  // 🆕 Firebase operations अब fire-and-forget — UI बंद होने के बाद background में
+  if (wasConnected && targetIdToLog) {
+    recordCallLog({
+      callId: callIdToCleanup || `call_${Date.now()}`,
+      targetId: targetIdToLog,
+      name: targetNameToLog,
+      type: wasCaller ? 'outgoing' : 'incoming',
+      callMode: wasAudioOnly ? 'audio' : 'video',
+      duration: actualDuration,
+      time: Date.now()
+    });
+  }
+
+  if (callIdToCleanup) {
+    update(ref(db, `users/${myUserId}`), { activeCallId: null }).catch(()=>{});
+    update(ref(db, `call_sessions/${callIdToCleanup}`), { status: 'ended' }).catch(()=>{});
+    remove(ref(db, `call_sessions/${callIdToCleanup}/members/${myUserId}`)).catch(()=>{});
+    remove(ref(db, `call_sessions/${callIdToCleanup}/recovery_requests`)).catch(()=>{});
+  }
+  remove(ref(db, `user_inbox/${myUserId}`)).catch(()=>{});
 }
 
 /* ───────── 🟦 [SECTION 70: HANGUP] — END ───────── */
@@ -5678,14 +5794,9 @@ function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(()=>{}); w
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 72: HARDWARE BACK BUTTON HANDLER] — START
-   📌 क्या: Android hardware back button को layered close क्रम में handle
-           करना — modal → message menu → media viewer → attach menu →
-           game → voice dock → reply → call minimize → chat → app exit
-   🔗 कहाँ से: initApp() → setupHardwareBackButton()
-   ⚠️ डिपेंड: closeTictactoeGame, closeRiddleGame, closeKidsQuiz (batch 4),
-              closeChat, hangup, minimizeCallScreen, ignoreBackUntil
-   🎯 Web popstate + Native Capacitor backButton दोनों support
-   ⏱️ Double back press पर app exit (2s window)
+   📌 क्या: Android hardware back button layered close
+   🆕 Web popstate में chat screen handling जोड़ी — अब chat पर बैक = lobby
+   🆕 Native backButton में lock-screen prompt जोड़ा (web जैसा)
    ═══════════════════════════════════════════════════════════════════════ */
 
 let backPressedOnce = false;
@@ -5693,88 +5804,12 @@ let backPressedOnce = false;
 function setupHardwareBackButton() {
   // 1️⃣ Web back (popstate) — layered close
   window.addEventListener('popstate', (e) => {
-    // 🛡️ Browser ko homepage par jaane se rokne ke liye turant history trap lagana
     history.pushState(null, '', window.location.href);
 
-    // Call shuru hone ke 2s tak back ignore karo
-    if (Date.now() < ignoreBackUntil) {
-      return;
-    }
-
-    // 1. Open modals band karein
-    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
-    for (const m of openModals) {
-      if (m && !m.hidden && m.style.display !== 'none') {
-        m.hidden = true;
-        m.style.display = 'none';
-        return;
-      }
-    }
-
-    // 2. Sub-menu aur viewers band karein
-    if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
-
-    // 3. Games aur drawing tools band karein
-    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
-    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; }
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
-      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
-      return;
-    }
-    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
-
-    // 4. Voice recording aur reply box band karein
-    if (!voiceDock.hidden) { discardRecording(); return; }
-    if ($('replyPreviewBox')) { cancelReply(); return; }
-
-    // 👈 5. Call chalu ho to back dabane par check karein (Lock screen security)
-    if (!callScreen.hidden && callScreen.style.display !== 'none') {
-      if (isDeviceLocked()) {
-        // Call disconnect nahi hogi — sirf phone unlock karne ke liye prompt aayega
-        toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
-        requestDeviceUnlock();
-        return;
-      }
-      minimizeCallScreen();
-      return;
-    }
-
-    // 👈 6. Agar phone lock hai to chat ya lobby mein bina unlock kiye jane se rokein
-    if (isDeviceLocked()) {
-      toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
-      requestDeviceUnlock();
-      return;
-    }
-
-    // 7. Calling dialogs
-    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
-    if (!incomingDialog.hidden) { $('btnReject').click(); return; }
-
-    // 8. Lobby screen par 2 second ke andar dobara back dabane par hi bahar niklein
-    if (backPressedOnce) {
-      window.history.go(-2);
-    } else {
-      backPressedOnce = true;
-      toast(currentLang === 'hi' ? 'बाहर निकलने के लिए दोबारा बैक दबाएँ' : 'Press back again to exit');
-      setTimeout(() => { backPressedOnce = false; }, 2000);
-    }
-  });
-
-  // Base history state register karein
-  history.pushState(null, '', window.location.href);
-
-  // 2️⃣ Native back button (Capacitor App plugin)
-  const appPlugin = getAppPlugin();
-  if (!isNativeApp() || !appPlugin) return;
-
-  appPlugin.addListener('backButton', () => {
     if (Date.now() < ignoreBackUntil) return;
 
     // 1. Open modals
-    const openModals = [$('adminPanelModal'),$('adminPinModal'), $('profileModal'),$('addParticipantModal'), $('permNoticeModal'),$('phoneContactsModal')];
+    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal'), $('phoneContactsModal')];
     for (const m of openModals) {
       if (m && !m.hidden && m.style.display !== 'none') {
         m.hidden = true;
@@ -5785,14 +5820,15 @@ function setupHardwareBackButton() {
 
     // 2. Sub-menu aur viewers
     if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
-    if ($('mediaViewer') && !$('mediaViewer').hidden) {$('closeMediaViewerBtn').click(); return; }
-    if ($('attachMenu') && !$('attachMenu').hidden) {$('attachMenu').hidden = true; return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; return; }
 
-    // 3. Games
+    // 3. Games aur drawing
     if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
     if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; }
-    if (!$('funModeTray').hidden) {$('funModeTray').hidden = true; return; }
-    if (!$('kidsWhiteboardModal').hidden) {$('kidsWhiteboardModal').hidden = true;
+    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {
+      $('kidsWhiteboardModal').hidden = true;
       if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
       return;
     }
@@ -5802,15 +5838,25 @@ function setupHardwareBackButton() {
     if (!voiceDock.hidden) { discardRecording(); return; }
     if ($('replyPreviewBox')) { cancelReply(); return; }
 
-    // 👈 5. Call screen ko minimize karein
+    // 5. Call screen — lock check पहले, फिर minimize
     if (!callScreen.hidden && callScreen.style.display !== 'none') {
+      if (isDeviceLocked()) {
+        toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
+        requestDeviceUnlock();
+        return;
+      }
       minimizeCallScreen();
       return;
     }
 
-    // 👈 6. Chat screen ko band karke lobby par aayein
+    // 6. 🆕 Chat screen — lock check, फिर closeChat() → lobby
     const isChatOpen = (!chatScreen.hidden && chatScreen.style.display !== 'none') || currentChatTargetId !== null;
     if (isChatOpen) {
+      if (isDeviceLocked()) {
+        toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
+        requestDeviceUnlock();
+        return;
+      }
       closeChat();
       return;
     }
@@ -5819,7 +5865,95 @@ function setupHardwareBackButton() {
     if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
     if (!incomingDialog.hidden) { $('btnReject').click(); return; }
 
-    // 8. Double back = app exit
+    // 8. Lobby — lock check, फिर double-back exit
+    if (isDeviceLocked()) {
+      toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
+      requestDeviceUnlock();
+      return;
+    }
+
+    if (backPressedOnce) {
+      window.history.go(-2);
+    } else {
+      backPressedOnce = true;
+      toast(currentLang === 'hi' ? 'बाहर निकलने के लिए दोबारा बैक दबाएँ' : 'Press back again to exit');
+      setTimeout(() => { backPressedOnce = false; }, 2000);
+    }
+  });
+
+  history.pushState(null, '', window.location.href);
+
+  // 2️⃣ Native back button (Capacitor App plugin)
+  const appPlugin = getAppPlugin();
+  if (!isNativeApp() || !appPlugin) return;
+
+  appPlugin.addListener('backButton', () => {
+    if (Date.now() < ignoreBackUntil) return;
+
+    // 1. Open modals
+    const openModals = [$('adminPanelModal'), $('adminPinModal'), $('profileModal'), $('addParticipantModal'), $('permNoticeModal'), $('phoneContactsModal')];
+    for (const m of openModals) {
+      if (m && !m.hidden && m.style.display !== 'none') {
+        m.hidden = true;
+        m.style.display = 'none';
+        return;
+      }
+    }
+
+    // 2. Sub-menu aur viewers
+    if ($('msgLongPressMenu')) { closeMessageMenu(); return; }
+    if ($('mediaViewer') && !$('mediaViewer').hidden) { $('closeMediaViewerBtn').click(); return; }
+    if ($('attachMenu') && !$('attachMenu').hidden) { $('attachMenu').hidden = true; return; }
+
+    // 3. Games
+    if ($('kidsTictactoeBox') && !$('kidsTictactoeBox').hidden) { closeTictactoeGame(); return; }
+    if ($('kidsRiddleBox') && !$('kidsRiddleBox').hidden) { closeRiddleGame(); return; }
+    if (!$('funModeTray').hidden) { $('funModeTray').hidden = true; return; }
+    if (!$('kidsWhiteboardModal').hidden) {
+      $('kidsWhiteboardModal').hidden = true;
+      if (activeCallId) update(ref(db, `call_sessions/${activeCallId}/whiteboard_state`), { active: false }).catch(()=>{});
+      return;
+    }
+    if (!$('kidsQuizBox').hidden) { closeKidsQuiz(); return; }
+
+    // 4. Voice recording aur reply
+    if (!voiceDock.hidden) { discardRecording(); return; }
+    if ($('replyPreviewBox')) { cancelReply(); return; }
+
+    // 5. 🆕 Call screen — lock check पहले, फिर minimize
+    if (!callScreen.hidden && callScreen.style.display !== 'none') {
+      if (isDeviceLocked()) {
+        toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
+        requestDeviceUnlock();
+        return;
+      }
+      minimizeCallScreen();
+      return;
+    }
+
+    // 6. 🆕 Chat screen — lock check, फिर closeChat() → lobby
+    const isChatOpen = (!chatScreen.hidden && chatScreen.style.display !== 'none') || currentChatTargetId !== null;
+    if (isChatOpen) {
+      if (isDeviceLocked()) {
+        toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
+        requestDeviceUnlock();
+        return;
+      }
+      closeChat();
+      return;
+    }
+
+    // 7. Calling dialogs
+    if (!outgoingDialog.hidden) { $('btnCancelCall').click(); return; }
+    if (!incomingDialog.hidden) { $('btnReject').click(); return; }
+
+    // 8. 🆕 Lobby — lock check, फिर double-back exit
+    if (isDeviceLocked()) {
+      toast(currentLang === 'hi' ? '🔒 कृपया फोन अनलॉक करें' : '🔒 Please unlock your phone');
+      requestDeviceUnlock();
+      return;
+    }
+
     if (backPressedOnce) {
       getAppPlugin().exitApp();
     } else {
@@ -6089,7 +6223,8 @@ async function initApp() {
     applyTheme(currentTheme);
     setupHardwareBackButton();
     setupNativePushListeners();
-    checkUser();
+    // 🆕 checkUser को await किया ताकि launch intent detection पूरी होने के बाद ही आगे बढ़े
+    await checkUser();
     handleDeepLinks();
     checkNativeLaunchIntent();
   } catch (err) {
@@ -6097,9 +6232,7 @@ async function initApp() {
     hideSplashScreen();
   }
 
-  // Safety: 4s बाद splash force hide
   setTimeout(() => { hideSplashScreen(); }, 4000);
-  // Auto OTA check (silent)
   setTimeout(() => checkWebOtaUpdate(false), 3000);
 }
 
@@ -7522,7 +7655,7 @@ joinCallSession = async function() {
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 85: FILE END MARKER]
    ═══════════════════════════════════════════════════════════════════════ */
-// ✅ app.js v1.24.1 — ALL SECTIONS COMPLETE
+// ✅ app.js v1.25.1 — ALL SECTIONS COMPLETE
 // 📋 Structure recap:
 //   1A: Config / Firebase / DOM / Translations / State
 //   1B: Permissions / Push / Sounds / Admin PIN (Firebase) / Presence
