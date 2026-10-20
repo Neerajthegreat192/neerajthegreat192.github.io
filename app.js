@@ -1067,8 +1067,11 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   if (!data || !data.callId) return;
   if (activeCallId === data.callId && !incomingDialog.hidden) return;
 
-  // 🆕 Foreground में in-app डायलॉग खोलने से पहले सिस्टम ट्रे नोटिफिकेशन हटाओ
-  if (isFromForegroundListener) {
+  // 🆕 lock screen / background में native ringtone को बिल्कुल मत छेड़ो
+  const appIsVisible = !document.hidden && document.visibilityState === 'visible';
+
+  // केवल app visible हो तभी native tray/ringtone clear करो
+  if (isFromForegroundListener && appIsVisible) {
     try { clearOngoingCallNotification(); } catch(e) {}
   }
 
@@ -1085,8 +1088,10 @@ function handleIncomingCallNotification(data, isFromForegroundListener = false) 
   $('incomingName').textContent = currentCallTargetName + (isAudioOnlyCall ? (currentLang==='hi'?' (ऑडियो कॉल)...':' (Audio Call)...') : (currentLang==='hi'?' (वीडियो कॉल)...':' (Video Call)...'));
   incomingDialog.hidden = false;
 
-  // 🆕 Web/browser पर भी incoming ringtone बजाओ
-  try { startIncomingRingtone(); } catch(e) {}
+  // 🆕 web ringtone भी सिर्फ app visible हो तभी — lock screen पर native ही रिंग करे
+  if (appIsVisible) {
+    try { startIncomingRingtone(); } catch(e) {}
+  }
 
   update(ref(db, `call_sessions/${activeCallId}`), { status: 'ringing' }).catch(()=>{});
 }
@@ -4267,9 +4272,12 @@ function listenForIncoming() {
         return;
       }
       handleIncomingCallNotification(data, true);
-      await update(ref(db, `users/${myUserId}`), { activeCallId: data.callId }).catch(()=>{});
-      await update(incomingRef, { status: 'ringing' }).catch(()=>{});
-      await update(ref(db, `call_sessions/${data.callId}`), { status: 'ringing' }).catch(()=>{});
+await update(ref(db, `users/${myUserId}`), { activeCallId: data.callId }).catch(()=>{});
+// 🆕 lock screen पर native को रिंग करने दो, inbox को ringing पर मत बदलो
+if (!document.hidden) {
+  await update(incomingRef, { status: 'ringing' }).catch(()=>{});
+}
+await update(ref(db, `call_sessions/${data.callId}`), { status: 'ringing' }).catch(()=>{});
     } else if (data.status === 'cancelled' || data.status === 'ended') {
       clearOngoingCallNotification();
       if (!isCallConnected && currentCallType === 'incoming') {
