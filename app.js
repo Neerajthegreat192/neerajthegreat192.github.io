@@ -661,17 +661,25 @@ async function setupNativePushListeners() {
   });
 
   push.addListener('pushNotificationReceived', (notification) => {
-    const data = notification.data || {};
-    if (data.callId && data.callId !== 'null' && String(data.callId).trim() !== '') {
-      handleIncomingCallNotification(data, false);
-    }
-  });
+  const data = notification.data || {};
+  // 🆕 CHAT_ prefix वाली callId और isChat=true वाले push को call न समझें
+  const rawCallId = data.callId ? String(data.callId) : '';
+  const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined' && !rawCallId.startsWith('CHAT_') && !data.isChat;
+  if (isRealCall) {
+    handleIncomingCallNotification(data, false);
+  }
+});
 
   push.addListener('pushNotificationActionPerformed', (action) => {
     const data = action.notification?.data || {};
     const rawCallId = data?.callId;
-    const isRealCall = rawCallId && rawCallId !== 'null' && rawCallId !== 'undefined' && String(rawCallId).trim() !== '';
-
+const isRealCall = rawCallId
+  && rawCallId !== 'null'
+  && rawCallId !== 'undefined'
+  && String(rawCallId).trim() !== ''
+  && !String(rawCallId).startsWith('CHAT_')   // 🆕
+  && !data.isChat;                            // 🆕
+     
     if (isRealCall) {
       if (action.actionId === 'ACTION_ACCEPT' || action.actionId === 'accept') {
         handleDirectAcceptCall(rawCallId);
@@ -3085,17 +3093,19 @@ async function sendChatMessagePush(targetId, textContent, roomId, msgId, mediaMe
 
     // 🆕 Chat push में अब callId नहीं — receiver इसे call नहीं समझेगा
     const payload = {
-      token,
-      title: myUserName,
-      body: textContent,
-      senderId: myUserId,
-      senderName: myUserName,
-      roomId: roomId,
-      messageId: msgId,
-      isChat: true,
-      chatTargetId: myUserId,      // receiver इस ID के साथ chat खोलेगा
-      chatTargetName: myUserName
-    };
+  token,
+  title: myUserName,
+  body: textContent,
+  callerName: myUserName,             // worker के लिए
+  callId: "CHAT_" + myUserId,         // 🆕 वापस जोड़ें — worker को notification trigger करने का संकेत
+  senderId: myUserId,
+  senderName: myUserName,
+  roomId: roomId,
+  messageId: msgId,
+  isChat: true,
+  chatTargetId: myUserId,
+  chatTargetName: myUserName
+};
 
     if (mediaMeta) {
       payload.mediaType = mediaMeta.mediaType;
@@ -4561,22 +4571,22 @@ $('btnReject').onclick = async () => {
 
   const wasLocked = isDeviceLocked();
   if (!wasLocked) {
-    activeCallId = null;
-    isCallConnected = false;
-    isAudioOnlyCall = false;
-    currentCallTargetId = null;
-    currentCallTargetName = null;
-    currentCallType = 'outgoing';
-    callJoinedViaDirectAccept = false;
+  activeCallId = null;
+  isCallConnected = false;
+  isAudioOnlyCall = false;
+  currentCallTargetId = null;
+  currentCallTargetName = null;
+  currentCallType = 'outgoing';
+  callJoinedViaDirectAccept = false;
 
-    callScreen.hidden = true;
-    chatScreen.hidden = true;
-    lobbyScreen.hidden = false;
-  } else {
-    callScreen.hidden = true;
-    chatScreen.hidden = true;
-    lobbyScreen.hidden = true;
-  }
+  callScreen.hidden = true;   callScreen.style.display = 'none';
+  chatScreen.hidden = true;   chatScreen.style.display = 'none';
+  lobbyScreen.hidden = false; lobbyScreen.style.display = '';
+} else {
+  callScreen.hidden = true;   callScreen.style.display = 'none';
+  chatScreen.hidden = true;   chatScreen.style.display = 'none';
+  lobbyScreen.hidden = true;  lobbyScreen.style.display = 'none';
+}
 
   closeIfLocked();
 };
@@ -5656,24 +5666,35 @@ async function hangup(silent = false) {
     if ($('ongoingCallBanner')) $('ongoingCallBanner').hidden = true;
 
     const wasLocked = isDeviceLocked();
-    if (!wasLocked) {
-      callScreen.hidden = true;
-      incomingDialog.hidden = true;
-      outgoingDialog.hidden = true;
-      if (currentChatTargetId) {
-        lobbyScreen.hidden = true;
-        chatScreen.hidden = false;
-      } else {
-        chatScreen.hidden = true;
-        lobbyScreen.hidden = false;
-      }
-    } else {
-      callScreen.hidden = true;
-      incomingDialog.hidden = true;
-      outgoingDialog.hidden = true;
-      chatScreen.hidden = true;
-      lobbyScreen.hidden = true;
-    }
+
+// 🆕 helper — hidden + inline display दोनों reset (inline display [hidden] को override करता है)
+const hideScreen = (el) => {
+  if (!el) return;
+  el.hidden = true;
+  el.style.display = 'none';
+};
+const showScreen = (el, displayValue = '') => {
+  if (!el) return;
+  el.hidden = false;
+  el.style.display = displayValue;
+};
+
+hideScreen(callScreen);
+hideScreen(incomingDialog);
+hideScreen(outgoingDialog);
+
+if (!wasLocked) {
+  if (currentChatTargetId) {
+    hideScreen(lobbyScreen);
+    showScreen(chatScreen, 'flex');
+  } else {
+    hideScreen(chatScreen);
+    showScreen(lobbyScreen, '');   // lobby अपनी default CSS ले
+  }
+} else {
+  hideScreen(chatScreen);
+  hideScreen(lobbyScreen);
+}
     isHangingUp = false;
     closeIfLocked();
   } catch(err) {
