@@ -2214,6 +2214,53 @@ video::-webkit-media-controls-overlay-play-button {
 
 /* ──────────────── [SECTION 24: APK OVERRIDES] — END ────────────────────── */
 
+/* =========================================================================
+   🆕 [SECTION 25: GAME BUTTON DISABLED STATES & LANDSCAPE FIX]
+   ========================================================================= */
+
+/* 🆕 Disabled quiz/ríddle option buttons — clear visual feedback */
+.quiz-opt-btn:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 🆕 Disabled eval buttons (रिडल hard mode में parent के) */
+.eval-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 🆕 Buzzer pressed के बाद — pulse animation बंद, faded look */
+.riddle-buzzer-btn:disabled {
+  animation: none !important;
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+/* 🆕 Landscape में quiz/riddle box overflow से बचाव */
+@media (orientation: landscape) and (max-height: 520px) {
+  .quiz-floating-box,
+  .riddle-box-extended {
+    min-height: auto !important;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .quiz-question,
+  .riddle-q-text {
+    font-size: 15px !important;
+    margin-top: 8px !important;
+    margin-bottom: 12px !important;
+  }
+  .quiz-options-grid {
+    margin-top: 8px !important;
+    margin-bottom: 8px !important;
+  }
+}
+
+/* ──────────── [SECTION 25: DISABLED STATES] — END ────────────── */
 
 /* =========================================================================
    🔴🔴🔴 [END: style.css — v1.24.3 (PART 2)] 🔴🔴🔴

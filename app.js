@@ -4614,6 +4614,21 @@ $('btnReject').onclick = async () => {
    🎯 Audio-only में earpiece, video mode में speaker
    ═══════════════════════════════════════════════════════════════════════ */
 
+// 🆕 सिर्फ वीडियो बंद — mode switch नहीं (Quiz/Riddle खोलने पर use होगा)
+function disableVideoOnly() {
+  try {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(t => { try { t.enabled = false; } catch(e) {} });
+    }
+    camEnabled = false;
+    const camBtnEl = $('camBtn');
+    if (camBtnEl) camBtnEl.classList.add('off');
+    if (activeCallId) {
+      update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
+    }
+  } catch(e) {}
+}
+
 function updateCallModeVisuals(isVoiceMode) {
   const voiceArea = $('voiceCallArea');
   const remoteGridEl = $('remoteGrid');
@@ -5515,11 +5530,8 @@ callScreen.addEventListener('click', e => {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 69: CALL CONTROLS (Mic/Cam/Speaker/Flip/Hang)] — START
-   📌 क्या: mic toggle, cam toggle, speaker toggle, camera flip,
-           hang button
-   🔗 कहाँ से: call screen control bar
-   ⚠️ डिपेंड: localStream, peerConnections, hardware bridge
-   🎯 सभी controls Firebase में sync (camEnabled, micEnabled)
+   📌 क्या: mic toggle, cam toggle (सिर्फ अपना), speaker toggle, camera flip, hang
+   🆕 camBtn सिर्फ local video track on/off — mode switch नहीं, remote नहीं छूता
    ═══════════════════════════════════════════════════════════════════════ */
 
 $('micBtn').onclick = async (e) => {
@@ -5533,8 +5545,65 @@ $('micBtn').onclick = async (e) => {
 
 $('camBtn').onclick = async (e) => {
   e.stopPropagation();
-  if (isAudioOnlyCall) toggleVideoTrackMode(true);
-  else toggleVideoTrackMode(!camEnabled);
+
+  // 🐛 DEBUG — console में देखें क्या state है
+  console.log('[camBtn] CLICKED | isAudioOnlyCall:', isAudioOnlyCall,
+              '| camEnabled:', camEnabled,
+              '| remoteGrid display:', remoteGrid ? remoteGrid.style.display : 'n/a',
+              '| voiceCallArea hidden:', $('voiceCallArea') ? $('voiceCallArea').hidden : 'n/a');
+
+  // 🆕 Voice mode में camBtn से video वापस मत लाओ — top audioModeBtn use करें
+  if (isAudioOnlyCall) {
+    toast(currentLang === 'hi'
+      ? 'वीडियो चालू करने के लिए ऊपर का मोड बटन दबाएँ'
+      : 'Use the top mode button to enable video');
+    return;
+  }
+
+  // 🆕 सिर्फ local video track on/off
+  camEnabled = !camEnabled;
+  try {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(t => {
+        try { t.enabled = camEnabled; } catch(err) {}
+      });
+    }
+  } catch(err) {}
+
+  // सिर्फ बटन का visual
+  $('camBtn').classList.toggle('off', !camEnabled);
+
+  // Firebase में सिर्फ camEnabled flag — remote peer overlay दिखाएगा
+  if (activeCallId) {
+    update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled }).catch(()=>{});
+  }
+
+  // 🆕 Safety check — कहीं भी remoteGrid छिपा या voice UI खुला न हो जाए
+  // (अगर कोई दूसरा code path गलती से इन्हें change कर दे तो यहाँ recover हो जाएँगे)
+  setTimeout(() => {
+    if (!isAudioOnlyCall) {
+      if (remoteGrid && remoteGrid.style.display === 'none') {
+        console.warn('[camBtn] FIXING: remoteGrid was hidden unexpectedly — restoring');
+        remoteGrid.style.display = 'grid';
+      }
+      const vca = $('voiceCallArea');
+      if (vca && !vca.hidden) {
+        console.warn('[camBtn] FIXING: voiceCallArea was visible unexpectedly — hiding');
+        vca.hidden = true;
+      }
+      if (pipWrap && pipWrap.style.display === 'none') {
+        console.warn('[camBtn] FIXING: pipWrap was hidden — restoring');
+        pipWrap.style.display = 'block';
+        pipWrap.style.opacity = '1';
+      }
+    }
+  }, 100);
+
+  // 🐛 DEBUG — after state
+  console.log('[camBtn] AFTER | camEnabled:', camEnabled,
+              '| isAudioOnlyCall:', isAudioOnlyCall,
+              '| remoteGrid display:', remoteGrid ? remoteGrid.style.display : 'n/a');
+
   scheduleAutoHide();
 };
 
@@ -6321,10 +6390,13 @@ $('funModeTray').onclick = (e) => {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 78: KIDS QUIZ GAME] — START
-   📌 क्या: LKG/UKG quiz — random सवाल, options, 15s timer,
+   📌 क्या: LKG/UKG quiz — random सवाल, options, 20s timer,
            Firebase sync (दोनों तरफ same question दिखे)
+   🆕 Parent/kid split: जिसने पहले खोला वही parent — Next + Category सिर्फ उसके पास
+   🆕 Timeout पर सही जवाब auto-green (दोनों तरफ)
+   🆕 Quiz पहली बार खुलते ही दोनों तरफ वीडियो बंद (mode switch नहीं)
    🔗 कहाँ से: btnKidsQuiz, nextQuizBtn, quizCategorySelect
-   ⚠️ डिपेंड: questions.json (external), playCheerSound/playOopsSound
+   ⚠️ डिपेंड: questions.json (external), playCheerSound/playOopsSound, disableVideoOnly
    🎯 Firebase: call_sessions/{id}/quiz_state
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -6344,7 +6416,7 @@ async function fetchQuizQuestions() {
   return null;
 }
 
-function startQuizTimerBar(durationSec = 15) {
+function startQuizTimerBar(durationSec = 20) {
   stopQuizTimerBar();
   const bar = $('quizTimerBar');
   if (!bar) return;
@@ -6363,6 +6435,11 @@ function startQuizTimerBar(durationSec = 15) {
       playOopsSound();
       toast(currentLang === 'hi' ? '⏱ समय समाप्त हो गया!' : '⏱ Time up!');
       document.querySelectorAll('.quiz-opt-btn').forEach(b => { b.disabled = true; });
+      // 🆕 Firebase को सूचित — दोनों तरफ सही जवाब green दिखेगा
+      if (activeCallId) {
+        update(ref(db, `call_sessions/${activeCallId}/quiz_state`),
+          { timedOut: true, updatedAt: Date.now() }).catch(()=>{});
+      }
     }
   }, 1000);
 }
@@ -6380,9 +6457,22 @@ async function sendQuizQuestion(category = 'lkg_ukg') {
   const list = data[category];
   const randomQ = list[Math.floor(Math.random() * list.length)];
   const quizRef = ref(db, `call_sessions/${activeCallId}/quiz_state`);
+
+  // 🆕 startedBy preserve — जिसने पहले खोला वही parent रहेगा
+  const curSnap = await get(quizRef);
+  const cur = curSnap.val() || {};
+  const keepStartedBy = cur.startedBy || myUserId;
+
   await set(quizRef, {
-    category, question: randomQ.q, options: randomQ.opts, answer: randomQ.ans,
-    selectedAnswer: null, isCorrect: null, updatedAt: Date.now()
+    category,
+    question: randomQ.q,
+    options: randomQ.opts,
+    answer: randomQ.ans,
+    selectedAnswer: null,
+    isCorrect: null,
+    timedOut: false,
+    startedBy: keepStartedBy,
+    updatedAt: Date.now()
   });
 }
 
@@ -6395,45 +6485,74 @@ function initKidsQuizListener() {
     const box = $('kidsQuizBox');
     if (!box) return;
     if (!qState || !qState.question) { box.hidden = true; stopQuizTimerBar(); return; }
+
+    const wasHidden = box.hidden;
     box.hidden = false;
     $('funModeTray').hidden = true;
     controlsBar.classList.add('fade-out');
 
+    // 🆕 Quiz पहली बार खुलते ही दोनों तरफ वीडियो बंद (mode switch नहीं)
+    if (wasHidden && typeof disableVideoOnly === 'function') {
+      disableVideoOnly();
+    }
+
+    // 🆕 Parent/kid split
+    const amIParent = qState.startedBy ? (qState.startedBy === myUserId) : isCaller;
+
+    // Next button + Category dropdown सिर्फ parent के पास
+    const nextBtn = $('nextQuizBtn');
+    if (nextBtn) nextBtn.hidden = !amIParent;
+    const catSelect = $('quizCategorySelect');
+    if (catSelect) {
+      catSelect.hidden = !amIParent;
+      if (qState.category) catSelect.value = qState.category;
+    }
+
     const qText = $('quizQuestionText');
     if (qText) qText.textContent = qState.question;
-    const catSelect = $('quizCategorySelect');
-    if (catSelect && qState.category) catSelect.value = qState.category;
 
     const optsArea = $('quizOptionsArea');
     if (!optsArea) return;
     optsArea.innerHTML = '';
 
-    if (!qState.selectedAnswer) startQuizTimerBar(15);
+    // 🆕 Answer revealed = selected या timeout
+    const answerRevealed = !!qState.selectedAnswer || !!qState.timedOut;
+    if (!answerRevealed) startQuizTimerBar(20);
     else stopQuizTimerBar();
 
     (qState.options || []).forEach(opt => {
       const btn = document.createElement('button');
       btn.className = 'quiz-opt-btn';
       btn.textContent = opt;
-      if (qState.selectedAnswer) {
+
+      if (answerRevealed) {
+        // 🆕 Timeout या selection के बाद — सही जवाब हमेशा green
         if (opt === qState.answer) {
           btn.style.background = '#10b981';
           btn.style.color = '#fff';
           btn.style.borderColor = '#10b981';
-        } else if (opt === qState.selectedAnswer && !qState.isCorrect) {
+        } else if (qState.selectedAnswer === opt && !qState.isCorrect) {
           btn.style.background = '#ef4444';
           btn.style.color = '#fff';
           btn.style.borderColor = '#ef4444';
+        } else if (qState.timedOut) {
+          // 🆕 Timeout पर बाकी options grey out
+          btn.style.opacity = '0.55';
         }
         btn.disabled = true;
+      } else {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          stopQuizTimerBar();
+          const isRight = (opt === qState.answer);
+          if (isRight) playCheerSound(); else playOopsSound();
+          update(quizRef, {
+            selectedAnswer: opt,
+            isCorrect: isRight,
+            timedOut: false
+          }).catch(()=>{});
+        };
       }
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        stopQuizTimerBar();
-        const isRight = (opt === qState.answer);
-        if (isRight) playCheerSound(); else playOopsSound();
-        update(quizRef, { selectedAnswer: opt, isCorrect: isRight }).catch(()=>{});
-      };
       optsArea.appendChild(btn);
     });
   });
@@ -6481,8 +6600,12 @@ $('btnKidsQuiz').onclick = (e) => {
    🟦 [SECTION 79: RIDDLE & GK GAME] — START
    📌 क्या: Riddles/GK — easy mode (MCQ, 20s timer) + hard mode
            (buzzer + parent eval), score 10 तक
+   🆕 Parent/kid split: जिसने पहले खोला वही parent
+   🆕 Kid के पास: Easy = options, Hard = सिर्फ buzzer
+   🆕 Parent के पास: Next, Mode select, Show Answer, Eval (Hard में)
+   🆕 Riddle खुलते ही दोनों तरफ वीडियो बंद (mode switch नहीं)
    🔗 कहाँ से: trayBtnRiddleGk, riddle controls
-   ⚠️ डिपेंड: riddle.json (external) + fallback defaults
+   ⚠️ डिपेंड: riddle.json (external), disableVideoOnly
    🎯 Firebase: call_sessions/{id}/riddle_state
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -6536,7 +6659,7 @@ function startRiddleTimerBar(durationSec = 20) {
         const riddleRef = ref(db, `call_sessions/${activeCallId}/riddle_state`);
         get(riddleRef).then(snap => {
           const st = snap.val();
-          if (st && !st.answered) {
+          if (st && !st.answered && !st.timedOut) {
             update(riddleRef, {
               answered: true,
               timedOut: true,
@@ -6565,26 +6688,31 @@ async function sendRiddleQuestion(mode = 'easy_mode') {
   const randomQ = list[Math.floor(Math.random() * list.length)];
   const riddleRef = ref(db, `call_sessions/${activeCallId}/riddle_state`);
 
-  get(riddleRef).then(snap => {
-    const cur = snap.val() || {};
-    let rScore = cur.rightScore || 0;
-    let wScore = cur.wrongScore || 0;
+  const curSnap = await get(riddleRef);
+  const cur = curSnap.val() || {};
+  let rScore = cur.rightScore || 0;
+  let wScore = cur.wrongScore || 0;
 
-    // 10 सवाल हो गए → reset
-    if (rScore + wScore >= 10) { rScore = 0; wScore = 0; }
+  // 10 सवाल हो गए → reset
+  if (rScore + wScore >= 10) { rScore = 0; wScore = 0; }
 
-    set(riddleRef, {
-      mode,
-      question: randomQ.q || randomQ.question,
-      options: randomQ.opts || randomQ.options || null,
-      answer: randomQ.ans || randomQ.answer,
-      answered: false,
-      buzzerPressed: false,
-      timedOut: false,
-      rightScore: rScore,
-      wrongScore: wScore,
-      updatedAt: Date.now()
-    });
+  // 🆕 startedBy preserve — जिसने पहले खोला वही parent
+  const keepStartedBy = cur.startedBy || myUserId;
+
+  await set(riddleRef, {
+    mode,
+    question: randomQ.q || randomQ.question,
+    options: randomQ.opts || randomQ.options || null,
+    answer: randomQ.ans || randomQ.answer,
+    answered: false,
+    buzzerPressed: false,
+    timedOut: false,
+    selectedAnswer: null,
+    isCorrect: null,
+    rightScore: rScore,
+    wrongScore: wScore,
+    startedBy: keepStartedBy,
+    updatedAt: Date.now()
   });
 }
 
@@ -6599,12 +6727,29 @@ function initRiddleGkListener() {
     if (!box) return;
     if (!state || !state.question) { box.hidden = true; stopRiddleTimerBar(); return; }
 
+    const wasHidden = box.hidden;
     box.hidden = false;
     $('funModeTray').hidden = true;
     controlsBar.classList.add('fade-out');
 
+    // 🆕 Riddle पहली बार खुलते ही दोनों तरफ वीडियो बंद (mode switch नहीं)
+    if (wasHidden && typeof disableVideoOnly === 'function') {
+      disableVideoOnly();
+    }
+
     $('riddleQuestionText').textContent = state.question;
-    $('riddleModeSelect').value = state.mode;
+
+    // 🆕 Parent/kid split
+    const amIParent = state.startedBy ? (state.startedBy === myUserId) : isCaller;
+
+    // Mode select + Next सिर्फ parent के पास
+    const modeSelect = $('riddleModeSelect');
+    if (modeSelect) {
+      modeSelect.hidden = !amIParent;
+      if (state.mode) modeSelect.value = state.mode;
+    }
+    const nextBtn = $('nextRiddleBtn');
+    if (nextBtn) nextBtn.hidden = !amIParent;
 
     const rScore = state.rightScore || 0;
     const wScore = state.wrongScore || 0;
@@ -6616,81 +6761,107 @@ function initRiddleGkListener() {
     const hardEvalArea = $('riddleHardEvalArea');
     const buzzerWrap = $('riddleBuzzerWrap');
     optsArea.innerHTML = '';
-    hardEvalArea.hidden = true;
-
-    // कौन parent है — admin या caller
-    const amIParent = isNeerajBadola(myUserName) || isCaller;
+    if (hardEvalArea) hardEvalArea.hidden = true;
+    if (buzzerWrap) buzzerWrap.hidden = true;
 
     if (rScore + wScore >= 10) {
       stopRiddleTimerBar();
-      if (buzzerWrap) buzzerWrap.hidden = true;
       optsArea.innerHTML = `<div style="text-align:center;font-size:16px;font-weight:800;color:#10b981;padding:15px;grid-column:1/-1;">🎉 मुकाबला समाप्त! सही: ${rScore}, गलत: ${wScore}</div>`;
       return;
     }
 
-    if (!state.answered && !state.timedOut && !state.buzzerPressed) {
+    const answerRevealed = state.answered || state.timedOut;
+    if (!answerRevealed && !state.buzzerPressed) {
       startRiddleTimerBar(20);
     } else {
       stopRiddleTimerBar();
     }
 
+    // ─────────────────────────────────────────────
+    // EASY MODE — MCQ
+    // ─────────────────────────────────────────────
     if (state.mode === 'easy_mode') {
-      if (buzzerWrap) buzzerWrap.hidden = true;
       if (state.options) {
         state.options.forEach(opt => {
           const btn = document.createElement('button');
           btn.className = 'quiz-opt-btn';
           btn.textContent = opt;
 
-          if (state.answered) {
+          if (answerRevealed) {
+            // सही जवाब green
             if (opt === state.answer) {
               btn.style.background = '#10b981'; btn.style.color = '#fff'; btn.style.borderColor = '#10b981';
             } else if (opt === state.selectedAnswer && !state.isCorrect) {
               btn.style.background = '#ef4444'; btn.style.color = '#fff'; btn.style.borderColor = '#ef4444';
+            } else if (state.timedOut) {
+              btn.style.opacity = '0.55';
             }
             btn.disabled = true;
+          } else {
+            // 🆕 Parent और kid दोनों click कर सकते हैं (जवाब चुनने का हक़ दोनों को)
+            btn.onclick = (e) => {
+              e.stopPropagation();
+              stopRiddleTimerBar();
+              const isRight = (opt === state.answer);
+              if (isRight) playCheerSound(); else playOopsSound();
+
+              update(riddleRef, {
+                answered: true,
+                selectedAnswer: opt,
+                isCorrect: isRight,
+                rightScore: isRight ? rScore + 1 : rScore,
+                wrongScore: !isRight ? wScore + 1 : wScore,
+                updatedAt: Date.now()
+              });
+            };
           }
-
-          btn.onclick = (e) => {
-            e.stopPropagation();
-            if (state.answered) return;
-            stopRiddleTimerBar();
-            const isRight = (opt === state.answer);
-            if (isRight) playCheerSound(); else playOopsSound();
-
-            update(riddleRef, {
-              answered: true,
-              selectedAnswer: opt,
-              isCorrect: isRight,
-              rightScore: isRight ? rScore + 1 : rScore,
-              wrongScore: !isRight ? wScore + 1 : wScore,
-              updatedAt: Date.now()
-            });
-          };
           optsArea.appendChild(btn);
         });
       }
     }
+    // ─────────────────────────────────────────────
+    // HARD MODE — Buzzer + Parent eval
+    // ─────────────────────────────────────────────
     else if (state.mode === 'hard_mode') {
-      if (buzzerWrap) buzzerWrap.hidden = false;
+      // 🆕 Buzzer सिर्फ kid के पास
+      if (buzzerWrap) buzzerWrap.hidden = amIParent;
 
+      // 🆕 Buzzer press के बाद disable (spam रोकें)
+      const buzzerBtn = $('riddleBuzzerBtn');
+      if (buzzerBtn) {
+        if (state.buzzerPressed || answerRevealed) {
+          buzzerBtn.disabled = true;
+          buzzerBtn.style.opacity = '0.5';
+          buzzerBtn.style.animation = 'none';
+        } else {
+          buzzerBtn.disabled = false;
+          buzzerBtn.style.opacity = '1';
+          buzzerBtn.style.animation = '';
+        }
+      }
+
+      // 🆕 Eval area सिर्फ parent के पास
       if (amIParent) {
         hardEvalArea.hidden = false;
         const ansLabel = $('riddleHiddenAnswer');
         const showAnsBtn = $('riddleShowAnswerBtn');
 
-        if (state.answered || state.timedOut) {
-          if(showAnsBtn) showAnsBtn.hidden = true;
-          ansLabel.hidden = false;
-          ansLabel.textContent = `उत्तर: ${state.answer}`;
-          ansLabel.style.color = state.isCorrect ? '#10b981' : '#ef4444';
+        if (answerRevealed) {
+          if (showAnsBtn) showAnsBtn.hidden = true;
+          if (ansLabel) {
+            ansLabel.hidden = false;
+            ansLabel.textContent = `उत्तर: ${state.answer}`;
+            ansLabel.style.color = state.isCorrect ? '#10b981' : (state.timedOut ? '#f59e0b' : '#ef4444');
+          }
           $('evalRightBtn').disabled = true;
           $('evalWrongBtn').disabled = true;
         } else {
-          ansLabel.hidden = true;
-          if(showAnsBtn) showAnsBtn.hidden = false;
-          ansLabel.textContent = `[गुप्त उत्तर]: ${state.answer}`;
-          ansLabel.style.color = '#f59e0b';
+          if (ansLabel) ansLabel.hidden = true;
+          if (showAnsBtn) showAnsBtn.hidden = false;
+          if (ansLabel) {
+            ansLabel.textContent = `[गुप्त उत्तर]: ${state.answer}`;
+            ansLabel.style.color = '#f59e0b';
+          }
           $('evalRightBtn').disabled = false;
           $('evalWrongBtn').disabled = false;
         }
@@ -6699,11 +6870,14 @@ function initRiddleGkListener() {
       }
     }
 
-    if (state.answered || state.timedOut) {
+    // 🆕 Result banner — दोनों तरफ
+    if (answerRevealed) {
       const info = document.createElement('div');
       info.style.cssText = 'margin-top:10px;font-size:14px;font-weight:800;text-align:center;grid-column:1/-1;';
       info.style.color = state.isCorrect ? '#10b981' : (state.timedOut ? '#f59e0b' : '#ef4444');
-      info.textContent = state.timedOut ? `⏱ समय समाप्त! उत्तर: ${state.answer}` : (state.isCorrect ? '🎉 सही जवाब!' : `❌ गलत! उत्तर: ${state.answer}`);
+      info.textContent = state.timedOut
+        ? `⏱ समय समाप्त! उत्तर: ${state.answer}`
+        : (state.isCorrect ? '🎉 सही जवाब!' : `❌ गलत! उत्तर: ${state.answer}`);
       optsArea.appendChild(info);
     }
   });
@@ -6757,8 +6931,16 @@ if ($('riddleBuzzerBtn')) {
   $('riddleBuzzerBtn').onclick = (e) => {
     e.stopPropagation();
     if (!activeCallId) return;
-    playMessageTickSound();
-    update(ref(db, `call_sessions/${activeCallId}/riddle_state`), { buzzerPressed: true }).catch(()=>{});
+    // 🆕 पहले से pressed/answered/timedOut हो तो न करें
+    if (activeCallId) {
+      const riddleRef = ref(db, `call_sessions/${activeCallId}/riddle_state`);
+      get(riddleRef).then(snap => {
+        const st = snap.val();
+        if (!st || st.buzzerPressed || st.answered || st.timedOut) return;
+        playMessageTickSound();
+        update(riddleRef, { buzzerPressed: true, updatedAt: Date.now() }).catch(()=>{});
+      });
+    }
   };
 }
 
