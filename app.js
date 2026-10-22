@@ -5150,12 +5150,13 @@ async function joinCallSession() {
     window.AndroidAudio.startCallForegroundService(currentCallTargetName || 'उपयोगकर्ता', isAudioOnlyCall ? 'ऑडियो कॉल' : 'वीडियो कॉल');
   }
 
-  // Fun mode listeners
+    // Fun mode listeners
   initKidsQuizListener();
   initRiddleGkListener();
   listenRemoteCanvas();
   listenWhiteboardAutoSync();
   listenTictactoeSession();
+  listenForSoundboard();
 
   const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
   onDisconnect(myMemberRef).remove().catch(()=>{});
@@ -7334,12 +7335,6 @@ $('trayBtnTictactoe').onclick = (e) => {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 82: CLEANUP KIDS MODULES (Base)] — START
-   📌 क्या: hangup पर सभी games (quiz/riddle/whiteboard/ttt) cleanup —
-           listeners unsub + UI hide + canvas clear
-   🔗 कहाँ से: hangup() (Section 70)
-   ⚠️ डिपेंड: quizSessionUnsub, riddleSessionUnsub, canvasSessionUnsub,
-              whiteboardSyncUnsub, tttSessionUnsub
-   🎯 Ludo का cleanup बाद में override pattern से जोड़ा जाएगा
    ═══════════════════════════════════════════════════════════════════════ */
 
 function cleanupKidsModules() {
@@ -7355,7 +7350,7 @@ function cleanupKidsModules() {
   const rBox = $('kidsRiddleBox'); if (rBox) rBox.hidden = true;
   const wb = $('kidsWhiteboardModal'); if (wb) wb.hidden = true;
   const ttt = $('kidsTictactoeBox'); if (ttt) ttt.hidden = true;
-  if ($('funModeTray'))$('funModeTray').hidden = true;
+  if ($('funModeTray')) $('funModeTray').hidden = true;
   if (ctx && canvasEl) ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 }
 
@@ -7364,11 +7359,6 @@ function cleanupKidsModules() {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 83: LUDO GAME MODULE] — START
-   📌 क्या: पूरा Ludo board game — 2 player (r/y), tokens, dice,
-           capture, home, auto-move, remote animation
-   🔗 कहाँ से: trayBtnLudo, ludoRollBtn, ludoResetBtn, closeLudoBtn
-   ⚠️ डिपेंड: Firebase ludo_state, playCheerSound/playOopsSound/playMessageTickSound
-   🎯 Auto video-off + speaker-on जब game खुले
    ═══════════════════════════════════════════════════════════════════════ */
 
 // --- Ludo Constants ---
@@ -7380,6 +7370,8 @@ const LUDO_HOME_POS = { r:[7,6], g:[6,7], y:[7,8], b:[8,7] };
 const LUDO_YARD_POS = { r: [[1,1],[1,4],[4,1],[4,4]], g: [[1,10],[1,13],[4,10],[4,13]], y: [[10,10],[10,13],[13,10],[13,13]], b: [[10,1],[10,4],[13,1],[13,4]] };
 
 let ludoState = null;
+let ludoTimerInterval = null;
+const LUDO_TURN_TIMEOUT = 15000; // 15 सेकंड का टाइमर
 let ludoSessionUnsub = null;
 let ludoMyColor = 'r';
 let ludoOpponentColor = 'y';
@@ -7462,7 +7454,7 @@ function ludoYardCell(color, r, c) {
   return cls;
 }
 
-// --- Render Tokens (सटीक अलाइनमेंट के साथ) ---
+// --- Render Tokens ---
 function renderLudoTokens() {
   const boardEl = $('ludoBoard');
   if (!boardEl) return;
@@ -7557,7 +7549,6 @@ async function startOrToggleLudo() {
     return;
   }
 
-  // दोनों का वीडियो ऑफ + लाउडस्पीकर चालू
   if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = false);
   if (typeof camEnabled !== 'undefined') camEnabled = false;
   if (typeof updateCallModeVisuals === 'function') updateCallModeVisuals(true);
@@ -7604,7 +7595,7 @@ function listenLudoSession() {
 
     if (box.hidden) {
       box.hidden = false;
-      if ($('funModeTray'))$('funModeTray').hidden = true;
+      if ($('funModeTray')) $('funModeTray').hidden = true;
       if (typeof controlsBar !== 'undefined' && controlsBar) controlsBar.classList.add('fade-out');
 
       if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = false);
@@ -7666,10 +7657,48 @@ function updateLudoUI() {
     diceBox.classList.remove('hot');
   }
 
+  startLudoTimer();
   maybeLudoAutoMove();
 }
 
 // --- Gameplay Actions ---
+
+function startLudoTimer() {
+  if (ludoTimerInterval) clearInterval(ludoTimerInterval);
+  const timerEl = $('ludoTimerDisplay');
+  if (!timerEl || !ludoState || ludoState.gameOver) return;
+
+  ludoTimerInterval = setInterval(() => {
+    if (!ludoState || ludoState.gameOver || ludoAnimating) return;
+    
+    const elapsed = Date.now() - (ludoState.updatedAt || Date.now());
+    const remaining = Math.max(0, LUDO_TURN_TIMEOUT - elapsed);
+    const seconds = Math.ceil(remaining / 1000);
+    
+    timerEl.textContent = `${seconds}s`;
+    timerEl.classList.toggle('urgent', seconds <= 5);
+
+    if (remaining <= 0) {
+      clearInterval(ludoTimerInterval);
+      if (ludoState.turn === ludoMyColor) {
+        ludoPassTurn();
+      }
+    }
+  }, 200);
+}
+
+async function ludoPassTurn() {
+  if (!activeCallId || !ludoState || ludoAnimating) return;
+  await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
+    turn: ludoOpponentColor,
+    dice: null,
+    phase: 'roll',
+    consecutiveSixes: 0,
+    lastMove: { color: ludoMyColor, skip: true, ts: Date.now() },
+    updatedAt: Date.now()
+  });
+}
+
 async function ludoRollDice() {
   if (!ludoState || ludoState.turn !== ludoMyColor || ludoState.phase !== 'roll' || ludoState.gameOver || ludoAnimating) return;
 
@@ -7682,43 +7711,46 @@ async function ludoRollDice() {
 
   const diceBox = $('ludoDiceBox');
   if (diceBox) {
-    diceBox.classList.add('rolling');
-    setTimeout(() => diceBox.classList.remove('rolling'), 550);
+    diceBox.classList.add('ludo-dice-rolling');
+    setTimeout(() => diceBox.classList.remove('ludo-dice-rolling'), 500);
   }
 
   const roll = 1 + Math.floor(Math.random() * 6);
   const newSixes = roll === 6 ? (ludoState.consecutiveSixes + 1) : 0;
 
-  // लगातार 3 छक्के = turn forfeit
   if (roll === 6 && newSixes >= 3) {
     await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
       dice: roll, consecutiveSixes: 0, phase: 'roll',
-      turn: ludoNextColor(ludoMyColor), updatedAt: Date.now(),
+      turn: ludoOpponentColor, updatedAt: Date.now(),
       lastMove: { color: ludoMyColor, skip: true, ts: Date.now() }
     });
     return;
   }
 
-  let movable = false;
-  for (let i=0; i<4; i++) if (ludoCanMove(ludoMyColor, i, roll)) movable = true;
+  let movableCount = 0;
+  for (let i=0; i<4; i++) if (ludoCanMove(ludoMyColor, i, roll)) movableCount++;
 
   await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
     dice: roll, consecutiveSixes: newSixes,
-    phase: movable ? 'move' : 'roll',
-    lastMove: { color: ludoMyColor, skip: !movable, ts: Date.now() },
+    phase: movableCount > 0 ? 'move' : 'roll',
+    lastMove: { color: ludoMyColor, skip: movableCount === 0, ts: Date.now() },
     updatedAt: Date.now()
   });
 
-  if (!movable) {
+  if (movableCount === 0) {
     setTimeout(() => {
-      if (ludoState && ludoState.turn === ludoMyColor) {
-        update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
-          turn: ludoNextColor(ludoMyColor), dice: null, consecutiveSixes: 0, phase: 'roll', updatedAt: Date.now()
-        }).catch(()=>{});
+      if (ludoState && ludoState.turn === ludoMyColor && ludoState.phase === 'roll') {
+        ludoPassTurn();
       }
-    }, 1200);
-  } else {
-    setTimeout(() => maybeLudoAutoMove(), 100);
+    }, 1500);
+  } else if (movableCount === 1) {
+    setTimeout(() => {
+      let idxToMove = -1;
+      for (let i=0; i<4; i++) if (ludoCanMove(ludoMyColor, i, roll)) idxToMove = i;
+      if (idxToMove !== -1 && ludoState && ludoState.turn === ludoMyColor && ludoState.phase === 'move') {
+        ludoTryMove(idxToMove);
+      }
+    }, 1000);
   }
 }
 
@@ -7734,13 +7766,11 @@ async function ludoTryMove(tokenIdx) {
 
   ludoVisualTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
 
-  // Yard से बाहर आने पर पहला step
   if (currentRel === -1) {
     ludoVisualTokens[ludoMyColor][tokenIdx] = 0;
     renderLudoTokens();
     await new Promise(r => setTimeout(r, 300));
   } else {
-    // Step-by-step animation
     for (let r = currentRel + 1; r <= finalRel; r++) {
       ludoVisualTokens[ludoMyColor][tokenIdx] = r;
       renderLudoTokens();
@@ -7752,7 +7782,6 @@ async function ludoTryMove(tokenIdx) {
   newTokens[ludoMyColor][tokenIdx] = finalRel;
   let captured = 0;
 
-  // Capture check (safe cells पर capture नहीं होगा)
   if (finalRel >= 0 && finalRel <= 50) {
     const myGlobalIdx = ludoAbsLoopIdx(ludoMyColor, finalRel);
     if (!LUDO_SAFE_IDX.includes(myGlobalIdx)) {
@@ -7808,38 +7837,45 @@ async function animateLudoRemoteMove(move, oldTokens) {
 }
 
 // --- Events Connection ---
-if ($('ludoRollBtn')) {$('ludoRollBtn').onclick = (e) => {
+if ($('ludoRollBtn')) {
+  $('ludoRollBtn').onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
     ludoRollDice();
   };
 }
 
-if ($('closeLudoBtn'))$('closeLudoBtn').onclick = (e) => {
-  e.stopPropagation();
-  if ($('kidsLudoBox'))$('kidsLudoBox').hidden = true;
-};
+if ($('closeLudoBtn')) {
+  $('closeLudoBtn').onclick = (e) => {
+    e.stopPropagation();
+    if ($('kidsLudoBox')) $('kidsLudoBox').hidden = true;
+    if (ludoTimerInterval) clearInterval(ludoTimerInterval);
+  };
+}
 
-if ($('ludoResetBtn'))$('ludoResetBtn').onclick = async (e) => {
-  e.stopPropagation();
-  if (confirm(currentLang === 'hi' ? "क्या आप लूडो गेम को रीसेट करके नया शुरू करना चाहते हैं?" : "Do you want to reset and start a new Ludo game?")) {
-    if (activeCallId) {
-      await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
-        active: true, turn: 'r', dice: null, phase: 'roll', consecutiveSixes: 0,
-        tokens: { r: [-1,-1,-1,-1], y: [-1,-1,-1,-1] },
-        gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
-      });
+if ($('ludoResetBtn')) {
+  $('ludoResetBtn').onclick = async (e) => {
+    e.stopPropagation();
+    if (confirm(currentLang === 'hi' ? "क्या आप लूडो गेम को रीसेट करके नया शुरू करना चाहते हैं?" : "Do you want to reset and start a new Ludo game?")) {
+      if (activeCallId) {
+        await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
+          active: true, turn: 'r', dice: null, phase: 'roll', consecutiveSixes: 0,
+          tokens: { r: [-1,-1,-1,-1], y: [-1,-1,-1,-1] },
+          gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
+        });
+      }
     }
-  }
-};
+  };
+}
 
 window.addEventListener('resize', () => {
   if ($('kidsLudoBox') && !$('kidsLudoBox').hidden) renderLudoTokens();
 });
 
-if ($('trayBtnLudo')) {$('trayBtnLudo').onclick = (e) => {
+if ($('trayBtnLudo')) {
+  $('trayBtnLudo').onclick = (e) => {
     e.stopPropagation();
-    if ($('funModeTray'))$('funModeTray').hidden = true;
+    if ($('funModeTray')) $('funModeTray').hidden = true;
     startOrToggleLudo();
     if (typeof scheduleAutoHide === 'function') scheduleAutoHide();
   };
@@ -7850,23 +7886,17 @@ if ($('trayBtnLudo')) {$('trayBtnLudo').onclick = (e) => {
 
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 84: FINAL OVERRIDES (Ludo Hooks into Cleanup & Join)] — START
-   📌 क्या: Ludo module के लिए cleanup और join hooks — bina base functions
-           को modify किए, override pattern से जोड़ना
-   🔗 कहाँ से: Module load time (initApp से पहले)
-   ⚠️ डिपेंड: cleanupKidsModules (Section 82), joinCallSession (Section 63)
-   🎯 दोनों function declarations हैं — reassignment काम करता है
    ═══════════════════════════════════════════════════════════════════════ */
 
-// cleanupKidsModules को wrap करो — Ludo का cleanup भी जोड़ो
 const originalLudoCleanup = typeof cleanupKidsModules === 'function' ? cleanupKidsModules : null;
 cleanupKidsModules = function() {
   if (originalLudoCleanup) originalLudoCleanup();
   if (ludoSessionUnsub) { ludoSessionUnsub(); ludoSessionUnsub = null; }
+  if (ludoTimerInterval) { clearInterval(ludoTimerInterval); ludoTimerInterval = null; }
   const lBox = $('kidsLudoBox');
   if (lBox) lBox.hidden = true;
 };
 
-// joinCallSession को wrap करो — Ludo session listener भी जोड़ो
 const originalJoinCallSession = typeof joinCallSession === 'function' ? joinCallSession : null;
 joinCallSession = async function() {
   if (originalJoinCallSession) await originalJoinCallSession();
@@ -7879,6 +7909,145 @@ joinCallSession = async function() {
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 85: FILE END MARKER]
    ═══════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟨 [SECTION 86: FUN SOUNDBOARD ENGINE] — START
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let soundboardSessionUnsub = null;
+let lastPlayedSoundTs = 0;
+
+function playSynthesizedSound(type) {
+  try {
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    if (type === 'clap') {
+      for(let i=0; i<3; i++) {
+        const bufferSize = ctx.sampleRate * 0.1;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let j = 0; j < bufferSize; j++) data[j] = Math.random() * 2 - 1;
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass'; filter.frequency.value = 1000;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.5, now + i*0.15);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + i*0.15 + 0.1);
+        noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+        noise.start(now + i*0.15);
+      }
+    } else if (type === 'drum') {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, now);
+      osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.5);
+      gain.gain.setValueAtTime(1, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now); osc.stop(now + 0.5);
+    } else if (type === 'boing') {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(200, now + 0.4);
+      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now); osc.stop(now + 0.4);
+    } else if (type === 'tada') {
+      [523.25, 659.25, 783.99].forEach((freq, idx) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+        gain.gain.setValueAtTime(0.15, now + idx * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.1 + 0.3);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now + idx * 0.1); osc.stop(now + idx * 0.1 + 0.3);
+      });
+    } else if (type === 'fail') {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, now);
+      osc.frequency.linearRampToValueAtTime(150, now + 1.0);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now); osc.stop(now + 1.0);
+    } else if (type === 'laugh') {
+      for(let i=0; i<5; i++) {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(500 + Math.random()*200, now + i*0.15);
+        gain.gain.setValueAtTime(0.3, now + i*0.15);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + i*0.15 + 0.1);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now + i*0.15); osc.stop(now + i*0.15 + 0.1);
+      }
+    }
+  } catch(e) { console.warn('Sound error', e); }
+}
+
+document.querySelectorAll('.sound-btn').forEach(btn => {
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    if (!activeCallId) return;
+    const soundType = btn.dataset.sound;
+    playSynthesizedSound(soundType);
+    update(ref(db, `call_sessions/${activeCallId}/soundboard_event`), {
+      sound: soundType,
+      sender: myUserId,
+      ts: Date.now()
+    }).catch(()=>{});
+  };
+});
+
+function listenForSoundboard() {
+  if (!activeCallId) return;
+  if (soundboardSessionUnsub) soundboardSessionUnsub();
+  
+  const sbRef = ref(db, `call_sessions/${activeCallId}/soundboard_event`);
+  soundboardSessionUnsub = onValue(sbRef, snap => {
+    const data = snap.val();
+    if (!data || !data.ts) return;
+    
+    if (data.sender !== myUserId && data.ts > lastPlayedSoundTs) {
+      lastPlayedSoundTs = data.ts;
+      playSynthesizedSound(data.sound);
+    }
+  });
+}
+
+if ($('btnSoundboard')) {
+  $('btnSoundboard').onclick = (e) => {
+    e.stopPropagation();
+    $('funModeTray').hidden = true;
+    $('soundboardTray').hidden = false;
+    controlsBar.classList.add('fade-out');
+  };
+}
+if ($('closeSoundboardBtn')) {
+  $('closeSoundboardBtn').onclick = (e) => {
+    e.stopPropagation();
+    $('soundboardTray').hidden = true;
+  };
+}
+$('soundboardTray').onclick = (e) => {
+  if (e.target === $('soundboardTray')) $('soundboardTray').hidden = true;
+};
+
+const originalSoundboardCleanup = typeof cleanupKidsModules === 'function' ? cleanupKidsModules : null;
+cleanupKidsModules = function() {
+  if (originalSoundboardCleanup) originalSoundboardCleanup();
+  if (soundboardSessionUnsub) { soundboardSessionUnsub(); soundboardSessionUnsub = null; }
+  if ($('soundboardTray')) $('soundboardTray').hidden = true;
+};
+
+/* ───────── 🟦 [SECTION 86: FUN SOUNDBOARD] — END ───────── */
+
 // ✅ app.js v1.25.1 — ALL SECTIONS COMPLETE
 // 📋 Structure recap:
 //   1A: Config / Firebase / DOM / Translations / State

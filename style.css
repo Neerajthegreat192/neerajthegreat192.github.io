@@ -2262,6 +2262,71 @@ video::-webkit-media-controls-overlay-play-button {
 
 /* ──────────── [SECTION 25: DISABLED STATES] — END ────────────── */
 
+/* ===================================================
+   🆕 FULL-SCREEN LUDO & TIMER STYLES
+   =================================================== */
+.ludo-fullscreen {
+  position: fixed !important;
+  top: 0 !important; left: 0 !important; 
+  width: 100vw !important; height: 100vh !important;
+  z-index: 99999 !important;
+  background: radial-gradient(circle at center, #1e1e1e 0%, #000000 100%) !important;
+  border-radius: 0 !important;
+  padding: 15px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+.ludo-header {
+  width: 100%; max-width: 500px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+
+.ludo-timer {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid var(--line);
+  color: #fff;
+  font-size: 16px; font-weight: 900;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-family: monospace;
+  transition: 0.3s;
+}
+.ludo-timer.urgent {
+  color: #f43f5e;
+  border-color: #f43f5e;
+  animation: pulseUrgent 1s infinite;
+}
+
+@keyframes pulseUrgent {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); box-shadow: 0 0 10px rgba(244, 63, 94, 0.5); }
+}
+
+.ludo-board-wrap {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  width: 100%; max-width: 500px;
+}
+
+/* बोर्ड को स्क्रीन के हिसाब से बड़ा करें */
+#kidsLudoBox #ludoBoard {
+  --bs: min(92vw, calc(100vh - 200px)) !important;
+  width: var(--bs) !important;
+  height: var(--bs) !important;
+}
+
+/* पासा घूमने का एनिमेशन */
+@keyframes ludoDiceRoll {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.2); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.ludo-dice-rolling {
+  animation: ludoDiceRoll 0.5s ease-out !important;
+}
+
 /* =========================================================================
    🔴🔴🔴 [END: style.css — v1.24.3 (PART 2)] 🔴🔴🔴
    =========================================================================
