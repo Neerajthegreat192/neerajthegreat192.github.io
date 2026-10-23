@@ -759,10 +759,18 @@ let incomingRingTimer = null, incomingRingActive = false;
 function ensureAudioContext() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(()=>{});
+    }
     return audioCtx;
   } catch(e) { return null; }
 }
+
+// 🆕 APK के लिए ज़रूरी: हर क्लिक पर ऑडियो अनलॉक करें
+document.addEventListener('pointerdown', () => { 
+  ensureAudioContext(); 
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}, {passive:true});
 
 function playMessageTickSound() {
   try {
@@ -1174,12 +1182,28 @@ function updateHeaderTitle() {
   myHeaderName.textContent = myUserName || (currentLang === 'hi' ? 'एचडी कॉलिंग' : 'HD Calling');
   adminBtn.style.display = isNeerajBadola(myUserName) ? 'block' : 'none';
 }
+
 // 🆕 जब app foreground आए और incoming dialog खुला हो पर ringtone न बज रही हो
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible'
-      && incomingDialog && !incomingDialog.hidden
-      && !isCallConnected && !incomingRingActive) {
-    try { ensureAudioContext(); startIncomingRingtone(); } catch(e) {}
+  if (document.visibilityState === 'visible') {
+    // 🆕 जब ऐप खुले, तो चेक करें कि क्या सच में कॉल आ रही है
+    if (incomingDialog && !incomingDialog.hidden && !isCallConnected && !incomingRingActive && currentCallType === 'incoming') {
+      if (activeCallId) {
+        get(ref(db, `call_sessions/${activeCallId}/status`)).then(snap => {
+          const status = snap.val();
+          if (status === 'calling' || status === 'ringing') {
+            try { ensureAudioContext(); startIncomingRingtone(); } catch(e) {}
+          } else {
+            // अगर कॉल पहले ही कट चुकी है, तो डायलॉग बंद करें और रिंगटोन रोकें
+            incomingDialog.hidden = true;
+            stopAllCallTones();
+          }
+        }).catch(()=>{});
+      }
+    }
+  } else {
+    // 🆕 जब ऐप बैकग्राउंड में जाए, तो तुरंत रिंगटोन बंद कर दें (Ghost Ringing रोकने के लिए)
+    try { stopIncomingRingtone(); } catch(e) {}
   }
 });
 
@@ -5157,6 +5181,7 @@ async function joinCallSession() {
   listenWhiteboardAutoSync();
   listenTictactoeSession();
   listenForSoundboard();
+  listenForCallReactions();
 
   const myMemberRef = ref(db, `call_sessions/${activeCallId}/members/${myUserId}`);
   onDisconnect(myMemberRef).remove().catch(()=>{});
@@ -7382,7 +7407,11 @@ let ludoAutoMoveTimer = null;
 let ludoAutoMoveKey = '';
 
 // --- Helpers ---
-function ludoNextColor(current) { return current === 'r' ? 'y' : 'r'; }
+function ludoNextColor(current) {
+  const colors = ludoState && ludoState.activeColors ? ludoState.activeColors : ['r', 'y'];
+  const idx = colors.indexOf(current);
+  return colors[(idx + 1) % colors.length];
+}
 function ludoAbsLoopIdx(color, rel) { return (LUDO_START_IDX[color] + rel) % 52; }
 function ludoPositionOf(color, rel) {
   if (rel < 0) return null;
@@ -7472,7 +7501,9 @@ function renderLudoTokens() {
   if (cellPx <= 0) return;
 
   const byCell = {};
-  for (const color of ['r', 'y']) {
+  const colors = (ludoState && ludoState.activeColors) ? ludoState.activeColors : ['r', 'y'];
+
+  for (const color of colors) {
     const arr = ludoGetTokensFor(color);
     for (let i=0; i<4; i++) {
       const rel = arr[i];
@@ -7559,17 +7590,28 @@ async function startOrToggleLudo() {
   }
   update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
 
-  ludoMyColor = isCaller ? 'r' : 'y';
-  ludoOpponentColor = isCaller ? 'y' : 'r';
-
   const ludoRef = ref(db, `call_sessions/${activeCallId}/ludo_state`);
   const snap = await get(ludoRef);
   const cur = snap.val();
 
   if (!cur || !cur.active) {
+    const mSnap = await get(ref(db, `call_sessions/${activeCallId}/members`));
+    const memberIds = Object.keys(mSnap.val() || {}).sort();
+    const count = Math.min(memberIds.length, 4); 
+
+    let activeColors = ['r', 'y']; 
+    if (count === 3) activeColors = ['r', 'g', 'y'];
+    else if (count >= 4) activeColors = ['r', 'g', 'y', 'b'];
+
+    const playerMap = {};
+    memberIds.slice(0, 4).forEach((uid, idx) => { playerMap[uid] = activeColors[idx]; });
+
     await set(ludoRef, {
-      active: true, turn: 'r', dice: null, phase: 'roll', consecutiveSixes: 0,
-      tokens: { r: [-1,-1,-1,-1], y: [-1,-1,-1,-1] },
+      active: true, 
+      turn: activeColors[0], 
+      activeColors: activeColors, 
+      playerMap: playerMap,
+      tokens: { r: [-1,-1,-1,-1], g: [-1,-1,-1,-1], y: [-1,-1,-1,-1], b: [-1,-1,-1,-1] },
       gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
     });
   } else {
@@ -7606,9 +7648,11 @@ function listenLudoSession() {
       }
       update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: false }).catch(()=>{});
 
-      ludoMyColor = isCaller ? 'r' : 'y';
-      ludoOpponentColor = isCaller ? 'y' : 'r';
       renderLudoBoard();
+    }
+
+    if (state.playerMap && state.playerMap[myUserId]) {
+      ludoMyColor = state.playerMap[myUserId];
     }
 
     if (ludoState && state.lastMove && state.lastMove.color !== ludoMyColor && state.lastMove.ts !== (ludoState.lastMove?.ts)) {
@@ -7637,10 +7681,19 @@ function updateLudoUI() {
   }
 
   const isMyTurn = ludoState.turn === ludoMyColor;
-  const turnColorEmoji = ludoState.turn === 'r' ? '🔴' : '🟡';
-  const turnName = isMyTurn ? (typeof myUserName !== 'undefined' ? myUserName : 'You') : (typeof currentCallTargetName !== 'undefined' ? currentCallTargetName : 'Opponent');
+  const turnColorEmoji = { r: '🔴', g: '🟢', y: '🟡', b: '🔵' }[ludoState.turn] || '⚪';
+  
+  let turnName = 'Opponent';
+  if (isMyTurn) {
+    turnName = typeof myUserName !== 'undefined' ? myUserName : 'You';
+  } else {
+    const oppId = Object.keys(ludoState.playerMap || {}).find(k => ludoState.playerMap[k] === ludoState.turn);
+    if (oppId && typeof allOnlineUsers !== 'undefined' && allOnlineUsers[oppId]) {
+      turnName = allOnlineUsers[oppId].name;
+    }
+  }
 
-  turnLabel.textContent = `${turnColorEmoji} ${turnName} ka turn hai`;
+  turnLabel.textContent = `${turnColorEmoji} ${turnName} की चाल है`;
   turnLabel.style.color = isMyTurn ? '#10b981' : '#a89e8a';
 
   if (isMyTurn && ludoState.phase === 'roll') {
@@ -7690,10 +7743,8 @@ function startLudoTimer() {
 async function ludoPassTurn() {
   if (!activeCallId || !ludoState || ludoAnimating) return;
   await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
-    turn: ludoOpponentColor,
-    dice: null,
-    phase: 'roll',
-    consecutiveSixes: 0,
+    turn: ludoNextColor(ludoState.turn),
+    dice: null, phase: 'roll', consecutiveSixes: 0,
     lastMove: { color: ludoMyColor, skip: true, ts: Date.now() },
     updatedAt: Date.now()
   });
@@ -7707,8 +7758,6 @@ async function ludoRollDice() {
   const rollBtn = $('ludoRollBtn');
   if (rollBtn) { rollBtn.disabled = true; }
 
-  if (typeof playMessageTickSound === 'function') playMessageTickSound();
-
   const diceBox = $('ludoDiceBox');
   if (diceBox) {
     diceBox.classList.add('ludo-dice-rolling');
@@ -7718,10 +7767,18 @@ async function ludoRollDice() {
   const roll = 1 + Math.floor(Math.random() * 6);
   const newSixes = roll === 6 ? (ludoState.consecutiveSixes + 1) : 0;
 
+  // 🆕 Optimistic UI (डाइस तुरंत दिखाओ)
+  if (diceBox) {
+    diceBox.textContent = roll;
+    diceBox.classList.add('hot');
+  }
+  if (typeof playMessageTickSound === 'function') playMessageTickSound();
+
+  // 3 छक्के वाला नियम
   if (roll === 6 && newSixes >= 3) {
     await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
       dice: roll, consecutiveSixes: 0, phase: 'roll',
-      turn: ludoOpponentColor, updatedAt: Date.now(),
+      turn: ludoNextColor(ludoState.turn), updatedAt: Date.now(),
       lastMove: { color: ludoMyColor, skip: true, ts: Date.now() }
     });
     return;
@@ -7764,34 +7821,36 @@ async function ludoTryMove(tokenIdx) {
   const currentRel = startArr[tokenIdx];
   const finalRel = currentRel === -1 ? 0 : currentRel + roll;
 
-  ludoVisualTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
+  ludoVisualTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y), g: ludoNormalizeTokens(ludoState.tokens.g), b: ludoNormalizeTokens(ludoState.tokens.b) };
 
   if (currentRel === -1) {
     ludoVisualTokens[ludoMyColor][tokenIdx] = 0;
     renderLudoTokens();
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई (100ms)
   } else {
     for (let r = currentRel + 1; r <= finalRel; r++) {
       ludoVisualTokens[ludoMyColor][tokenIdx] = r;
       renderLudoTokens();
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई (100ms)
     }
   }
 
-  const newTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), y: ludoNormalizeTokens(ludoState.tokens.y) };
+  const newTokens = { r: ludoNormalizeTokens(ludoState.tokens.r), g: ludoNormalizeTokens(ludoState.tokens.g), y: ludoNormalizeTokens(ludoState.tokens.y), b: ludoNormalizeTokens(ludoState.tokens.b) };
   newTokens[ludoMyColor][tokenIdx] = finalRel;
   let captured = 0;
 
   if (finalRel >= 0 && finalRel <= 50) {
     const myGlobalIdx = ludoAbsLoopIdx(ludoMyColor, finalRel);
     if (!LUDO_SAFE_IDX.includes(myGlobalIdx)) {
-      const opp = ludoOpponentColor;
-      for (let j=0; j<4; j++) {
-        const orel = newTokens[opp][j];
-        if (orel >= 0 && orel <= 50 && ludoAbsLoopIdx(opp, orel) === myGlobalIdx) {
-          newTokens[opp][j] = -1;
-          captured++;
-          if (typeof playOopsSound === 'function') playOopsSound();
+      const opponents = (ludoState.activeColors || ['r','y']).filter(c => c !== ludoMyColor);
+      for (const opp of opponents) {
+        for (let j=0; j<4; j++) {
+          const orel = newTokens[opp][j];
+          if (orel >= 0 && orel <= 50 && ludoAbsLoopIdx(opp, orel) === myGlobalIdx) {
+            newTokens[opp][j] = -1;
+            captured++;
+            if (typeof playOopsSound === 'function') playOopsSound();
+          }
         }
       }
     }
@@ -7802,7 +7861,7 @@ async function ludoTryMove(tokenIdx) {
 
   const allHome = newTokens[ludoMyColor].every(r => r === 56);
   const extraTurn = (roll === 6) || (captured > 0) || reachedHome;
-  const newTurn = (allHome || extraTurn) ? ludoMyColor : ludoOpponentColor;
+  const newTurn = (allHome || extraTurn) ? ludoMyColor : ludoNextColor(ludoMyColor);
 
   ludoVisualTokens = null;
   ludoAnimating = false;
@@ -7819,17 +7878,17 @@ async function ludoTryMove(tokenIdx) {
 async function animateLudoRemoteMove(move, oldTokens) {
   if (!move || move.skip || move.from === undefined || move.to === undefined) return;
   ludoAnimating = true;
-  ludoVisualTokens = { r: ludoNormalizeTokens(oldTokens.r), y: ludoNormalizeTokens(oldTokens.y) };
+  ludoVisualTokens = { r: ludoNormalizeTokens(oldTokens.r), y: ludoNormalizeTokens(oldTokens.y), g: ludoNormalizeTokens(oldTokens.g), b: ludoNormalizeTokens(oldTokens.b) };
 
   if (move.from === -1) {
     ludoVisualTokens[move.color][move.token] = 0;
     renderLudoTokens();
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई
   } else {
     for (let r = move.from + 1; r <= move.to; r++) {
       ludoVisualTokens[move.color][move.token] = r;
       renderLudoTokens();
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई
     }
   }
   ludoVisualTokens = null;
@@ -7860,7 +7919,7 @@ if ($('ludoResetBtn')) {
       if (activeCallId) {
         await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
           active: true, turn: 'r', dice: null, phase: 'roll', consecutiveSixes: 0,
-          tokens: { r: [-1,-1,-1,-1], y: [-1,-1,-1,-1] },
+          tokens: { r: [-1,-1,-1,-1], g: [-1,-1,-1,-1], y: [-1,-1,-1,-1], b: [-1,-1,-1,-1] },
           gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
         });
       }
@@ -8047,6 +8106,115 @@ cleanupKidsModules = function() {
 };
 
 /* ───────── 🟦 [SECTION 86: FUN SOUNDBOARD] — END ───────── */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🟨 [SECTION 87: FLOATING EMOJIS (Call + Ludo)] — START
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let emojiListenerUnsub = null;
+
+// 🎈 स्क्रीन पर इमोजी उड़ाने का फंक्शन
+function showFloatingEmoji(emoji) {
+  const layer = $('floatingEmojiLayer');
+  if (!layer) return;
+
+  const el = document.createElement('div');
+  el.className = 'floating-emoji';
+  el.textContent = emoji;
+  
+  // स्क्रीन पर रैंडम जगह (Left 10% से 90%)
+  const randomX = 10 + Math.random() * 80;
+  el.style.left = randomX + '%';
+  
+  // थोड़ा रैंडम टाइम ताकि एक साथ उड़ें नहीं
+  el.style.animationDuration = (2.5 + Math.random()) + 's';
+
+  layer.appendChild(el);
+
+  // 3.5 सेकंड बाद DOM से हटा दें
+  setTimeout(() => { el.remove(); }, 3500);
+  
+  if (typeof playMessageTickSound === 'function') playMessageTickSound();
+}
+
+// 🚀 Firebase में इमोजी भेजना
+async function sendCallEmoji(emoji) {
+  if (!activeCallId) return;
+  
+  // तुरंत अपनी स्क्रीन पर दिखाएं (Optimistic)
+  showFloatingEmoji(emoji);
+  $('emojiPicker').hidden = true;
+
+  // दूसरे तरफ भेजें
+  try {
+    await push(ref(db, `call_sessions/${activeCallId}/reactions`), {
+      emoji: emoji,
+      sender: myUserId,
+      ts: Date.now()
+    });
+  } catch(e) {}
+}
+
+// 🎧 दूसरे की इमोजी सुनना
+function listenForCallReactions() {
+  if (!activeCallId) return;
+  if (emojiListenerUnsub) emojiListenerUnsub();
+
+  const reactRef = ref(db, `call_sessions/${activeCallId}/reactions`);
+  
+  // जब भी नई इमोजी आए, उसे दिखाओ
+  emojiListenerUnsub = onChildAdded(reactRef, (snap) => {
+    const data = snap.val();
+    if (data && data.sender !== myUserId) {
+      // अगर पुरानी इमोजी है (कॉल जॉइन करते वक्त), तो स्किप करें
+      if (Date.now() - data.ts > 10000) return; 
+      showFloatingEmoji(data.emoji);
+    }
+  });
+}
+
+// 🎛️ UI कनेक्शन (बटन्स)
+function setupEmojiUI() {
+  // पिकर खोलना/बंद करना
+  const togglePicker = (e) => {
+    e.stopPropagation();
+    const picker = $('emojiPicker');
+    picker.hidden = !picker.hidden;
+  };
+
+  if ($('callEmojiBtn')) $('callEmojiBtn').onclick = togglePicker;
+  if ($('ludoEmojiBtn')) $('ludoEmojiBtn').onclick = togglePicker;
+
+  // इमोजी क्लिक करने पर
+  document.querySelectorAll('.emoji-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      sendCallEmoji(btn.dataset.emoji);
+    };
+  });
+
+  // बाहर क्लिक करने पर पिकर बंद करें
+  document.addEventListener('click', (e) => {
+    const picker = $('emojiPicker');
+    if (picker && !picker.hidden) {
+      if (!e.target.closest('#emojiPicker') && !e.target.closest('#callEmojiBtn') && !e.target.closest('#ludoEmojiBtn')) {
+        picker.hidden = true;
+      }
+    }
+  });
+}
+setupEmojiUI();
+
+// 🧹 Cleanup (कॉल कटने पर)
+const originalEmojiCleanup = typeof cleanupKidsModules === 'function' ? cleanupKidsModules : null;
+cleanupKidsModules = function() {
+  if (originalEmojiCleanup) originalEmojiCleanup();
+  if (emojiListenerUnsub) { emojiListenerUnsub(); emojiListenerUnsub = null; }
+  if ($('floatingEmojiLayer')) $('floatingEmojiLayer').innerHTML = '';
+  if ($('emojiPicker')) $('emojiPicker').hidden = true;
+};
+
+/* ───────── 🟨 [SECTION 87: FLOATING EMOJIS] — END ───────── */
 
 // ✅ app.js v1.25.1 — ALL SECTIONS COMPLETE
 // 📋 Structure recap:

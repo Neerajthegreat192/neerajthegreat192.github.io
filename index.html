@@ -321,7 +321,7 @@
 
 
 <!-- ─────────────────────────────────────────────────────────────────────────
-   🟦 [SECTION 10: ACTIVE CALL ENGINE & GAMES (FIXED STRUCTURE)] — START
+   🟦 [SECTION 10: ACTIVE CALL ENGINE & GAMES] — START
    ───────────────────────────────────────────────────────────────────────── -->
 <div id="call" class="screen" hidden>
   <!-- रिमोट वीडियो ग्रिड -->
@@ -361,6 +361,10 @@
       </button>
       <button class="top-action-btn" id="btnAddPerson" title="सदस्य जोड़ें">
         <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      </button>
+      <!-- 🆕 कॉल में इमोजी बटन -->
+      <button class="top-action-btn" id="callEmojiBtn" title="Emoji भेजें" style="font-size: 18px;">
+        😀
       </button>
       <button class="top-action-btn" id="flipBtn" title="कैमरा पलटें">
         <svg viewBox="0 0 24 24"><path d="M9 12c0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3-3 1.34-3 3zm11-4h-3.17L15 6H9L7.17 8H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm-8 10c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
@@ -484,32 +488,50 @@
     </div>
   </div>
 
-    <!-- 🎲 लूडो गेम बॉक्स -->
+  <!-- 🎲 लूडो गेम बॉक्स -->
   <div id="kidsLudoBox" class="ludo-fullscreen" hidden>
     <div class="ludo-header">
       <div style="display:flex; align-items:center; gap:10px;">
         <div style="color:#f5c542; font-size:16px; font-weight:900; letter-spacing:0.5px;">🎲 LUDO</div>
-        <!-- 🆕 टाइमर एलिमेंट -->
         <div id="ludoTimerDisplay" class="ludo-timer">15s</div>
       </div>
       <div style="display:flex; gap:10px;">
+        <!-- 🆕 Ludo में इमोजी बटन -->
+        <button id="ludoEmojiBtn" class="ludo-action-btn" title="Emoji भेजें" style="font-size: 16px;">😀</button>
         <button id="ludoResetBtn" class="ludo-action-btn" title="गेम रीसेट करें">🔄</button>
         <button id="closeLudoBtn" class="ludo-action-btn" title="बंद करें">✕</button>
       </div>
     </div>
 
-    <!-- लूडो का बोर्ड -->
     <div id="ludoBoardWrap" class="ludo-board-wrap">
       <div id="ludoBoard"></div>
     </div>
 
-    <!-- नीचे टर्न और डाइस कंट्रोल्स -->
     <div class="ludo-bottom-controls">
       <div id="ludoTurnLabel" class="ludo-turn-display">🔴 Waiting...</div>
       <div class="ludo-actions">
         <div class="diceBox" id="ludoDiceBox">🎲</div>
         <button id="ludoRollBtn" disabled>ROLL</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 🆕 फ्लोटिंग इमोजी लेयर (सबसे ऊपर ताकि गेम के ऊपर दिखे) -->
+  <div id="floatingEmojiLayer"></div>
+
+  <!-- 🆕 इमोजी पिकर (पैनल) -->
+  <div id="emojiPicker" class="emoji-picker" hidden>
+    <div class="emoji-grid">
+      <button class="emoji-btn" data-emoji="😂">😂</button>
+      <button class="emoji-btn" data-emoji="❤️">❤️</button>
+      <button class="emoji-btn" data-emoji="👍">👍</button>
+      <button class="emoji-btn" data-emoji="😮">😮</button>
+      <button class="emoji-btn" data-emoji="😢">😢</button>
+      <button class="emoji-btn" data-emoji="🙏">🙏</button>
+      <button class="emoji-btn" data-emoji="🔥">🔥</button>
+      <button class="emoji-btn" data-emoji="🎉">🎉</button>
+      <button class="emoji-btn" data-emoji="😡">😡</button>
+      <button class="emoji-btn" data-emoji="👏">👏</button>
     </div>
   </div>
 
