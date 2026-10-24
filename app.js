@@ -1039,7 +1039,8 @@ async function acquireCallMedia(audioOnly = false) {
     if (!audioOnly && localStream.getVideoTracks().length === 0) {
       try {
         const vStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } }
+          // 🆕 1080p Full HD और 30fps
+          video: { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } }
         });
         const vt = vStream.getVideoTracks()[0];
         localStream.addTrack(vt);
@@ -1051,7 +1052,8 @@ async function acquireCallMedia(audioOnly = false) {
   try {
     const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
     if (!audioOnly) {
-      constraints.video = { facingMode: { ideal: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 20 } };
+      // 🆕 1080p Full HD
+      constraints.video = { facingMode: { ideal: facingMode }, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, min: 24 } };
     } else {
       constraints.video = false;
     }
@@ -7382,6 +7384,7 @@ function cleanupKidsModules() {
 /* ───────── 🟦 [SECTION 82: CLEANUP KIDS MODULES] — END ───────── */
 
 
+
 /* ═══════════════════════════════════════════════════════════════════════
    🟦 [SECTION 83: LUDO GAME MODULE] — START
    ═══════════════════════════════════════════════════════════════════════ */
@@ -7402,16 +7405,41 @@ let ludoMyColor = 'r';
 let ludoOpponentColor = 'y';
 let ludoAnimating = false;
 let ludoVisualTokens = null;
+let ludoUserClosed = false; // 🆕 यूजर ने खुद बंद किया है या नहीं
 
 let ludoAutoMoveTimer = null;
 let ludoAutoMoveKey = '';
 
-// --- Helpers ---
-function ludoNextColor(current) {
-  const colors = ludoState && ludoState.activeColors ? ludoState.activeColors : ['r', 'y'];
-  const idx = colors.indexOf(current);
-  return colors[(idx + 1) % colors.length];
+// 🆕 वीडियो/कैमरा रीस्टोर करने का फंक्शन (गेम बंद होने पर)
+function restoreCallVideoAfterGame() {
+  if (isCallConnected && !isAudioOnlyCall) {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(t => t.enabled = true);
+    }
+    if (typeof updateCallModeVisuals === 'function') updateCallModeVisuals(false);
+    if (activeCallId) {
+      update(ref(db, `call_sessions/${activeCallId}/members/${myUserId}`), { camEnabled: true }).catch(()=>{});
+    }
+    camEnabled = true;
+    const camBtnEl = $('camBtn');
+    if (camBtnEl) camBtnEl.classList.remove('off');
+  }
 }
+
+// 🆕 अगली बारी वाले रंग का चयन (जो खेल खत्म नहीं हुए हैं)
+function getNextTurn(current, finishedList) {
+  const colors = (ludoState && ludoState.activeColors) ? ludoState.activeColors : ['r', 'y'];
+  const list = finishedList || [];
+  if (colors.length === 1) return colors[0];
+  let idx = colors.indexOf(current);
+  for (let i = 1; i <= colors.length; i++) {
+    const next = colors[(idx + i) % colors.length];
+    if (!list.includes(next)) return next;
+  }
+  return current;
+}
+
+// --- Helpers ---
 function ludoAbsLoopIdx(color, rel) { return (LUDO_START_IDX[color] + rel) % 52; }
 function ludoPositionOf(color, rel) {
   if (rel < 0) return null;
@@ -7498,7 +7526,13 @@ function renderLudoTokens() {
   const offsetX = cellRect.left - boardRect.left;
   const offsetY = cellRect.top - boardRect.top;
 
-  if (cellPx <= 0) return;
+  // 🆕 Fix 7: अगर विड्थ 0 है (लोडिंग ग्लिच), तो 100ms बाद फिर से रेंडर करें
+  if (cellPx <= 0) {
+    setTimeout(() => {
+      if ($('kidsLudoBox') && !$('kidsLudoBox').hidden) renderLudoTokens();
+    }, 100);
+    return;
+  }
 
   const byCell = {};
   const colors = (ludoState && ludoState.activeColors) ? ludoState.activeColors : ['r', 'y'];
@@ -7580,6 +7614,8 @@ async function startOrToggleLudo() {
     return;
   }
 
+  ludoUserClosed = false; // 🆕 मैन्युअल ओपन पर फ्लैग रीसेट करें
+
   if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = false);
   if (typeof camEnabled !== 'undefined') camEnabled = false;
   if (typeof updateCallModeVisuals === 'function') updateCallModeVisuals(true);
@@ -7612,13 +7648,17 @@ async function startOrToggleLudo() {
       activeColors: activeColors, 
       playerMap: playerMap,
       tokens: { r: [-1,-1,-1,-1], g: [-1,-1,-1,-1], y: [-1,-1,-1,-1], b: [-1,-1,-1,-1] },
+      finishedPlayers: [],
       gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
     });
   } else {
     const box = $('kidsLudoBox');
     if (box) {
       box.hidden = !box.hidden;
-      if (!box.hidden) renderLudoBoard();
+      if (!box.hidden) {
+        ludoUserClosed = false;
+        renderLudoBoard();
+      }
     }
   }
 }
@@ -7633,9 +7673,14 @@ function listenLudoSession() {
     const box = $('kidsLudoBox');
     if (!box) return;
 
-    if (!state || !state.active) { box.hidden = true; return; }
+    if (!state || !state.active) { 
+      box.hidden = true; 
+      restoreCallVideoAfterGame();
+      return; 
+    }
 
-    if (box.hidden) {
+    // 🆕 Fix 2: अगर यूजर ने खुद बंद किया है, तो जबरन न खोलें
+    if (box.hidden && !ludoUserClosed) {
       box.hidden = false;
       if ($('funModeTray')) $('funModeTray').hidden = true;
       if (typeof controlsBar !== 'undefined' && controlsBar) controlsBar.classList.add('fade-out');
@@ -7659,7 +7704,14 @@ function listenLudoSession() {
       await animateLudoRemoteMove(state.lastMove, ludoState.tokens);
     }
 
+    const wasGameOver = ludoState && ludoState.gameOver;
     ludoState = state;
+    
+    // 🆕 गेम ओवर होते ही वीडियो रीस्टोर करें
+    if (!wasGameOver && state.gameOver) {
+      restoreCallVideoAfterGame();
+    }
+
     updateLudoUI();
   });
 }
@@ -7722,8 +7774,11 @@ function startLudoTimer() {
   if (!timerEl || !ludoState || ludoState.gameOver) return;
 
   ludoTimerInterval = setInterval(() => {
-    if (!ludoState || ludoState.gameOver || ludoAnimating) return;
+    if (!ludoState || ludoState.gameOver) return;
     
+    // 🆕 Fix 4: अगर पीस चल रहा है (Animation), तो टाइमर को पॉज़ रखें
+    if (ludoAnimating) return;
+
     const elapsed = Date.now() - (ludoState.updatedAt || Date.now());
     const remaining = Math.max(0, LUDO_TURN_TIMEOUT - elapsed);
     const seconds = Math.ceil(remaining / 1000);
@@ -7742,8 +7797,9 @@ function startLudoTimer() {
 
 async function ludoPassTurn() {
   if (!activeCallId || !ludoState || ludoAnimating) return;
+  const next = getNextTurn(ludoState.turn, ludoState.finishedPlayers);
   await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
-    turn: ludoNextColor(ludoState.turn),
+    turn: next,
     dice: null, phase: 'roll', consecutiveSixes: 0,
     lastMove: { color: ludoMyColor, skip: true, ts: Date.now() },
     updatedAt: Date.now()
@@ -7767,7 +7823,7 @@ async function ludoRollDice() {
   const roll = 1 + Math.floor(Math.random() * 6);
   const newSixes = roll === 6 ? (ludoState.consecutiveSixes + 1) : 0;
 
-  // 🆕 Optimistic UI (डाइस तुरंत दिखाओ)
+  // Optimistic UI (डाइस तुरंत दिखाओ)
   if (diceBox) {
     diceBox.textContent = roll;
     diceBox.classList.add('hot');
@@ -7776,9 +7832,10 @@ async function ludoRollDice() {
 
   // 3 छक्के वाला नियम
   if (roll === 6 && newSixes >= 3) {
+    const next = getNextTurn(ludoState.turn, ludoState.finishedPlayers);
     await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
       dice: roll, consecutiveSixes: 0, phase: 'roll',
-      turn: ludoNextColor(ludoState.turn), updatedAt: Date.now(),
+      turn: next, updatedAt: Date.now(),
       lastMove: { color: ludoMyColor, skip: true, ts: Date.now() }
     });
     return;
@@ -7800,15 +7857,9 @@ async function ludoRollDice() {
         ludoPassTurn();
       }
     }, 1500);
-  } else if (movableCount === 1) {
-    setTimeout(() => {
-      let idxToMove = -1;
-      for (let i=0; i<4; i++) if (ludoCanMove(ludoMyColor, i, roll)) idxToMove = i;
-      if (idxToMove !== -1 && ludoState && ludoState.turn === ludoMyColor && ludoState.phase === 'move') {
-        ludoTryMove(idxToMove);
-      }
-    }, 1000);
-  }
+  } 
+  // 🆕 Fix 1: movableCount === 1 के लिए यहाँ से टाइमर हटा दिया गया है। 
+  // यह काम अब सिर्फ maybeLudoAutoMove() (350ms) करेगा, जिससे डबल मूव नहीं होगा।
 }
 
 async function ludoTryMove(tokenIdx) {
@@ -7826,12 +7877,12 @@ async function ludoTryMove(tokenIdx) {
   if (currentRel === -1) {
     ludoVisualTokens[ludoMyColor][tokenIdx] = 0;
     renderLudoTokens();
-    await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई (100ms)
+    await new Promise(r => setTimeout(r, 100));
   } else {
     for (let r = currentRel + 1; r <= finalRel; r++) {
       ludoVisualTokens[ludoMyColor][tokenIdx] = r;
       renderLudoTokens();
-      await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई (100ms)
+      await new Promise(r => setTimeout(r, 100));
     }
   }
 
@@ -7860,16 +7911,44 @@ async function ludoTryMove(tokenIdx) {
   if (reachedHome && typeof playCheerSound === 'function') playCheerSound();
 
   const allHome = newTokens[ludoMyColor].every(r => r === 56);
-  const extraTurn = (roll === 6) || (captured > 0) || reachedHome;
-  const newTurn = (allHome || extraTurn) ? ludoMyColor : ludoNextColor(ludoMyColor);
+  let newFinished = ludoState.finishedPlayers ? [...ludoState.finishedPlayers] : [];
+  let isGameOver = false;
+  let winner = null;
+
+  // 🆕 Fix 5: 3 या 4 खिलाड़ियों के लिए गेम ओवर लॉजिक
+  if (allHome && !newFinished.includes(ludoMyColor)) {
+    newFinished.push(ludoMyColor);
+    if (typeof playCheerSound === 'function') playCheerSound();
+    const activeCols = ludoState.activeColors || ['r', 'y'];
+    if (newFinished.length >= activeCols.length - 1) {
+      isGameOver = true;
+      winner = newFinished[0]; // पहले वाला ही विजेता है
+    } else {
+      if (typeof toast === 'function') toast(`${ludoMyColor.toUpperCase()} ने 4 गोटियाँ पूरी कर लीं! अब 2nd/3rd पोज़िशन के लिए खेल जारी है...`);
+    }
+  }
+
+  const extraTurn = (roll === 6) || (captured > 0) || allHome;
+  let newTurn = ludoMyColor;
+  
+  if (isGameOver) {
+    newTurn = winner;
+  } else if (allHome) {
+    newTurn = getNextTurn(ludoMyColor, newFinished);
+  } else if (extraTurn) {
+    newTurn = ludoMyColor;
+  } else {
+    newTurn = getNextTurn(ludoMyColor, newFinished);
+  }
 
   ludoVisualTokens = null;
   ludoAnimating = false;
 
   await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
     tokens: newTokens, turn: newTurn, dice: null, phase: 'roll',
-    consecutiveSixes: extraTurn ? ludoState.consecutiveSixes : 0,
-    gameOver: allHome, winner: allHome ? ludoMyColor : null,
+    consecutiveSixes: extraTurn && !isGameOver ? ludoState.consecutiveSixes : 0,
+    finishedPlayers: newFinished,
+    gameOver: isGameOver, winner: winner,
     lastMove: { color: ludoMyColor, token: tokenIdx, from: currentRel, to: finalRel, ts: Date.now() },
     updatedAt: Date.now()
   });
@@ -7883,12 +7962,12 @@ async function animateLudoRemoteMove(move, oldTokens) {
   if (move.from === -1) {
     ludoVisualTokens[move.color][move.token] = 0;
     renderLudoTokens();
-    await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई
+    await new Promise(r => setTimeout(r, 100));
   } else {
     for (let r = move.from + 1; r <= move.to; r++) {
       ludoVisualTokens[move.color][move.token] = r;
       renderLudoTokens();
-      await new Promise(r => setTimeout(r, 100)); // 🆕 स्पीड बढ़ाई
+      await new Promise(r => setTimeout(r, 100));
     }
   }
   ludoVisualTokens = null;
@@ -7907,8 +7986,10 @@ if ($('ludoRollBtn')) {
 if ($('closeLudoBtn')) {
   $('closeLudoBtn').onclick = (e) => {
     e.stopPropagation();
+    ludoUserClosed = true; // 🆕 यूजर ने खुद बंद किया
     if ($('kidsLudoBox')) $('kidsLudoBox').hidden = true;
     if (ludoTimerInterval) clearInterval(ludoTimerInterval);
+    restoreCallVideoAfterGame(); // 🆕 वीडियो वापस चालू
   };
 }
 
@@ -7917,11 +7998,31 @@ if ($('ludoResetBtn')) {
     e.stopPropagation();
     if (confirm(currentLang === 'hi' ? "क्या आप लूडो गेम को रीसेट करके नया शुरू करना चाहते हैं?" : "Do you want to reset and start a new Ludo game?")) {
       if (activeCallId) {
+        // 🆕 Fix 6: रीसेट करते समय सही प्लेयर्स (Members) दोबारा मैप करें
+        const mSnap = await get(ref(db, `call_sessions/${activeCallId}/members`));
+        const memberIds = Object.keys(mSnap.val() || {}).sort();
+        const count = Math.min(memberIds.length, 4); 
+
+        let activeColors = ['r', 'y']; 
+        if (count === 3) activeColors = ['r', 'g', 'y'];
+        else if (count >= 4) activeColors = ['r', 'g', 'y', 'b'];
+
+        const playerMap = {};
+        memberIds.slice(0, 4).forEach((uid, idx) => { playerMap[uid] = activeColors[idx]; });
+
         await update(ref(db, `call_sessions/${activeCallId}/ludo_state`), {
-          active: true, turn: 'r', dice: null, phase: 'roll', consecutiveSixes: 0,
+          active: true, 
+          turn: activeColors[0], 
+          activeColors: activeColors,
+          playerMap: playerMap,
+          dice: null, phase: 'roll', consecutiveSixes: 0,
           tokens: { r: [-1,-1,-1,-1], g: [-1,-1,-1,-1], y: [-1,-1,-1,-1], b: [-1,-1,-1,-1] },
+          finishedPlayers: [],
           gameOver: false, winner: null, lastMove: null, updatedAt: Date.now()
         });
+        
+        ludoUserClosed = false;
+        if ($('kidsLudoBox')) $('kidsLudoBox').hidden = false;
       }
     }
   };
@@ -7947,6 +8048,7 @@ if ($('trayBtnLudo')) {
    🟦 [SECTION 84: FINAL OVERRIDES (Ludo Hooks into Cleanup & Join)] — START
    ═══════════════════════════════════════════════════════════════════════ */
 
+// cleanupKidsModules को wrap करो — Ludo का cleanup भी जोड़ो
 const originalLudoCleanup = typeof cleanupKidsModules === 'function' ? cleanupKidsModules : null;
 cleanupKidsModules = function() {
   if (originalLudoCleanup) originalLudoCleanup();
@@ -7954,8 +8056,11 @@ cleanupKidsModules = function() {
   if (ludoTimerInterval) { clearInterval(ludoTimerInterval); ludoTimerInterval = null; }
   const lBox = $('kidsLudoBox');
   if (lBox) lBox.hidden = true;
+  restoreCallVideoAfterGame(); // 🆕 कॉल कटने या गेम खत्म होने पर वीडियो रीस्टोर
+  ludoUserClosed = false;      // 🆕 फ्लैग रीसेट
 };
 
+// joinCallSession को wrap करो — Ludo session listener भी जोड़ो
 const originalJoinCallSession = typeof joinCallSession === 'function' ? joinCallSession : null;
 joinCallSession = async function() {
   if (originalJoinCallSession) await originalJoinCallSession();
@@ -7963,6 +8068,8 @@ joinCallSession = async function() {
 };
 
 /* ───────── 🟦 [SECTION 84: FINAL OVERRIDES] — END ───────── */
+
+
 
 
 /* ═══════════════════════════════════════════════════════════════════════
